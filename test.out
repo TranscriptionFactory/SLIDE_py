@@ -1,0 +1,73 @@
+no change     /ihome/djishnu/alw399/miniforge3/condabin/conda
+no change     /ihome/djishnu/alw399/miniforge3/bin/conda
+no change     /ihome/djishnu/alw399/miniforge3/bin/conda-env
+no change     /ihome/djishnu/alw399/miniforge3/bin/activate
+no change     /ihome/djishnu/alw399/miniforge3/bin/deactivate
+no change     /ihome/djishnu/alw399/miniforge3/etc/profile.d/conda.sh
+no change     /ihome/djishnu/alw399/miniforge3/etc/fish/conf.d/conda.fish
+no change     /ihome/djishnu/alw399/miniforge3/shell/condabin/Conda.psm1
+no change     /ihome/djishnu/alw399/miniforge3/shell/condabin/conda-hook.ps1
+no change     /ihome/djishnu/alw399/miniforge3/lib/python3.12/site-packages/xontrib/conda.xsh
+no change     /ihome/djishnu/alw399/miniforge3/etc/profile.d/conda.csh
+no change     /ihome/djishnu/alw399/.bashrc
+No action taken.
+
+Inactive Modules:
+  1) fftw/3.3.10  4) gsl/2.7.1    7) java/16.0.1-openjdk 10) r/4.4.0
+  2) gdal/2.4.4   5) hdf5/1.14.0  8) netcdf/4.8.1
+  3) glpk/5.0     6) jags/4.3.2   9) openmpi/4.1.5
+
+
+Activating Modules:
+  1) fftw/3.3.10  4) gsl/2.7.1    7) java/16.0.1-openjdk 10) r/4.4.0
+  2) gdal/2.4.4   5) hdf5/1.14.0  8) netcdf/4.8.1
+  3) glpk/5.0     6) jags/4.3.2   9) openmpi/4.1.5
+
+rhino
+
+### PARAMETERS ###
+
+x_path: /ix3/djishnu/alw399/SLIDE_PLM/data/slide/inputs/10x_200k_donor1_mait_X.csv
+y_path: /ix3/djishnu/alw399/SLIDE_PLM/data/slide/inputs/10x_200k_donor1_mait_y.csv
+niter: 5
+spec: 0.1
+fdr: 0.5
+rep_CV: 50
+pure_homo: True
+lambda: [0.5]
+delta: [0.1]
+out_path: /ix3/djishnu/alw399/SLIDE_py/test_results
+thresh_fdr: 0.2
+
+####### DATA #######
+
+500 samples
+500 features
+61.6% cases
+38.4% controls
+
+##################
+
+Running LOVE with delta=0.1 and lambda=0.5
+Finish estimating the pure loadings...
+Estimate the non-pure loadings by Hard Thresholding ...
+
+Running SLIDE knockoffs...
+Calculated f_size: 57
+Finding standalone LF...
+Processing subsets:   0%|          | 0/1 [00:00<?, ?it/s]Processing subsets:   0%|          | 0/1 [00:04<?, ?it/s]
+Traceback (most recent call last):
+  File "/ix3/djishnu/alw399/SLIDE_py/test.py", line 37, in <module>
+    slider.run_pipeline(verbose=True, n_workers=1)
+  File "/ix3/djishnu/alw399/SLIDE_py/src/SLIDE/slide.py", line 267, in run_pipeline
+    self.runSLIDE(
+  File "/ix3/djishnu/alw399/SLIDE_py/src/SLIDE/slide.py", line 179, in runSLIDE
+    machop = self.find_standalone_LFs(latent_factors, spec, fdr, niter, f_size, n_workers)
+  File "/ix3/djishnu/alw399/SLIDE_py/src/SLIDE/slide.py", line 135, in find_standalone_LFs
+    marginal_idxs = machop.select_short_freq(
+  File "/ix3/djishnu/alw399/SLIDE_py/src/SLIDE/knockoffs.py", line 176, in select_short_freq
+    selected_indices = np.where(rejections == 1)[0]
+IndexError: boolean index did not match indexed array along axis 0; size of axis is 500 but size of corresponding boolean axis is 57
+R[write to console]: There were 50 or more warnings (use warnings() to see the first 50)
+R[write to console]: 
+

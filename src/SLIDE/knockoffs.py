@@ -1,0 +1,197 @@
+import numpy as np 
+import pandas as pd 
+import os, pickle
+from concurrent.futures import ProcessPoolExecutor
+import math
+from pqdm.processes import pqdm
+from functools import partial
+from tqdm import tqdm
+import copy
+
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.linear_model import LinearRegression, Lasso
+from knockpy import KnockoffFilter
+
+
+class Knockoffs():
+
+    def __init__(self, y, z2, model='LR'):
+
+        # self.z1 = self.scale_features(z1)
+        self.z2 = self.scale_features(z2)
+        self.y = y
+        self.n = self.y.shape[0]
+        # self.n, self.k = self.z1.shape
+        self.l = self.z2.shape[1] 
+        # self.interaction_terms = self.get_interaction_terms(self.z1, self.z2) 
+        
+        if model == 'lasso':
+            self.model = Lasso(alpha=0.1)
+        elif model == 'LR':
+            self.model = LinearRegression()
+        else:
+            raise ValueError('Model not supported')
+    
+    def add_z1(self, z1=None, marginal_idxs=None):
+        if marginal_idxs is not None and z1 is None:
+            z1 = self.z2[:, marginal_idxs]
+
+        n, self.k = z1.shape
+
+        assert n == self.n
+
+        self.z1 = self.scale_features(z1)
+        self.interaction_terms = self.get_interaction_terms(self.z1, self.z2) 
+    
+    @staticmethod
+    def scale_features(X, minmax=False, feature_range=(-1, 1)):
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        
+        if minmax:
+            scaler = MinMaxScaler(feature_range=feature_range)
+        else:
+            scaler = StandardScaler()
+        
+        scaler.fit(X)
+        return scaler.transform(X)
+
+    @staticmethod
+    def get_interaction_terms(z_matrix, plm_embedding):
+        '''
+        @return: interactions in shape of (n_samples, n_LFs, plm_embed_dim)
+        '''
+        return np.einsum('ij,ik->ijk', z_matrix, plm_embedding)
+
+    @staticmethod
+    def filter_knockoffs(interaction_terms, y, fdr=0.05):
+        '''
+        @return: mask of 0,1 significant interaction terms where 1 is significant
+        '''
+
+        kfilter = KnockoffFilter(
+            ksampler='gaussian', 
+            fstat='lasso'
+        )
+        rejections = kfilter.forward(X=interaction_terms, y=y, fdr=fdr, shrinkage="ledoitwolf")
+        return rejections
+    
+    def filter_knockoffs_iterative(self, interaction_terms, y, fdr=0.05, niter=1000, spec=0.3, n_workers=None):
+        """
+        Run knockoff filter multiple times and select features that appear consistently.
+        
+        Parameters:
+        -----------
+        interaction_terms : numpy.ndarray
+            Feature matrix
+        y : numpy.ndarray
+            Target variable
+        fdr : float, default=0.05
+            False discovery rate threshold
+        niter : int, default=1000
+            Number of iterations to run
+        spec : float, default=0.3
+            Specificity threshold (proportion of iterations a feature must be selected)
+        n_workers : int, default=None
+            Number of parallel workers. If None, uses available CPU count
+            
+        Returns:
+        --------
+        dict
+            Contains 'selected_features' (binary mask) and 'selection_frequencies'
+        """
+        rejections_list = []
+        for _ in range(niter):
+            rejections_list.append(self.filter_knockoffs(interaction_terms, y, fdr))
+
+        # Convert to numpy array and calculate selection frequency
+        rejections_array = np.array(rejections_list)
+        selection_frequencies = np.sum(rejections_array, axis=0) / niter
+        
+        # Apply specificity threshold
+        sig_mask = np.where(selection_frequencies >= spec, 1, 0)
+        
+        return sig_mask
+
+    
+    def fit_linear(self, z_matrix, y):
+        '''fit z-matrix in linear part to get LP'''
+        reg = self.model.fit(z_matrix, y)
+        
+        LP = reg.predict(z_matrix)
+        beta = reg.coef_       
+
+        return LP, beta
+
+
+    def select_short_freq(self, z, spec=0.3, fdr=0.1, niter=1000, f_size=100, n_workers=1):
+        """
+        Find significant variables using second order knockoffs across subsets of features.
+
+        Parameters:
+        -----------
+        z : np.ndarray or pandas.DataFrame
+            Feature matrix of shape (n_samples, n_features)
+        y : np.ndarray or pandas.DataFrame
+            Response vector of shape (n_samples,)
+        spec : float
+            Proportion threshold to consider a variable frequently selected
+        fdr : float
+            Target false discovery rate
+        elbow : bool
+            Whether to use elbow method to select frequent variables
+        niter : int
+            Number of knockoff iterations
+        f_size : int
+            Target size for each feature subset
+        parallel : bool
+            Whether to run iterations in parallel
+
+        Returns:
+
+        --------
+        list
+            List of selected variable indices
+        """
+        # Scale the input features
+        z = self.scale_features(z)
+        y = self.y.copy()
+        
+        n_features = z.shape[1]
+        n_splits = math.ceil(n_features / f_size)
+        feature_split = math.ceil(n_features / n_splits)
+        feature_starts = list(range(0, n_features, feature_split))
+        feature_stops = [min(start + feature_split, n_features) for start in feature_starts]
+
+        screen_var = []
+
+        for start, stop in tqdm(zip(feature_starts, feature_stops), 
+                              total=len(feature_starts),
+                              desc="Processing subsets"):
+
+            subset_z = z[:, start:stop]
+
+            # Run knockoffs on this subset
+            rejections = self.filter_knockoffs_iterative(subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers)
+            selected_indices = np.where(rejections == 1)[0]
+        
+            # Adjust indices to account for subset
+            selected_indices = selected_indices + start
+            
+            if len(selected_indices) > 0:
+                screen_var.extend(selected_indices)
+
+        # Aggregation step if multiple splits
+
+        screen_var = np.array(screen_var)
+
+        if n_splits > 1 and len(screen_var) > 1:
+            subset_z = z[:, screen_var]
+            rejections = self.filter_knockoffs(subset_z, y, fdr=fdr)
+            final_var = screen_var[np.where(rejections == 1)[0]]
+        else:
+            final_var = screen_var
+
+        return final_var
+
+
