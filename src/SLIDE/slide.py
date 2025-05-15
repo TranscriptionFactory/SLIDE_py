@@ -38,12 +38,11 @@ class SLIDE:
             print(f"Error loading LOVE result: {e}")
             return
     
-    def score_performance(self, z_matrix, n_iters=10, scale_features=True):
-        model = Estimator(model='linear', scaler='standard')
+    def get_aucs(self, z_matrix, n_iters=10, scaler='standard'):
+        model = Estimator(model='linear', scaler=scaler)
         scores = model.evaluate(
             z_matrix, self.data.Y, 
-            n_iters=n_iters, 
-            scale_features=scale_features
+            n_iters=n_iters
         )
         return scores
         
@@ -161,11 +160,14 @@ class OptimizeSLIDE(SLIDE):
             n_workers = n_workers
         )
 
-        # Convert flattened indices back to original x,y coordinates
-        x_indices = sig_interactions // machop.l  # Integer division gives x index
-        y_indices = sig_interactions % machop.l   # Modulo gives y index
+        if len(sig_interactions) == 0:
+            self.interaction_pairs = np.array([])
+        else:
+            # Convert flattened indices back to original x,y coordinates
+            x_indices = sig_interactions // machop.l  # Integer division gives x index
+            y_indices = sig_interactions % machop.l   # Modulo gives y index
 
-        self.interaction_pairs = np.array([x_indices, y_indices])
+            self.interaction_pairs = np.array([x_indices, y_indices])
 
     def runSLIDE(self, latent_factors, niter, spec, fdr, verbose=False, n_workers=1, outpath='.'):
         
@@ -192,19 +194,22 @@ class OptimizeSLIDE(SLIDE):
 
         self.find_interaction_LFs(machop, spec, fdr, niter, f_size, n_workers)
 
-        self.sig_interacts = [f"Z{j}" for i, j in self.interaction_pairs]
-        np.save(os.path.join(outpath, 'sig_interacts.npy'), np.array(self.sig_interacts))
-
         if verbose:
             print(f'Found {len(self.interaction_pairs)} interacting LF')
 
-    def get_LF_genes(self, lf):
+        self.sig_interacts = [f"Z{j}" for i, j in self.interaction_pairs]
+        np.save(os.path.join(outpath, 'sig_interacts.npy'), np.array(self.sig_interacts))
+
+
+
+    def get_LF_genes(self, lf, lf_thresh=0.2):
         """
         Returns a dictionary of lists, categorizing genes into positive and negative based on their loadings.
         
         Parameters:
         - lf: The name of the latent factor (column name in self.latent_factors).
-        
+        - lf_thresh: The threshold for the latent factor loadings.
+
         Returns:
         - Dictionary with 'positive' and 'negative' keys, containing lists of indices (gene names) for each.
         """
@@ -212,15 +217,14 @@ class OptimizeSLIDE(SLIDE):
         if lf not in self.A.columns:
             raise ValueError(f"Latent factor {lf} not found in A matrix")
 
-        # contribution = self.A[lf]
-        # group = {
-        #     'pos': np.where(contribution > thresh)[0],
-        #     'neg': np.where(contribution < thresh)[0]
-        # }
-        group = self.love_result['group'][int(lf.replace('Z', ''))]
-        genes = self.data.X.columns
-        positive_genes = genes[np.array(group['pos']) - 1]
-        negative_genes = genes[np.array(group['neg']) - 1] # +1 because LOVE uses 1-indexing
+        contribution = self.A[lf]
+        positive_genes = np.where(contribution > lf_thresh)[0]
+        negative_genes = np.where(contribution < -lf_thresh)[0]
+
+        # group = self.love_result['group'][int(lf.replace('Z', ''))]
+        # genes = self.data.X.columns
+        # positive_genes = genes[np.array(group['pos']) - 1]
+        # negative_genes = genes[np.array(group['neg']) - 1] # +1 because LOVE uses 1-indexing
 
         # Sort genes by absolute loading value in descending order
         loadings = self.A[lf]
@@ -283,19 +287,19 @@ class OptimizeSLIDE(SLIDE):
             sig_LF_genes = {lf: self.get_LF_genes(lf) for lf in self.sig_LFs}
             sig_interact_genes = {lf: self.get_LF_genes(lf) for lf in self.sig_interacts}
 
-            Plotter.plot_latent_factors(sig_LF_genes, outdir=out_iter, title='marginal_LFs')
-            Plotter.plot_latent_factors(sig_interact_genes, outdir=out_iter, title='interaction_LFs')
+            Plotter.plot_latent_factors(sig_LF_genes, loadings=self.A, outdir=out_iter, title='marginal_LFs')
+            Plotter.plot_latent_factors(sig_interact_genes, loadings=self.A, outdir=out_iter, title='interaction_LFs')
 
             self.score_performance(
                 z1=self.latent_factors, 
                 z2=self.latent_factors[self.sig_LFs], 
                 z3=self.latent_factors[np.concatenate([self.sig_LFs, self.sig_interacts])], 
                 n_iters=10, 
-                scale_features=True, 
+                scaler='standard', 
                 outdir=out_iter
             )
 
-    def score_performance(self, z1, z2, z3, n_iters=10, scale_features=True, outdir='.'):
+    def score_performance(self, z1, z2, z3, n_iters=10, scaler='standard', outdir='.'):
         '''
         z1: all LFs from LOVE
         z2: marginal LFs from SLIDE
@@ -303,9 +307,9 @@ class OptimizeSLIDE(SLIDE):
         '''
         scores = {}
         
-        scores['z1'] = self.score_performance(z1, n_iters, scale_features)
-        scores['z2'] = self.score_performance(z2, n_iters, scale_features)
-        scores['z3'] = self.score_performance(z3, n_iters, scale_features)
+        scores['z_matrix'] = self.get_aucs(z1, n_iters, scaler)
+        scores['marginals'] = self.get_aucs(z2, n_iters, scaler)
+        scores['marginals&interactions'] = self.get_aucs(z3, n_iters, scaler)
 
         Plotter.plot_scores(scores, outdir=outdir, title='scores')
 
