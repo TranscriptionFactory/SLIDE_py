@@ -104,7 +104,7 @@ LOVE <- function(X, lbd = 0.5, mu = 0.5, est_non_pure_row = "HT", thresh_fdr = N
 
   n <- nrow(X);  p <- ncol(X)
 
-  X <- scale(X, TRUE, FALSE)  # centering
+  X <- scale(X, T, T)  # centering
 
   if (pure_homo) {
     # Estimate the pure rows by using homogeneous approach
@@ -121,6 +121,9 @@ LOVE <- function(X, lbd = 0.5, mu = 0.5, est_non_pure_row = "HT", thresh_fdr = N
 
     # SLIDE delta selection
     optDelta <- delta * sqrt(log(max(p, n)) / n)
+    if (verbose) {
+      cat("optDelta max: ", max(optDelta) , ", optDelta min: ", min(optDelta), "\n")
+    }
 
     # delta selection isn't done in SLIDE
     # if (verbose)
@@ -172,6 +175,7 @@ LOVE <- function(X, lbd = 0.5, mu = 0.5, est_non_pure_row = "HT", thresh_fdr = N
 
   } else {
     # Estimate the pure rows via heterogeneous approach
+
     R_hat <- cor(X)
     Sigma <- cov(X)
 
@@ -179,7 +183,7 @@ LOVE <- function(X, lbd = 0.5, mu = 0.5, est_non_pure_row = "HT", thresh_fdr = N
       cat("Select delta by using", nfolds, "fold cross-validation...\n")
 
     # Find parallel rows and its partition
-    CV_res <- KfoldCV_delta(X, delta, ndelta, q, exact, nfolds, max_pure)
+    CV_res <- KfoldCV_delta(X, delta, ndelta, q, exact, nfolds, max_pure, verbose)
     pure_res <- CV_res$est_pure
     est_I <- pure_res$I_part
     est_I_set <- pure_res$I

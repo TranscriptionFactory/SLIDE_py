@@ -134,14 +134,23 @@ CalFittedSigma <- function(Sigma, delta, Ms, arg_Ms, se_est, diagonal, merge) {
 
 
 KfoldCV_delta <- function(X, delta = NULL, ndelta = 50, q = 2, exact = FALSE,
-                          nfolds = 10, max_pure = NULL) {
+                          nfolds = 10, max_pure = NULL, verbose = FALSE) {
   n_total <- nrow(X)
   p_total <- ncol(X)
   R <- cor(X)
 
+  if (verbose) {
+    cat("n_total:", n_total, "\n")
+    cat("p_total:", p_total, "\n")
+  }
+
   score_res <- Score_mat(R, q, exact)
   score_mat <- score_res$score
   moments_mat <- score_res$moments
+  if (verbose) {
+    cat("score_mat shape:", dim(score_mat)[1], "x", dim(score_mat)[2], "\n")
+    cat("delta length:", length(delta), "\n")
+  }
 
   if (length(delta) == 1) {
     # when only one value of delta is provided.
@@ -165,9 +174,14 @@ KfoldCV_delta <- function(X, delta = NULL, ndelta = 50, q = 2, exact = FALSE,
                             probs = max_pure)
       delta <- seq(delta_max, min(score_mat, na.rm = T), length.out = ndelta)
     }
+    if (verbose) {
+      cat('max_pure:', max_pure, "\n")
+      cat('delta_max:', delta_max, "\n")
+      cat('choosing delta from:', delta, "\n")
+    }
 
     indicesPerGroup = extract(sample(1:n_total), partition(n_total, nfolds))
-
+    
     loss <- matrix(NA, nfolds, length(delta))
     for (i in 1:nfolds) {
       valid_ind <- indicesPerGroup[[i]]
@@ -178,7 +192,6 @@ KfoldCV_delta <- function(X, delta = NULL, ndelta = 50, q = 2, exact = FALSE,
       score_res <- Score_mat(R1, q, exact)
       score_mat_1 <- score_res$score
       moments_1 <- score_res$moments
-
 
       for (j in 1:length(delta)) {
         delta_j <- delta[j]
@@ -213,13 +226,44 @@ KfoldCV_delta <- function(X, delta = NULL, ndelta = 50, q = 2, exact = FALSE,
         }
       }
     }
-    cv_mean <- apply(loss, 2, mean)
-    cv_sd <- apply(loss, 2, sd)
+    
+    
+    # cv_mean <- apply(loss, 2, mean)
+    # cv_sd <- apply(loss, 2, sd)
+    cv_mean <- apply(loss, 2, function(x) {
+      x_finite <- x[is.finite(x)]
+      if (length(x_finite) == 0) {
+        warning("A column in 'loss' contains only non-finite values. Returning NA for its mean.")
+        return(NA_real_)
+      }
+      mean(x_finite)
+    })
+
+    cv_sd <- apply(loss, 2, function(x) {
+      x_finite <- x[is.finite(x)]
+      if (length(x_finite) == 0) {
+        warning("A column in 'loss' contains only non-finite values. Returning NA for its standard deviation.")
+        return(NA_real_)
+      }
+      sd(x_finite)
+    })
+
+
+    if (verbose) {
+      cat('loss:', loss, "\n")
+      cat('cv_mean:', cv_mean, "\n")
+      cat('cv_sd:', cv_sd, "\n")
+    }
 
     ind_min <- which.min(cv_mean)
     delta_min <- delta[ind_min]
     # delta_1se <- delta[min(which(cv_mean <= (cv_mean[ind_min] + cv_sd[ind_min])))]
     delta_1se <- delta[range(which(cv_mean <= (cv_mean[ind_min] + cv_sd[ind_min])))]
+    if (verbose) {
+      cat('best delta:', delta_min, "\n")
+      cat('delta_1se:', delta_1se, "\n")
+    }
+    
     return(list(foldid = indicesPerGroup,
                 delta_min = delta_min,
                 delta_1se = delta_1se,

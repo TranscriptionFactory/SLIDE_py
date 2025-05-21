@@ -35,6 +35,7 @@ class Knockoffs():
     def add_z1(self, z1=None, marginal_idxs=None):
         if marginal_idxs is not None and z1 is None:
             z1 = self.z2[:, marginal_idxs]
+            self.z2 = np.delete(self.z2, marginal_idxs, axis=1)
 
         n, self.k = z1.shape
 
@@ -73,7 +74,12 @@ class Knockoffs():
             ksampler='gaussian', 
             fstat='lasso'
         )
-        rejections = kfilter.forward(X=interaction_terms, y=y, fdr=fdr, shrinkage="ledoitwolf")
+        rejections = kfilter.forward(
+            X=interaction_terms, 
+            y=y, 
+            fdr=fdr, 
+            shrinkage="ledoitwolf"
+        )
         return rejections
     
     def filter_knockoffs_iterative(self, interaction_terms, y, fdr=0.05, niter=1000, spec=0.3, n_workers=None):

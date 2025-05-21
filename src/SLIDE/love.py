@@ -23,30 +23,6 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
     # Activate automatic conversion between R and NumPy objects
     numpy2ri.activate()
     
-    file_dir = os.path.dirname(os.path.abspath(__file__))
-    love_path = os.path.join(file_dir, "../LOVE-master", "R")
-    
-    # Source all R files in the directory - this will define the LOVE function
-    r_files = [os.path.join(love_path, f) for f in os.listdir(love_path) 
-               
-               if f.endswith('.R')]
-    
-    # First, check if there's a specific file containing the LOVE function
-    love_main_file = None
-    for file in r_files:
-        if "LOVE.R" in file or "main.R" in file:
-            love_main_file = file
-            break
-    
-    # If we found a main file, source it first
-    if love_main_file:
-        r(f'source("{love_main_file}")')
-        r_files.remove(love_main_file)
-    
-    # Then source all other R files
-    for r_file in r_files:
-        r(f'source("{r_file}")')
-    
     # Convert Python parameters to R values
     r_X = numpy2ri.py2rpy(X)
     r_lbd = robjects.FloatVector([lbd]) if not isinstance(lbd, (list, np.ndarray)) else robjects.FloatVector(lbd)
@@ -68,6 +44,37 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
     
     # Handle max_pure which can be None
     r_max_pure = robjects.NULL if max_pure is None else robjects.IntVector([max_pure])
+
+
+    # Source the correct LOVE function
+    if LOVE_version == 'SLIDE':
+        love_function = 'getLatentFactors.R'
+        love_directory = 'SLIDE-R'
+    else:
+        love_function = 'LOVE.R'
+        love_directory = 'LOVE-master/R'
+
+    file_dir = os.path.dirname(os.path.abspath(__file__))
+    love_path = os.path.join(file_dir, f"../{love_directory}")
+    
+    # Source all R files in the directory - this will define the LOVE function
+    r_files = [os.path.join(love_path, f) for f in os.listdir(love_path) 
+               if f.endswith('.R')]
+    
+    love_main_file = None
+    for file in r_files:
+        if love_function in file:
+            love_main_file = file
+            break
+
+    # If we found a main file, source it first
+    if love_main_file:
+        r(f'source("{love_main_file}")')
+        r_files.remove(love_main_file)
+    
+    # Then source all other R files
+    for r_file in r_files:
+        r(f'source("{r_file}")')
     
     # Check if LOVE function is defined
     try:
@@ -79,21 +86,22 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
     if LOVE_version == 'SLIDE':
         result = r.getLatentFactors(r_X, 
                   delta=r_delta,
-                  thresh_fdr=r_thresh_fdr,
                   lbd=r_lbd, 
+                  thresh_fdr=r_thresh_fdr,
                   rep_cv=r_rep_CV,
-                  outpath=outpath
+                  out_path=outpath,
+                  verbose=r_verbose
                   )
     else:
         result = r.LOVE(r_X, 
+                  delta=r_delta, 
                   lbd=r_lbd, 
                   mu=r_mu, 
-                  est_non_pure_row=r_est_non_pure_row,
                   thresh_fdr=r_thresh_fdr,
                   verbose=r_verbose,
                   pure_homo=r_pure_homo, 
+                  est_non_pure_row=r_est_non_pure_row,
                   diagonal=r_diagonal,
-                  delta=r_delta, 
                   merge=r_merge, 
                   rep_CV=r_rep_CV,
                   ndelta=r_ndelta, 

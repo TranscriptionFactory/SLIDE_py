@@ -26,32 +26,44 @@
 #' @export
 
 getLatentFactors <- function(x, sigma = NULL, delta, thresh_fdr = 0.2, lbd = 0.1,
-                    rep_cv = 50, alpha_level = 0.05, out_path = NULL) {
+                    rep_cv = 50, alpha_level = 0.05, out_path = NULL, verbose = FALSE) {
   lambda <- lbd 
   ## Data Housekeeping #########################################################
   raw_x <- x  # input raw x is now raw_x
 
   ## standardization but only x
   # x <- x_std # scaled x is now x
-  x <- scale(x, TRUE, FALSE)  # centering
+  x <- scale(x, T, T)  # centering
+  if (verbose) {
+    cat("x max: ", max(x), ", x min: ", min(x), "\n")
+  }
 
   opt_lambda <- lambda ## no longer CV lambda
   ## ER Housekeeping ###########################################################
   n <- nrow(x);  p <- ncol(x) #### feature matrix dimensions
   se_est <- apply(x, 2, stats::sd) #### get sd of columns for feature matrix
+  if (verbose) {
+    cat("se_est max: ", max(se_est) , ", se_est min: ", min(se_est), "\n")
+  }
 
   if (is.null(sigma)) {
     sigma <- cor(x)
+    if (verbose) {
+      cat("sigma max: ", max(sigma), ", sigma min: ", min(sigma), "\n")
+    }
   }
 
   #### scale delta by this value to satisfy some requirements so that the
   #### statistical guarantees in the paper hold
   delta_scaled <- delta * sqrt(log(max(p, n)) / n)
+  if (verbose) {
+    cat("delta_scaled max: ", max(delta_scaled) , ", delta_scaled min: ", min(delta_scaled), "\n")
+  }
 
   ## Sigma Thresholding ########################################################
   #### save correlation matrix heatmap
   if (!is.null(out_path)) {
-    pdf_file <- paste0(out_path, "delta_", delta[1], "/corr_mat_heatmap.pdf")
+    pdf_file <- paste0(out_path, "/delta_", delta[1], "/corr_mat_heatmap.pdf")
     dir.create(file.path(dirname(pdf_file)), showWarnings = F, recursive = T)
     grDevices::pdf(file = pdf_file)
     makeHeatmap(sigma, "Correlation Matrix Heatmap", T, T)
@@ -69,9 +81,10 @@ getLatentFactors <- function(x, sigma = NULL, delta, thresh_fdr = 0.2, lbd = 0.1
     kept_entries <- matrix(1, nrow = nrow(sigma), ncol = ncol(sigma))
   }
 
+
   #### save threshold correlation matrix heatmap
   if (!is.null(out_path)) {
-    pdf_file <- paste0(out_path, "delta_", delta[1], "/thresh_corr_mat_heatmap.pdf")
+    pdf_file <- paste0(out_path, "/delta_", delta[1], "/thresh_corr_mat_heatmap.pdf")
     dir.create(file.path(dirname(pdf_file)), showWarnings = F, recursive = T)
     grDevices::pdf(file = pdf_file)
     makeHeatmap(sigma, "FDR Thresholded Correlation Matrix Heatmap", T, T)
@@ -103,6 +116,10 @@ getLatentFactors <- function(x, sigma = NULL, delta, thresh_fdr = 0.2, lbd = 0.1
   I_hat <- result_AI$pure_vec
   I_hat_list <- result_AI$pure_list
 
+  if (verbose) {
+    cat("A_hat shape: ", dim(A_hat), "\n")
+  }
+
   if (is.null(I_hat)) {
     cat("Algorithm fails due to non-existence of pure variable.\n")
     stop()
@@ -133,37 +150,38 @@ getLatentFactors <- function(x, sigma = NULL, delta, thresh_fdr = 0.2, lbd = 0.1
   #   Q <- theta_hat %*% MASS::ginv(crossprod(x %*% theta_hat) / n) %*% crossprod(theta_hat)
   # }
 
-  # #### Beta Estimation
-  # if (length(result_AI$pure_vec) != nrow(sigma)) { ## check if all vars are pure vars?
-  #   sigma_TJ <- estSigmaTJ(sigma = sigma, AI = A_hat, pure_vec = result_AI$pure_vec)
-  #   # opt_lambda <- ifelse(length(lambda) > 1,
-  #   #                      stats::median(unlist(replicate(rep_cv,
-  #   #                                                     cvLambda(x = x,
-  #   #                                                              fdr_entries = kept_entries,
-  #   #                                                              lambdas = lambda,
-  #   #                                                              AI = result_AI$AI,
-  #   #                                                              pure_vec = result_AI$pure_ec),
-  #   #                                                     simplify = F))),
-  #   #                      lambda)
-  #   opt_lambda <- lambda
-  #   if (opt_lambda > 0) {
-  #     AI_hat <- abs(A_hat[I_hat, ]) ## just rows of pure variables
-  #     sigma_bar_sup <- max(solve(crossprod(AI_hat), t(AI_hat)) %*% se_est[I_hat]) ## not sure what this does
-  #     AJ <- estAJDant(C_hat = C_hat, sigma_TJ = sigma_TJ,
-  #                     lambda = opt_lambda * opt_delta * sigma_bar_sup,
-  #                     se_est_J = sigma_bar_sup + se_est[-I_hat])
-  #     if (is.null(AJ)) {
-  #       return (NULL)
-  #     }
-  #   } else {
-  #     AJ <- t(solve(C_hat, sigma_TJ))
-  #   }
-  #   A_hat[-result_AI$pure_vec, ] <- AJ
-  # }
+  #### Beta Estimation
+  if (length(result_AI$pure_vec) != nrow(sigma)) { ## check if all vars are pure vars?
+    sigma_TJ <- estSigmaTJ(sigma = sigma, AI = A_hat, pure_vec = result_AI$pure_vec)
+    # opt_lambda <- ifelse(length(lambda) > 1,
+    #                      stats::median(unlist(replicate(rep_cv,
+    #                                                     cvLambda(x = x,
+    #                                                              fdr_entries = kept_entries,
+    #                                                              lambdas = lambda,
+    #                                                              AI = result_AI$AI,
+    #                                                              pure_vec = result_AI$pure_ec),
+    #                                                     simplify = F))),
+    #                      lambda)
+    opt_lambda <- lambda
+    if (opt_lambda > 0) {
+      AI_hat <- abs(A_hat[I_hat, ]) ## just rows of pure variables
+      sigma_bar_sup <- max(solve(crossprod(AI_hat), t(AI_hat)) %*% se_est[I_hat]) ## not sure what this does
+      AJ <- estAJDant(C_hat = C_hat, sigma_TJ = sigma_TJ,
+                      lambda = opt_lambda * opt_delta * sigma_bar_sup,
+                      se_est_J = sigma_bar_sup + se_est[-I_hat])
+      if (is.null(AJ)) {
+        return (NULL)
+      }
+    } else {
+      AJ <- t(solve(C_hat, sigma_TJ))
+    }
+    A_hat[-result_AI$pure_vec, ] <- AJ
+  }
 
-  # Gamma_hat[-I_hat] <- diag(sigma[-I_hat, -I_hat]) - diag(A_hat[-I_hat,] %*% C_hat %*% t(A_hat[-I_hat, ]))
-  # Gamma_hat[Gamma_hat < 0] <- 1e2 #### replace negative values with 100
-  # #### use standardized x and y
+  Gamma_hat[-I_hat] <- diag(sigma[-I_hat, -I_hat]) - diag(A_hat[-I_hat,] %*% C_hat %*% t(A_hat[-I_hat, ]))
+  Gamma_hat[Gamma_hat < 0] <- 1e2 #### replace negative values with 100
+
+  #### use standardized x and y
   
   # res_beta <- estBeta(y = y, x = x, sigma = sigma, A_hat = A_hat,
   #                     C_hat = C_hat, Gamma_hat = Gamma_hat, I_hat = I_hat,
@@ -179,6 +197,8 @@ getLatentFactors <- function(x, sigma = NULL, delta, thresh_fdr = 0.2, lbd = 0.1
   rownames(C_hat) <- colnames(C_hat) <- paste0("Z", 1:ncol(C_hat))
 
   I_clust <- NULL
+
+
   for (i in 1:length(I_hat_list)) {
     clust_name <- paste0("Z", i)
     cluster <- I_hat_list[[i]]
@@ -203,7 +223,7 @@ getLatentFactors <- function(x, sigma = NULL, delta, thresh_fdr = 0.2, lbd = 0.1
   return(list(K = ncol(A_hat),
               pureVec = I_hat,
               purInd =  I_hat_list,
-              group = I_clust,
+              # group = I_clust,
               A = A_hat,
               C = C_hat,
               Gamma = Gamma_hat

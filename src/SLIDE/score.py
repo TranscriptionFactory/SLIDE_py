@@ -52,16 +52,17 @@ class Estimator():
         scaler.fit(X)
         return scaler.transform(X)
 
-    def evaluate(self, X, y, n_iters=10):
+    def evaluate(self, X, y, n_iters=10, test_size=0.2):
         scores = [] 
         X = X.copy()
 
         X = self.scale_features(X, scaler=self.scaler)
 
         for iter in range(n_iters):
-            X_train, X_test, y_train, y_test = self.train_test_split(X, y, seed=iter)
+            X_train, X_test, y_train, y_test = self.train_test_split(X, y, test_size, seed=iter)
             self.fit(X_train, y_train)
             y_pred = self.predict(X_test)
             scores.append(self.score(y_pred, y_test))
+            
         return np.array(scores)
     
