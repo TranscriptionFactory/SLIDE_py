@@ -10,7 +10,7 @@ import copy
 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.linear_model import LinearRegression, Lasso
-from knockpy import KnockoffFilter
+# from knockpy import KnockoffFilter
 
 
 class Knockoffs():

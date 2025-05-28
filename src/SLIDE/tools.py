@@ -50,10 +50,7 @@ def init_data(input_params):
         input_params['niter'] = 100
     
     if input_params['SLIDE_top_feats'] is None:
-        input_params['SLIDE_top_feats'] = 10
-
-    if input_params['rep_CV'] is None:
-        input_params['rep_CV'] = 50
+        input_params['SLIDE_top_feats'] = 20
 
     if input_params['out_path'] is None:
         input_params['out_path'] = os.getcwd()

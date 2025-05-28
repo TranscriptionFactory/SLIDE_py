@@ -3,7 +3,6 @@ import os
 from rpy2 import robjects
 from rpy2.robjects import numpy2ri, packages, r
 
-# est_non_pure_row="Dantzig"
 
 def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose=False, 
                     pure_homo=False, diagonal=False, delta=None, merge=False, 

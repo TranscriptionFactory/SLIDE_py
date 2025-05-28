@@ -220,7 +220,7 @@ class OptimizeSLIDE(SLIDE):
     def __init__(self, input_params):
         super().__init__(input_params)
     
-    def get_latent_factors(self, x, y, delta, mu=0.5, lbd=0.1, rep_CV=50, pure_homo=True, verbose=False, thresh_fdr=0.2, outpath='.'):
+    def get_latent_factors(self, x, y, delta, mu=0.5, lbd=0.1, pure_homo=True, verbose=False, thresh_fdr=0.2, outpath='.'):
         """
         Get the latent factors (aka z_matrix) from the LOVE algorithm.
 
@@ -230,7 +230,6 @@ class OptimizeSLIDE(SLIDE):
             delta (float): The delta parameter.
             mu (float): The mu parameter. Set to 0.5 by default.
             lbd (float): The lambda parameter.
-            rep_CV (int): The number of cross-validation folds.
             pure_homo (bool): Whether to use the pure homoscedastic model. Newest LOVE implementation uses False
             verbose (bool): Whether to print verbose output.
             thresh_fdr (float): a numerical constant used for thresholding the correlation matrix to
@@ -242,7 +241,6 @@ class OptimizeSLIDE(SLIDE):
             X=x, 
             lbd=lbd, 
             mu=mu, 
-            rep_CV=rep_CV, 
             pure_homo=pure_homo, 
             delta=delta, 
             verbose=verbose,
@@ -439,7 +437,6 @@ class OptimizeSLIDE(SLIDE):
                     y=self.data.Y, 
                     delta=delta_iter,
                     lbd=lambda_iter, 
-                    rep_CV=self.input_params['rep_CV'], 
                     thresh_fdr=self.input_params['thresh_fdr'],
                     pure_homo=self.input_params['pure_homo'],
                     verbose=verbose,
@@ -512,21 +509,35 @@ class OptimizeSLIDE(SLIDE):
 
 if __name__ == "__main__":
     
-    input_params = {
-        'x_path' : '/ix/djishnu/Jane/SLIDE_PLM/alok_antigen/data/cd4_INS1_INSIAPP3_MTfilt_rna.csv',
-        'y_path' : '/ix/djishnu/Jane/SLIDE_PLM/alok_antigen/data/cd4_INS1_INSIAPP3_Ylabels.csv',
-        'fdr' : 0.1,
-        'thresh_fdr': 0.1,
-        'spec' : 0.2,
-        'y_factor': True,
-        'niter' : 500,
-        'SLIDE_top_feats': 10,
-        'rep_CV' : 50,
-        'pure_homo' : False,
-        'delta' : [0.001, 0.01],
-        'lambda' : [0.5, 0.1],
-        'out_path': '/ix3/djishnu/alw399/SLIDE_py/example_results/love_homo'
-    }
+    import argparse
+
+    parser = argparse.ArgumentParser(description='SLIDE pipeline parameters')
+    parser.add_argument('--x_path', type=str, required=True,
+                      help='Path to feature matrix CSV file')
+    parser.add_argument('--y_path', type=str, required=True,
+                      help='Path to response labels CSV file')
+    parser.add_argument('--fdr', type=float,
+                      help='False discovery rate threshold (Knockoffs)')
+    parser.add_argument('--thresh_fdr', type=float,
+                      help='FDR threshold for feature selection (LOVE)')
+    parser.add_argument('--spec', type=float,
+                      help='Minimum % times an LF found to be significant')
+    parser.add_argument('--y_factor', type=bool,
+                      help='Treat response as factor variable')
+    parser.add_argument('--niter', type=int,
+                      help='Number of iterations')
+    parser.add_argument('--SLIDE_top_feats', type=int,
+                      help='Number of top features to display')
+    parser.add_argument('--pure_homo', type=bool)
+    parser.add_argument('--delta', type=float, nargs='+')
+    parser.add_argument('--lambda', type=float, nargs='+')
+    parser.add_argument('--out_path', type=str, required=True,
+                      help='Output directory path')
+
+    args = parser.parse_args()
+    input_params = vars(args)
+
+    print(input_params)
 
     slider = OptimizeSLIDE(input_params)
     slider.run_pipeline(verbose=True, n_workers=1)
