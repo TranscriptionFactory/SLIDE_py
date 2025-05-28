@@ -50,7 +50,7 @@ slider.run_pipeline(verbose=True, n_workers=1)
 
 ## Pipeline Overview
 
-The `run_pipeline()` has three parts:
+The `run_pipeline()` has three main parts:
 
 ### Stage 1: Latent Factor Discovery
 - **LOVE Algorithm**: Runs the overlapping clustering algorithm to identify latent factors
