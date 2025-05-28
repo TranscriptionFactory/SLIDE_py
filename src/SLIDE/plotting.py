@@ -43,24 +43,20 @@ class Plotter:
             all_genes = genes_dict['pos'] + genes_dict['neg']
             sorted_genes = sorted(all_genes, 
                                 key=lambda x: abs(loadings[lf_name][x]), 
-                                reverse=True)
+                                reverse=False)
             
             # Plot genes
             for j, gene in enumerate(sorted_genes):
                 # Determine color based on sign
                 color = colors['pos'] if loadings[lf_name][gene] > 0 else colors['neg']
                 
-                # Add gene name with background
+                # Add gene name without background box
                 ax.text(i, j, gene, 
                        color=color,
-                       fontsize=10,
+                       fontsize=14,  # Increased font size
                        fontweight='bold',
                        ha='center',
-                       va='center',
-                       bbox=dict(facecolor='white',
-                               edgecolor='lightgray',
-                               alpha=0.7,
-                               boxstyle='round,pad=0.3'))
+                       va='center')
         
         # Customize plot appearance
         ax.set_title(title.replace('_', ' '), pad=20, fontsize=14, fontweight='bold')
@@ -76,16 +72,6 @@ class Plotter:
         ax.set_xticks(range(n_lfs))
         ax.set_xticklabels(lfs.keys(), ha='center')
         ax.set_yticks([])
-        
-        # Add legend
-        # legend_elements = [
-        #     Patch(facecolor=colors['pos'], label='Positive Loading', alpha=0.7),
-        #     Patch(facecolor=colors['neg'], label='Negative Loading', alpha=0.7)
-        # ]
-        # ax.legend(
-        #     handles=legend_elements, 
-        #     loc='best'
-        # )
         
         # Adjust layout and save
         plt.tight_layout()
@@ -185,8 +171,11 @@ class Plotter:
         fig.patch.set_facecolor('white')
         
         # Plot density for s1_random and s2_random with filled area
-        sns.kdeplot(scores['full_random'], label='full_random', ax=ax, fill=True, alpha=0.3, color='blue')
-        sns.kdeplot(scores['partial_random'], label='partial_random', ax=ax, fill=True, alpha=0.3, color='green')
+        for score_type, color in [('full_random', 'blue'), ('partial_random', 'green')]:
+            if len(set(scores[score_type])) == 1:  # If all values are the same
+                ax.axvline(x=scores[score_type][0], color=color, label=f'{score_type}', linewidth=2)
+            else:
+                sns.kdeplot(scores[score_type], label=score_type, ax=ax, fill=True, alpha=0.3, color=color)
         
         # Add vertical line at s1 median
         # s1_median = np.median(scores['s1'])

@@ -1,6 +1,8 @@
 import numpy as np 
 import pandas as pd
 import os 
+import datetime
+from glob import glob
 import pickle
 from tqdm import tqdm
 from itertools import product
@@ -76,6 +78,7 @@ class SLIDE:
             test_size=test_size,
         )
         return scores
+
     
     def score_performance(self, s1, s2, n_iters=100, test_size=0.2, scaler='standard', outdir='.'):
         """
@@ -88,33 +91,43 @@ class SLIDE:
         """
         scores = defaultdict(list)
 
-        scores['s1'] = self.get_aucs(s1, n_iters, test_size=test_size, scaler=scaler)
-        scores['s2'] = self.get_aucs(s2, n_iters, test_size=test_size, scaler=scaler)
+        # scores['s1'] = self.get_aucs(s1, n_iters, test_size=test_size, scaler=scaler)
+        # scores['s2'] = self.get_aucs(s2, n_iters, test_size=test_size, scaler=scaler)
         scores['s3'] = self.get_aucs(np.concatenate([s1, s2], axis=1), n_iters, test_size=test_size, scaler=scaler)
 
         num_marginals = s1.shape[1]
         num_interactions = s2.shape[1]
+        sig_terms = np.concatenate([self.sig_LFs, self.sig_interacts], axis=0)
+
+        non_sig_LFs = self.latent_factors.loc[:, ~self.latent_factors.columns.isin(sig_terms)]
+
+        if non_sig_LFs.shape[1] <= 0:
+            print('No non-sig LFs found')
+            return scores
+        
         n = self.data.X.shape[0]
         real_interaction_terms = Knockoffs.get_interaction_terms(
-            self.latent_factors.loc[:, ~self.latent_factors.columns.isin(self.sig_interacts + self.sig_LFs)],  # remove real sig LFs
-            s1
+            self.latent_factors.loc[:, sig_terms], # real sig standalone with fake interaction terms
+            non_sig_LFs
         ).reshape(n, -1)
 
-
         for _ in tqdm(range(n_iters)):
-            s1_random = self.latent_factors.iloc[:, np.random.choice(
-                self.latent_factors.shape[1], num_marginals, replace=False
+            s1_random = non_sig_LFs.iloc[:, np.random.choice(
+                non_sig_LFs.shape[1], num_marginals, replace=False
             )]
 
-            interaction_terms = Knockoffs.get_interaction_terms(self.latent_factors, s1_random).reshape(n, -1)
+            interaction_terms = Knockoffs.get_interaction_terms(non_sig_LFs, s1_random).reshape(n, -1)
             s2_random = interaction_terms[:, np.random.choice(interaction_terms.shape[1], num_interactions, replace=False)]
             
             s3_random = np.concatenate([s1_random.values, s2_random], axis=1)
             scores['full_random'].append(self.get_aucs(s3_random, n_iters=1, test_size=test_size, scaler=scaler))
 
-            s2_real = real_interaction_terms[:, np.random.choice(real_interaction_terms.shape[1], num_interactions, replace=False)]
-            s3_real = np.concatenate([s1.values, s2_real], axis=1)
-            scores['partial_random'].append(self.get_aucs(s3_real, n_iters=1, test_size=test_size, scaler=scaler))
+            if real_interaction_terms.shape[1] > 0:
+                s2_real = real_interaction_terms[:, np.random.choice(real_interaction_terms.shape[1], num_interactions, replace=False)]
+                s3_real = np.concatenate([s1.values, s2_real], axis=1)
+                scores['partial_random'].append(self.get_aucs(s3_real, n_iters=1, test_size=test_size, scaler=scaler))
+            else:
+                pass # not enough interaction terms to sample from
 
         scores['full_random'] = np.array(scores['full_random']).flatten()
         scores['partial_random'] = np.array(scores['partial_random']).flatten()
@@ -122,50 +135,92 @@ class SLIDE:
         Plotter.plot_controlplot(scores, outdir=outdir, title='control_plot')
         return scores
 
-    # def score_performance(self, s1, s2, n_iters=10, scaler='standard', outdir='.'):
-    #     '''
-    #     Score the performance of the given latent factors relative to each other and to random
-    #     selection of marginals and interactions.
-    #     This is a new visualization that is not in the original SLIDE paper.
+    def save_params(self, outpath, scores):
+        """
+        Save the parameters and scores.
+        """
+        if scores is None:
+            true_scores = 'NA'
+            partial_random = 'NA'
+            full_random = 'NA'
+        else:
+            true_scores = scores['s3'].mean()
+            partial_random = scores['partial_random'].mean()
+            full_random = scores['full_random'].mean()
 
-    #     s1: standalone LFs 
-    #     s2: interacting LF terms (marginal * interacting)
-    #     '''
-    #     scores = {}
+        with open(os.path.join(outpath, 'scores.txt'), 'w') as f:
+            f.write(f"True Scores: {true_scores}\n")
+            f.write(f"Partial Random: {partial_random}\n")
+            f.write(f"Full Random: {full_random}\n")
         
-    #     scores['X'] = self.get_aucs(self.data.X, n_iters, scaler)
-    #     scores['z_matrix'] = self.get_aucs(self.latent_factors, n_iters, scaler)
-    #     scores['s1'] = self.get_aucs(s1, n_iters, scaler)
-    #     scores['s2'] = self.get_aucs(s2, n_iters, scaler)
-    #     scores['s3'] = self.get_aucs(np.concatenate([s1, s2], axis=1), n_iters, scaler)
+        with open(os.path.join(outpath, 'run_params.txt'), 'w') as f:
+            
+            f.write(f"Run completed: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
-    #     ### Compare to randomly selected marginals ###
-    #     num_marginals = s1.shape[1]
-    #     s1_random = self.latent_factors.iloc[:, np.random.choice(
-    #         self.latent_factors.shape[1], num_marginals, replace=False
-    #     )]
-    #     scores['s1_random'] = self.get_aucs(s1_random, n_iters, scaler)
+            f.write("\n#########################\n\n")
+            
+            for key, value in self.input_params.items():
+                f.write(f"{key}: {value}\n")
+            
+            f.write("\n#########################\n\n")
 
-    #     num_interactions = s2.shape[1]
-    #     n = self.data.X.shape[0]
-    #     s2_random = Knockoffs.get_interaction_terms(self.latent_factors, s1_random).reshape(n, -1)
-    #     s2_random = s2_random[:, np.random.choice(s2_random.shape[1], num_interactions, replace=False)]
-    #     scores['s2_random'] = self.get_aucs(s2_random, n_iters, scaler)
+            f.write(f"Number of latent factors: {self.latent_factors.shape[1]}\n")
+            f.write(f"Number of marginals: {len(self.sig_LFs)}\n")
+            f.write(f"Number of interactions: {len(self.sig_interacts)}\n")
+            
+            f.write("\n#########################\n\n")
+            
+            f.write(f"Partial Random: {partial_random}\n")
+            f.write(f"Full Random: {full_random}\n")
+            f.write(f"True Scores: {true_scores}\n")
+        
 
-    #     s3_random = np.concatenate([s1_random, s2_random], axis=1)
-    #     scores['s3_random'] = self.get_aucs(s3_random, n_iters, scaler)
+    def create_summary_table(self, outpath):
+        """
+        Create a summary table of the results.
+        """
+        outs = glob(os.path.join(outpath, '*_out/run_params.txt'))
+        df = pd.DataFrame(columns=['delta', 'lambda', 'num_of_LFs', 'num_of_Sig_LFs', 'num_of_Interactors', 'sampleCV_Performance'])
+        
+        for out in outs:
+            basename = os.path.basename(out.replace('/run_params.txt', ''))
+            delta_ = basename.split('_')[0]
+            lambda_ = basename.split('_')[1]
+            
+            with open(out, 'r') as f:
+                lines = f.readlines()
+                for line in lines:
+                    if 'latent factors' in line:
+                        num_latent_factors = line.split(': ')[1].strip()
+                    if 'interactions' in line:
+                        num_interactions = line.split(': ')[1].strip()
+                    if 'marginals' in line:
+                        num_marginals = line.split(': ')[1].strip()
+                    if 'True Scores' in line:
+                        true_scores = line.split(': ')[1].strip()
 
-    #     Plotter.plot_scores(scores, outdir=outdir, title='scores')
-    #     Plotter.plot_controlplot(scores, outdir=outdir, title='')
+            df = pd.concat([df, pd.DataFrame({
+                'delta': [delta_],
+                'lambda': [lambda_],
+                'num_of_LFs': [num_latent_factors],
+                'num_of_Sig_LFs': [num_marginals],
+                'num_of_Interactors': [num_interactions],
+                'sampleCV_Performance': [true_scores],
+            })], ignore_index=True)
 
+        # df['full_random'] = df['full_random'].astype(float).round(3)
+        # df['partial_random'] = df['partial_random'].astype(float).round(3)
+        df['sampleCV_Performance'] = df['sampleCV_Performance'].astype(float).round(3)
+
+        
+        df.to_csv(os.path.join(outpath, 'summary_table.csv'), index=False)
 
 
 class OptimizeSLIDE(SLIDE):
     def __init__(self, input_params):
         super().__init__(input_params)
     
-    def get_latent_factors(self, x, y, delta, mu=0.5, lbd=0.1, rep_CV=50, pure_homo=True, verbose=False, thresh_fdr=0.2, 
-                           outpath='.', LOVE_version='LOVE'):
+    def get_latent_factors(self, x, y, delta, mu=0.5, lbd=0.1, rep_CV=50, pure_homo=True, verbose=False, thresh_fdr=0.2, outpath='.'):
         """
         Get the latent factors (aka z_matrix) from the LOVE algorithm.
 
@@ -181,13 +236,10 @@ class OptimizeSLIDE(SLIDE):
             thresh_fdr (float): a numerical constant used for thresholding the correlation matrix to
                                 control the false discovery rate
             outpath (str): The path to save the LOVE result.
-            LOVE_version (str): original LOVE or SLIDE implementation of LOVE
         """
 
-        assert LOVE_version in ['LOVE', 'SLIDE'], "LOVE_version must be either 'LOVE' or 'SLIDE'"
-        
         love_result = call_love(
-            X=x.values, 
+            X=x, 
             lbd=lbd, 
             mu=mu, 
             rep_CV=rep_CV, 
@@ -195,7 +247,6 @@ class OptimizeSLIDE(SLIDE):
             delta=delta, 
             verbose=verbose,
             thresh_fdr=thresh_fdr,
-            LOVE_version=LOVE_version,
             outpath=outpath
         )
         self.love_result = love_result
@@ -369,13 +420,10 @@ class OptimizeSLIDE(SLIDE):
             'neg': [x for x in negative_genes.index if x in all_genes]
         }
 
-    def run_pipeline(self, verbose=True, n_workers=1, LOVE_version='LOVE'):
+    def run_pipeline(self, verbose=True, n_workers=1):
         
         if verbose:
             self.show_params()
-
-        delta_iter = self.input_params['delta']
-        lambda_iter = self.input_params['lambda']
 
         for delta_iter, lambda_iter in product(self.input_params['delta'], self.input_params['lambda']):
             
@@ -395,9 +443,12 @@ class OptimizeSLIDE(SLIDE):
                     thresh_fdr=self.input_params['thresh_fdr'],
                     pure_homo=self.input_params['pure_homo'],
                     verbose=verbose,
-                    outpath=out_iter, 
-                    LOVE_version=LOVE_version
+                    outpath=out_iter
                 )
+
+                if verbose:
+                    print(f"LOVE found {self.latent_factors.shape[1]} latent factors.")
+            
             except Exception as e:
                 print(f"\nError running LOVE: {e}\n")
                 print('##################\n')
@@ -412,8 +463,8 @@ class OptimizeSLIDE(SLIDE):
                 niter=self.input_params['niter'], 
                 spec=self.input_params['spec'], 
                 fdr=self.input_params['fdr'],
+                n_workers=self.input_params['n_workers'],
                 verbose=verbose,
-                n_workers=n_workers,
                 outpath=out_iter
             )
 
@@ -436,17 +487,46 @@ class OptimizeSLIDE(SLIDE):
                 if len(sig_interact_genes) > 0:
                     Plotter.plot_latent_factors(sig_interact_genes, loadings=self.A, outdir=out_iter, title='interaction_LFs')
 
-                self.score_performance(
+                scores = self.score_performance(
                     s1=self.latent_factors[self.sig_LFs], 
                     s2=self.interaction_terms, 
                     n_iters=10, 
                     test_size=0.2,
                     scaler='standard', 
                     outdir=out_iter
+                
                 )
+            else:
+                scores = None
+                self.sig_interacts = []
+
+            self.save_params(out_iter, scores)
 
             if verbose:
                 print(f"\nCompleted {delta_iter}_{lambda_iter}\n")
                 print('##################\n')
 
+        self.create_summary_table(self.input_params['out_path'])
     
+
+
+if __name__ == "__main__":
+    
+    input_params = {
+        'x_path' : '/ix/djishnu/Jane/SLIDE_PLM/alok_antigen/data/cd4_INS1_INSIAPP3_MTfilt_rna.csv',
+        'y_path' : '/ix/djishnu/Jane/SLIDE_PLM/alok_antigen/data/cd4_INS1_INSIAPP3_Ylabels.csv',
+        'fdr' : 0.1,
+        'thresh_fdr': 0.1,
+        'spec' : 0.2,
+        'y_factor': True,
+        'niter' : 500,
+        'SLIDE_top_feats': 10,
+        'rep_CV' : 50,
+        'pure_homo' : False,
+        'delta' : [0.001, 0.01],
+        'lambda' : [0.5, 0.1],
+        'out_path': '/ix3/djishnu/alw399/SLIDE_py/example_results/love_homo'
+    }
+
+    slider = OptimizeSLIDE(input_params)
+    slider.run_pipeline(verbose=True, n_workers=1)

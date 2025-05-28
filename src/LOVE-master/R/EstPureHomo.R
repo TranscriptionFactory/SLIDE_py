@@ -2,6 +2,10 @@
 ####  of A corresponding to the pure variables.
 
 
+###### BIG WARNING: This code is not used in the current implementation of SLIDE.
+###### It is kept here for reference purposes. 
+###### EstAI (I think in FindPureNode) is causing the difference in results between this and
+###### the current implementation of SLIDE.
 #' @title Estimate the submatrix of \eqn{A} corresponding to the pure variables.
 #'
 #' @description Function to calculate the fitted submatrix \eqn{A_I} and to estimate the set and
@@ -23,11 +27,17 @@
 EstAI <- function(Sigma, optDelta, se_est, merge) {
   off_Sigma <- abs(Sigma)
   diag(off_Sigma) <- 0
+
+  # SLIDE uses the abs of sigma because it uses the correlation matrix rather than the covariance matrix
+  off_Sigma <- abs(Sigma)
+  
   result_Ms <- FindRowMax(off_Sigma)
+
   Ms <- result_Ms$M
   arg_Ms <- result_Ms$arg_M
 
   resultPure <- FindPureNode(off_Sigma, optDelta, Ms, arg_Ms, se_est, merge)
+
   estPureIndices <- resultPure$pureInd
   estPureVec <- resultPure$pureVec
 
@@ -77,18 +87,6 @@ EstC <- function(Sigma, AI, diagonal) {
 #' @return A numerical vector of \eqn{p} elements.
 #' @noRd
 
-
-findRowMax <- function(abs_sigma) {
-  p <- nrow(abs_sigma)
-  max_vals <- max_inds <- rep(0, p)
-  for (i in 1:p) {
-    row_i <- abs_sigma[i,]
-    max_inds[i] <- which.max(row_i)
-    max_vals[i] <- row_i[max_inds[i]]
-  }
-  return(list(max_inds = max_inds, max_vals = max_vals))
-}
-
 FindRowMax <- function(Sigma) {
   p <- nrow(Sigma)
   M <- arg_M <- rep(0, p)
@@ -121,6 +119,7 @@ FindPureNode = function(off_Sigma, delta, Ms, arg_Ms, se_est, merge) {
   G <- list()
   for (i in 1:nrow(off_Sigma)) {
     row_i <- off_Sigma[i,]
+
     Si <- FindRowMaxInd(i, Ms[i], arg_Ms[i], row_i, delta, se_est)
     if (length(Si) != 0) {
       pureFlag <- TestPure(row_i, i, Si, Ms, arg_Ms, delta, se_est)
@@ -294,9 +293,3 @@ RecoverAI <- function(estGroupList, p) {
   }
   return(A)
 }
-
-
-
-
-
-

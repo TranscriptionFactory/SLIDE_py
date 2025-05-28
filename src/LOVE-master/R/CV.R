@@ -164,6 +164,7 @@ KfoldCV_delta <- function(X, delta = NULL, ndelta = 50, q = 2, exact = FALSE,
                 score = score_mat,
                 moments = moments_mat))
   } else {
+    cat("Warning: delta is not provided, using k-fold CV validation (which is not recommended)")
     # use k-fold CV validation
     if (is.null(delta)) {
       # when delta is not provided, the following generates a grid of delta.

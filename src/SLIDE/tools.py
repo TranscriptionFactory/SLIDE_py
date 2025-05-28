@@ -58,6 +58,9 @@ def init_data(input_params):
     if input_params['out_path'] is None:
         input_params['out_path'] = os.getcwd()
     
+    if input_params['n_workers'] is None:
+        input_params['n_workers'] = 1
+    
     data.X = pd.read_csv(input_params['x_path'], index_col=0)
     data.Y = pd.read_csv(input_params['y_path'], index_col=0)
 

@@ -62,62 +62,123 @@ class Knockoffs():
         '''
         @return: interactions in shape of (n_samples, n_LFs, plm_embed_dim)
         '''
+
+        # If only one dimension, need to reshape to 2D for einsum to work as expected
+        if len(z_matrix.shape) == 1:
+            n = z_matrix.shape[0]
+            z_matrix = z_matrix.reshape(n, -1)
+        
+        if len(plm_embedding.shape) == 1:
+            n = plm_embedding.shape[0]
+            plm_embedding = plm_embedding.reshape(n, -1)
+        
+        assert z_matrix.shape[0] == plm_embedding.shape[0]
         return np.einsum('ij,ik->ijk', z_matrix, plm_embedding)
 
-    @staticmethod
-    def filter_knockoffs(interaction_terms, y, fdr=0.05):
+    # @staticmethod
+    # def filter_knockoffs_knockpy(interaction_terms, y, fdr=0.05):
+    #     '''
+    #     The knockpy filter is too stringent, and not performing as well as expected.
+    #     @return: mask of 0,1 significant interaction terms where 1 is significant
+    #     '''
+
+    #     print('Warning: The knockpy filter is not recommended. Use the R knockoff filter instead.')
+
+    #     kfilter = KnockoffFilter(
+    #         ksampler='gaussian', 
+    #         fstat='lasso',
+    #         fstat_kwargs={
+    #             'zstat': 'lars_path',
+    #         },
+    #         knockoff_kwargs={'method': 'sdp'}
+    #     )
+    #     rejections = kfilter.forward(
+    #         X=interaction_terms, 
+    #         y=y.flatten(), 
+    #         fdr=fdr, 
+    #         knockoff_kwargs={
+    #             'offset': 0
+    #         },
+    #         shrinkage="ledoitwolf"
+    #     )
+    #     return rejections
+    
+    @staticmethod 
+    def filter_knockoffs_iterative(z, y, fdr=0.1, niter=1, spec=0.2, n_workers=1):
         '''
         @return: mask of 0,1 significant interaction terms where 1 is significant
         '''
-
-        kfilter = KnockoffFilter(
-            ksampler='gaussian', 
-            fstat='lasso'
-        )
-        rejections = kfilter.forward(
-            X=interaction_terms, 
-            y=y, 
-            fdr=fdr, 
-            shrinkage="ledoitwolf"
-        )
-        return rejections
-    
-    def filter_knockoffs_iterative(self, interaction_terms, y, fdr=0.05, niter=1000, spec=0.3, n_workers=None):
-        """
-        Run knockoff filter multiple times and select features that appear consistently.
+        import rpy2.robjects as robjects
+        from rpy2.robjects import pandas2ri
+        from rpy2.robjects.packages import importr
         
-        Parameters:
-        -----------
-        interaction_terms : numpy.ndarray
-            Feature matrix
-        y : numpy.ndarray
-            Target variable
-        fdr : float, default=0.05
-            False discovery rate threshold
-        niter : int, default=1000
-            Number of iterations to run
-        spec : float, default=0.3
-            Specificity threshold (proportion of iterations a feature must be selected)
-        n_workers : int, default=None
-            Number of parallel workers. If None, uses available CPU count
-            
-        Returns:
-        --------
-        dict
-            Contains 'selected_features' (binary mask) and 'selection_frequencies'
-        """
-        rejections_list = []
+        # Convert numpy arrays to R objects
+        pandas2ri.activate()
+        z_r = pandas2ri.py2rpy(pd.DataFrame(z))
+        y_r = pandas2ri.py2rpy(pd.Series(y.flatten()))
+        
+        # Import R packages
+        knockoff = importr('knockoff')
+        
+        results = []
         for _ in range(niter):
-            rejections_list.append(self.filter_knockoffs(interaction_terms, y, fdr))
+            result = knockoff.knockoff_filter(
+                X=z_r,
+                y=y_r,
+                knockoffs=knockoff.create_second_order,
+                statistic=knockoff.stat_glmnet_lambdasmax,
+                offset=0,
+                fdr=fdr
+            )
+            selected = result.rx2('selected')
+            results.append(pandas2ri.rpy2py(selected))
 
-        # Convert to numpy array and calculate selection frequency
-        rejections_array = np.array(rejections_list)
-        selection_frequencies = np.sum(rejections_array, axis=0) / niter
+        results = np.concatenate(results, axis=0)
+        results = results - 1 # Convert to 0-based indexing
+
+        idx, counts = np.unique(results, return_counts=True)
+        sig_idxs = idx[np.where(counts >= spec * niter)]
+        # sig_mask = np.zeros(z.shape[1], dtype=int)
+        # sig_mask[sig_idxs] = 1
+
+        return sig_idxs
+    
+    # def filter_knockoffs_iterative(self, interaction_terms, y, fdr=0.05, niter=1000, spec=0.3, n_workers=None):
+    #     """
+    #     Run knockoff filter multiple times and select features that appear consistently.
         
-        # Apply specificity threshold
-        sig_mask = np.where(selection_frequencies >= spec, 1, 0)
+    #     Parameters:
+    #     -----------
+    #     interaction_terms : numpy.ndarray
+    #         Feature matrix
+    #     y : numpy.ndarray
+    #         Target variable
+    #     fdr : float, default=0.05
+    #         False discovery rate threshold
+    #     niter : int, default=1000
+    #         Number of iterations to run
+    #     spec : float, default=0.3
+    #         Specificity threshold (proportion of iterations a feature must be selected)
+    #     n_workers : int, default=None
+    #         Number of parallel workers. If None, uses available CPU count
+            
+    #     Returns:
+    #     --------
+    #     dict
+    #         Contains 'selected_features' (binary mask) and 'selection_frequencies'
+    #     """
+    #     rejections_list = []
+    #     for _ in range(niter):
+    #         rejections_list.append(self.filter_knockoffs(interaction_terms, y, fdr))
+
+    #     # Convert to numpy array and calculate selection frequency
+    #     rejections_array = np.array(rejections_list)
+    #     selection_frequencies = np.sum(rejections_array, axis=0) / niter
         
-        return sig_mask
+    #     # Apply specificity threshold
+    #     sig_mask = np.where(selection_frequencies >= spec, 1, 0)
+        
+    #     return sig_mask
 
     
     def fit_linear(self, z_matrix, y):
@@ -178,8 +239,7 @@ class Knockoffs():
             subset_z = z[:, start:stop]
 
             # Run knockoffs on this subset
-            rejections = self.filter_knockoffs_iterative(subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers)
-            selected_indices = np.where(rejections == 1)[0]
+            selected_indices = self.filter_knockoffs_iterative(subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers)
         
             # Adjust indices to account for subset
             selected_indices = selected_indices + start
@@ -193,8 +253,8 @@ class Knockoffs():
 
         if n_splits > 1 and len(screen_var) > 1:
             subset_z = z[:, screen_var]
-            rejections = self.filter_knockoffs(subset_z, y, fdr=fdr)
-            final_var = screen_var[np.where(rejections == 1)[0]]
+            final_var = self.filter_knockoffs_iterative(subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers)
+            final_var = screen_var[final_var] # index the candidate indices to get the final significant indices
         else:
             final_var = screen_var
 

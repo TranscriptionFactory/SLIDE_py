@@ -91,7 +91,7 @@
 
 script_path <- getSrcDirectory(function(){})
 script_dir <- dirname(script_path)
-thresh_path <- file.path(dirname(script_dir), "SLIDE-R", "threshSigma.R")
+thresh_path <- file.path(dirname(script_dir), "LOVE-SLIDE", "threshSigma.R")
 
 source(thresh_path)
 
@@ -99,129 +99,137 @@ source(thresh_path)
 
 LOVE <- function(X, lbd = 0.5, mu = 0.5, est_non_pure_row = "HT", thresh_fdr = NULL,
                  verbose = FALSE, pure_homo = FALSE, diagonal = FALSE, 
-                 delta = NULL, merge = FALSE, rep_CV = 50, ndelta = 50, 
-                 q = 2, exact = FALSE, max_pure = NULL, nfolds = 10) {
+                 delta = NULL, merge = FALSE, rep_CV = 50, ndelta = 1, 
+                 q = 2, exact = FALSE, max_pure = NULL, nfolds = 10, 
+                 out_path = NULL, gene_names = NULL, sample_names = NULL) {
+
+
+  # Adding back the gene and sample names that were removed in python -> R conversion
+  if (!is.null(gene_names)) {
+    colnames(X) <- gene_names
+  }
+  if (!is.null(sample_names)) {
+    rownames(X) <- sample_names
+  }
 
   n <- nrow(X);  p <- ncol(X)
 
   X <- scale(X, T, T)  # centering
-
-  if (pure_homo) {
-    # Estimate the pure rows by using homogeneous approach
-    se_est <- apply(X, 2, stats::sd)   # estimate the standard errors of each feature
-
-    # original LOVE delta selection
-    # deltaGrids <- delta * sqrt(log(max(p, n)) / n)
-    # if (verbose)
-    #   cat("Select delta by using data splitting...\n")
-    # optDelta <- ifelse(length(deltaGrids) > 1,
-    #                    median(replicate(rep_CV, CV_delta(X, deltaGrids, diagonal,
-    #                                                      se_est, merge))),
-    #                    deltaGrids)
-
-    # SLIDE delta selection
-    optDelta <- delta * sqrt(log(max(p, n)) / n)
-    if (verbose) {
-      cat("optDelta max: ", max(optDelta) , ", optDelta min: ", min(optDelta), "\n")
-    }
-
-    # delta selection isn't done in SLIDE
-    # if (verbose)
-    #   cat("Finish selecting delta and start estimating the pure loadings...\n")
-
-    Sigma <- cov(X)
-
-    # SLIDE added this to threshold sigma to control for FDR 
-    if (!is.null(thresh_fdr)) {
-      control_fdr <- threshSigma(x = X,
-                               sigma = Sigma,
-                               thresh = thresh_fdr)
-      Sigma <- control_fdr$thresh_sigma
-      kept_entries <- control_fdr$kept_entries
-    } else {
-      kept_entries <- matrix(1, nrow = nrow(Sigma), ncol = ncol(Sigma))
-    }
-    
-    resultAI <- EstAI(Sigma, optDelta, se_est, merge)
-
-    # In SLIDE, delta is only ever 1 element when this function is used
-    # ### Check if there is any group with ONLY ONE pure variable
-    # pure_numb <- sapply(resultAI$pureSignInd,
-    #                     FUN = function(x) {length(c(x$pos, x$neg))})
-    # if (sum(pure_numb == 1) > 0) {
-    #   cat("Change 'merge' to 'union' and reselecting delta ... \n")
-    #   optDelta <- ifelse(length(deltaGrids) > 1,
-    #                      median(replicate(rep_CV, CV_delta(X, deltaGrids, diagonal,
-    #                                                        se_est, merge = F))),
-    #                      deltaGrids)
-    #   resultAI <- EstAI(Sigma, optDelta, se_est, merge = F)
-    # }
-    
-    A_hat <- resultAI$AI
-    I_hat <- resultAI$pureVec
-    I_hat_part <- resultAI$pureSignInd
-
-    if (is.null(I_hat)) {
-      cat("Algorithm fails due to the non-existence of any pure variable.\n")
-      stop()
-    }
-
-    C_hat <- EstC(Sigma, A_hat, diagonal)
-
-    # Estimate the covariance matrix of the error corresponding to
-    # non-pure variables
-    Gamma_hat <- rep(0, p)
-    Gamma_hat[I_hat] <- diag(Sigma[I_hat, I_hat]) - diag(A_hat[I_hat,] %*% C_hat %*% t(A_hat[I_hat,]))
-
-  } else {
-    # Estimate the pure rows via heterogeneous approach
-
-    R_hat <- cor(X)
-    Sigma <- cov(X)
-
-    if (verbose)
-      cat("Select delta by using", nfolds, "fold cross-validation...\n")
-
-    # Find parallel rows and its partition
-    CV_res <- KfoldCV_delta(X, delta, ndelta, q, exact, nfolds, max_pure, verbose)
-    pure_res <- CV_res$est_pure
-    est_I <- pure_res$I_part
-    est_I_set <- pure_res$I
-
-    optDelta <- CV_res$delta_min
-
-    if (verbose)
-      cat("Finish selecting delta and start estimating the pure loadings...\n")
-
-    # Post-select pure variables
-    if (length(est_I) >= 2) {
-      BI_C_res <- Est_BI_C(CV_res$moments, R_hat, est_I, est_I_set)
-      est_I <- Re_Est_Pure(X, Sigma, CV_res$moments, est_I, BI_C_res$Gamma)
-      est_I_set <- as.numeric(unlist(est_I))
-    } else if (length(est_I) <= 1) {
-      cat("Algorithm fails since <2 pure variables found.\n")
-      stop()
-    }
-
-    D_Sigma <- diag(Sigma)
-    B_hat <- BI_C_res$B
-    R_Z <- BI_C_res$C
-
-    # Estimate the loading matrix A and C.
-
-    B_hat <- sqrt(D_Sigma) * B_hat
-    D_B <- apply(abs(B_hat), 2, max)
-    A_hat <- t(t(B_hat) / D_B)
-    C_hat <- D_B  * R_Z
-
-    if (diagonal)
-      C_hat <- diag(diag(C_hat))
-
-    I_hat <- est_I_set
-    I_hat_part <- FindSignPureNode(pure_res$I_part, Sigma)
-
-    Gamma_hat <- BI_C_res$Gamma * D_Sigma
+  if (verbose) {
+    cat("x max: ", max(X), ", x min: ", min(X), "\n")
   }
+
+  if (!is.null(out_path)) {
+    # Save X to a CSV file in the output directory
+    write.csv(X, file.path(out_path, "X.csv"), row.names = FALSE)
+  }
+
+  se_est <- apply(X, 2, stats::sd)   # estimate the standard errors of each feature
+
+  if (verbose) {
+    cat("se_est max: ", max(se_est) , ", se_est min: ", min(se_est), "\n")
+  }
+
+  if (!is.null(out_path)) {
+    write.csv(se_est, file.path(out_path, "se_est.csv"), row.names = FALSE)
+  }
+
+  # original LOVE delta selection
+  # deltaGrids <- delta * sqrt(log(max(p, n)) / n)
+  # if (verbose)
+  #   cat("Select delta by using data splitting...\n")
+  # optDelta <- ifelse(length(deltaGrids) > 1,
+  #                    median(replicate(rep_CV, CV_delta(X, deltaGrids, diagonal,
+  #                                                      se_est, merge))),
+  #                    deltaGrids)
+
+  # SLIDE delta selection
+  optDelta <- delta * sqrt(log(max(p, n)) / n)
+
+  if (verbose) {
+    cat("optDelta: ", optDelta, "\n")
+  }
+
+  # delta selection isn't done in SLIDE
+  # if (verbose)
+  #   cat("Finish selecting delta and start estimating the pure loadings...\n")
+
+  # Sigma <- cov(X)
+  Sigma <- cor(X) # SLIDE uses correlation matrix
+
+  if (verbose) {
+    cat("sigma max: ", max(Sigma), ", sigma min: ", min(Sigma), "\n")
+  }
+
+  # SLIDE added this to threshold sigma to control for FDR 
+  if (!is.null(thresh_fdr)) {
+    control_fdr <- threshSigma(x = X,
+                              sigma = Sigma,
+                              thresh = thresh_fdr)
+    Sigma <- control_fdr$thresh_sigma
+    kept_entries <- control_fdr$kept_entries
+  } else {
+    kept_entries <- matrix(1, nrow = nrow(Sigma), ncol = ncol(Sigma))
+  }
+
+  if (!is.null(out_path)) {
+    write.csv(Sigma, file.path(out_path, "Sigma.csv"), row.names = FALSE)
+    write.csv(kept_entries, file.path(out_path, "kept_entries.csv"), row.names = FALSE)
+  }
+
+  ##### pure_homo starts from here
+  R_hat <- cor(X)
+  Sigma <- abs(Sigma) # This has become a thresholded correlation matrix, which can be negative
+  # Sigma <- cov(X)
+
+  if (verbose)
+    cat("Select delta by using", nfolds, "fold cross-validation...\n")
+
+  # Find parallel rows and its partition
+  CV_res <- KfoldCV_delta(X, optDelta, ndelta, q, exact, nfolds, max_pure, verbose)
+  pure_res <- CV_res$est_pure
+  est_I <- pure_res$I_part
+  est_I_set <- pure_res$I
+
+  if (verbose) {
+    cat('delta: ', CV_res$delta_min, '\n')
+  }
+
+  # optDelta <- CV_res$delta_min
+
+  if (verbose)
+    cat("Start estimating the pure loadings...\n")
+
+  # Post-select pure variables
+  if (length(est_I) >= 2) {
+    BI_C_res <- Est_BI_C(CV_res$moments, R_hat, est_I, est_I_set)
+    est_I <- Re_Est_Pure(X, Sigma, CV_res$moments, est_I, BI_C_res$Gamma)
+    est_I_set <- as.numeric(unlist(est_I))
+  } else if (length(est_I) <= 1) {
+    cat("Algorithm fails since <2 pure variables found.\n")
+    stop()
+  }
+
+  D_Sigma <- diag(Sigma)
+  B_hat <- BI_C_res$B
+  R_Z <- BI_C_res$C
+
+  # Estimate the loading matrix A and C.
+
+  B_hat <- sqrt(D_Sigma) * B_hat
+  D_B <- apply(abs(B_hat), 2, max)
+  A_hat <- t(t(B_hat) / D_B)
+  C_hat <- D_B  * R_Z
+
+  if (diagonal)
+    C_hat <- diag(diag(C_hat))
+
+  I_hat <- est_I_set
+  I_hat_part <- FindSignPureNode(pure_res$I_part, Sigma)
+
+  Gamma_hat <- BI_C_res$Gamma * D_Sigma
+  
+  #### pure_homo ends from here
 
   Gamma_hat[Gamma_hat < 0] <- 0
 

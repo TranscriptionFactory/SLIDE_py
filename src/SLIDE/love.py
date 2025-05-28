@@ -7,8 +7,7 @@ from rpy2.robjects import numpy2ri, packages, r
 
 def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose=False, 
                     pure_homo=False, diagonal=False, delta=None, merge=False, 
-                    rep_CV=50, ndelta=50, q=2, exact=False, max_pure=None, nfolds=10,
-                    LOVE_version='LOVE', outpath='.'):
+                    rep_CV=50, ndelta=50, q=2, exact=False, max_pure=None, nfolds=10, outpath='.'):
     """
     Python wrapper for calling the LOVE function from local R scripts.
     Need to use local due to edge case where only 1 pure variable is found in LOVE.
@@ -19,10 +18,15 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
     dict
         Dictionary containing the results from the LOVE analysis
     """
+
+    gene_names = X.columns
+    sample_names = X.index
+
+    X = X.values
     
     # Activate automatic conversion between R and NumPy objects
     numpy2ri.activate()
-    
+
     # Convert Python parameters to R values
     r_X = numpy2ri.py2rpy(X)
     r_lbd = robjects.FloatVector([lbd]) if not isinstance(lbd, (list, np.ndarray)) else robjects.FloatVector(lbd)
@@ -38,6 +42,8 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
     r_q = robjects.IntVector([q])
     r_exact = robjects.BoolVector([exact])
     r_nfolds = robjects.IntVector([nfolds])
+    r_gene_names = robjects.StrVector(gene_names)
+    r_sample_names = robjects.StrVector(sample_names)
     
     # Handle delta which can be None
     r_delta = robjects.NULL if delta is None else robjects.FloatVector([delta]) if not isinstance(delta, (list, np.ndarray)) else robjects.FloatVector(delta)
@@ -47,9 +53,9 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
 
 
     # Source the correct LOVE function
-    if LOVE_version == 'SLIDE':
+    if pure_homo is True:
         love_function = 'getLatentFactors.R'
-        love_directory = 'SLIDE-R'
+        love_directory = 'LOVE-SLIDE'
     else:
         love_function = 'LOVE.R'
         love_directory = 'LOVE-master/R'
@@ -83,7 +89,7 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
         raise ValueError("LOVE function not found. Please check the LOVE-master directory path.")
     
     # Now call the LOVE function directly using r.LOVE instead of r['LOVE']
-    if LOVE_version == 'SLIDE':
+    if pure_homo is True:
         result = r.getLatentFactors(r_X, 
                   delta=r_delta,
                   lbd=r_lbd, 
@@ -108,7 +114,11 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
                   q=r_q, 
                   exact=r_exact, 
                   max_pure=r_max_pure, 
-                  nfolds=r_nfolds)
+                  nfolds=r_nfolds,
+                  out_path=outpath,
+                  gene_names=r_gene_names,
+                  sample_names=r_sample_names
+                )
     
     # Convert R results to Python
     python_result = {}
