@@ -4,7 +4,7 @@ A bunch of python wrappers for R code
 
 ## Overview
 
-SLIDE combines the LOVE (Latent Overlapping Variable Estimation) clustering algorithm with knockoff-based statistical inference to identify significant standalone and interacting latent factors. 
+SLIDE combines the LOVE (Latent Model-Based Clustering for Biological Discovery) clustering algorithm with knockoff-based statistical inference to identify significant standalone and interacting latent factors. 
 
 ## Quick Start
 
