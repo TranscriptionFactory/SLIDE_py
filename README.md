@@ -9,6 +9,9 @@ SLIDE combines the LOVE (Latent Model-Based Clustering for Biological Discovery)
 ## Quick Start
 
 ### Basic Usage
+
+If running into trouble, feel free to use or clone the environment here: /ix3/djishnu/alw399/envs/rhino
+
 ##### From command line 
 Use the full path if you are not calling slide.py from the same directory
 
