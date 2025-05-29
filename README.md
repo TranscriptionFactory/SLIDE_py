@@ -4,11 +4,14 @@ A bunch of python wrappers for R code
 
 ## Overview
 
-SLIDE combines the LOVE (Latent Overlapping Variable Estimation) clustering algorithm with knockoff-based statistical inference to identify significant standalone and interacting latent factors. 
+SLIDE combines the LOVE (Latent Model-Based Clustering for Biological Discovery) clustering algorithm with knockoff-based statistical inference to identify significant standalone and interacting latent factors. 
 
 ## Quick Start
 
 ### Basic Usage
+
+If running into trouble, feel free to use or clone the environment here: ```/ix3/djishnu/alw399/envs/rhino```
+
 ##### From command line 
 Use the full path if you are not calling slide.py from the same directory
 
