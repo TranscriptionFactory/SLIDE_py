@@ -117,7 +117,7 @@ SLIDE_py/
 ## To-do list
 
 These files
-- **Yaml conversion**: Since people already have pipelines set up, it would be convenient to have a function to read yamls into dictionaries
+- ~~**Yaml conversion**: Since people already have pipelines set up, it would be convenient to have a function to read yamls into dictionaries~~
 - **Other y_factor**: Currently only binary y is accomodated. 
 - **Parallelization**: Knockoffs can be made much faster. Please see `select_short_freq` in `src/SLIDE/knockoffs.py`. I was trying to use concurrent futures/ pqdm but I couldn't figure out the errors and gave up. 
 - **Correlation networks**: I think networkx can make similar graph-like figures, but I'm not familiar with making them
