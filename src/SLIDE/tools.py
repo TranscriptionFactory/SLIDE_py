@@ -3,7 +3,22 @@ from collections import defaultdict
 import os
 import numpy as np
 import pandas as pd
+import yaml
 
+def yaml_to_dict(yaml_path):
+    """
+    Convert a .yaml file to a dictionary
+    
+    Args:
+        yaml_path (string): String path to the file containing the input parameters.
+
+    Returns:
+        input_params (dict): Dictionary containing input parameters with default values.
+    """
+    with open(yaml_path, 'r') as file:
+        input_params = yaml.safe_load(file)   
+    return(input_params)
+    
 def init_data(input_params):
     """
     Initialize the data object and set default parameters.
