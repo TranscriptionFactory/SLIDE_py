@@ -303,6 +303,7 @@ class OptimizeSLIDE(SLIDE):
 
         marginal_idxs = machop.select_short_freq(
             z = latent_factors.values, 
+            y = self.data.Y.values,
             spec = spec, 
             fdr = fdr, 
             niter = niter, 
@@ -323,6 +324,7 @@ class OptimizeSLIDE(SLIDE):
         # Get significant interactions from flattened array
         sig_interactions = machop.select_short_freq(
             z = interaction_terms,
+            y = self.data.Y.values,
             spec = spec,
             fdr = fdr,
             niter = niter,

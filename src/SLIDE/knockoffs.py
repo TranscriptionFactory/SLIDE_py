@@ -190,8 +190,8 @@ class Knockoffs():
 
         return LP, beta
 
-
-    def select_short_freq(self, z, spec=0.3, fdr=0.1, niter=1000, f_size=100, n_workers=1):
+    @staticmethod
+    def select_short_freq(z, y, spec=0.3, fdr=0.1, niter=1000, f_size=100, n_workers=1):
         """
         Find significant variables using second order knockoffs across subsets of features.
 
@@ -221,8 +221,14 @@ class Knockoffs():
             List of selected variable indices
         """
         # Scale the input features
-        z = self.scale_features(z)
-        y = self.y.copy()
+        z = Knockoffs.scale_features(z)
+        y = y.copy()
+
+        if isinstance(y, pd.Series) or isinstance(y, pd.DataFrame):
+            y = y.values
+        
+        if isinstance(z, pd.DataFrame):
+            z = z.values
         
         n_features = z.shape[1]
         n_splits = math.ceil(n_features / f_size)
@@ -239,7 +245,7 @@ class Knockoffs():
             subset_z = z[:, start:stop]
 
             # Run knockoffs on this subset
-            selected_indices = self.filter_knockoffs_iterative(subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers)
+            selected_indices = Knockoffs.filter_knockoffs_iterative(subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers)
         
             # Adjust indices to account for subset
             selected_indices = selected_indices + start
@@ -253,7 +259,7 @@ class Knockoffs():
 
         if n_splits > 1 and len(screen_var) > 1:
             subset_z = z[:, screen_var]
-            final_var = self.filter_knockoffs_iterative(subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers)
+            final_var = Knockoffs.filter_knockoffs_iterative(subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers)
             final_var = screen_var[final_var] # index the candidate indices to get the final significant indices
         else:
             final_var = screen_var
