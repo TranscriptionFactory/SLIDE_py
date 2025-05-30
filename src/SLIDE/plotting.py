@@ -171,19 +171,14 @@ class Plotter:
         fig.patch.set_facecolor('white')
         
         # Plot density for s1_random and s2_random with filled area
-        for score_type, color in [('full_random', 'blue'), ('partial_random', 'green')]:
+        for score_type, color in [('full_random', 'blue'), ('partial_random', 'green'), ('s3', 'red')]:
             if len(set(scores[score_type])) == 1:  # If all values are the same
                 ax.axvline(x=scores[score_type][0], color=color, label=f'{score_type}', linewidth=2)
             else:
                 sns.kdeplot(scores[score_type], label=score_type, ax=ax, fill=True, alpha=0.3, color=color)
         
-        # Add vertical line at s1 median
-        # s1_median = np.median(scores['s1'])
-        # ax.axvline(x=s1_median, color='purple', linestyle='--', label=f's1 median: {s1_median:.3f}', alpha=0.3)
-        # s2_median = np.median(scores['s2'])
-        # ax.axvline(x=s2_median, color='orange', linestyle='--', label=f's2 median: {s2_median:.3f}', alpha=0.3)
-        s3_median = np.median(scores['s3'])
-        ax.axvline(x=s3_median, color='red', linestyle='--', label=f's3 median: {s3_median:.3f}')
+        s3_max = np.max(scores['s3'])
+        ax.axvline(x=s3_max, color='red', linestyle='--', label=f's3 best: {s3_max:.3f}')
         
         # Customize plot appearance
         ax.set_title(title, fontsize=14, pad=15, fontweight='bold')

@@ -14,11 +14,11 @@ from knockoffs import Knockoffs
 
 # from ER import EssentialRegression
 from plotting import Plotter
-from score import Estimator
+from score import SLIDE_Estimator
 
 class SLIDE:
-    def __init__(self, input_params):
-        self.data, self.input_params = init_data(input_params)
+    def __init__(self, input_params, x=None, y=None):
+        self.data, self.input_params = init_data(input_params, x, y)
 
     def calc_default_fsize(self, K):
         """
@@ -59,82 +59,6 @@ class SLIDE:
             print(f"Error loading LOVE result: {e}")
             return
     
-    def get_aucs(self, z_matrix, n_iters=10, test_size=0.2, scaler='standard'):
-        """
-        Get the AUCs on a sample x feature matrix. Each iter will fit and test on a different
-        random sample of the data.
-
-        Args:
-            z_matrix (pd.DataFrame): The z_matrix to evaluate.
-            n_iters (int): The number of iterations to run.
-            test_size (float): The percentage of data to use as a test set.
-            scaler (str): The scaler to use.
-        """
-        model = Estimator(model='linear', scaler=scaler)
-        scores = model.evaluate(
-            X=z_matrix, 
-            y=self.data.Y, 
-            n_iters=n_iters,
-            test_size=test_size,
-        )
-        return scores
-
-    
-    def score_performance(self, s1, s2, n_iters=100, test_size=0.2, scaler='standard', outdir='.'):
-        """
-        Score the performance of the given latent factors relative to each other and to random
-        selection of marginals and interactions.
-        This visualization is similar to the control plot in original R code.
-
-        s1: standalone LFs 
-        s2: interacting LF terms (marginal * interacting)
-        """
-        scores = defaultdict(list)
-
-        # scores['s1'] = self.get_aucs(s1, n_iters, test_size=test_size, scaler=scaler)
-        # scores['s2'] = self.get_aucs(s2, n_iters, test_size=test_size, scaler=scaler)
-        scores['s3'] = self.get_aucs(np.concatenate([s1, s2], axis=1), n_iters, test_size=test_size, scaler=scaler)
-
-        num_marginals = s1.shape[1]
-        num_interactions = s2.shape[1]
-        sig_terms = np.concatenate([self.sig_LFs, self.sig_interacts], axis=0)
-
-        non_sig_LFs = self.latent_factors.loc[:, ~self.latent_factors.columns.isin(sig_terms)]
-
-        if non_sig_LFs.shape[1] <= 0:
-            print('No non-sig LFs found')
-            return scores
-        
-        n = self.data.X.shape[0]
-        real_interaction_terms = Knockoffs.get_interaction_terms(
-            self.latent_factors.loc[:, sig_terms], # real sig standalone with fake interaction terms
-            non_sig_LFs
-        ).reshape(n, -1)
-
-        for _ in tqdm(range(n_iters)):
-            s1_random = non_sig_LFs.iloc[:, np.random.choice(
-                non_sig_LFs.shape[1], num_marginals, replace=False
-            )]
-
-            interaction_terms = Knockoffs.get_interaction_terms(non_sig_LFs, s1_random).reshape(n, -1)
-            s2_random = interaction_terms[:, np.random.choice(interaction_terms.shape[1], num_interactions, replace=False)]
-            
-            s3_random = np.concatenate([s1_random.values, s2_random], axis=1)
-            scores['full_random'].append(self.get_aucs(s3_random, n_iters=1, test_size=test_size, scaler=scaler))
-
-            if real_interaction_terms.shape[1] > 0:
-                s2_real = real_interaction_terms[:, np.random.choice(real_interaction_terms.shape[1], num_interactions, replace=False)]
-                s3_real = np.concatenate([s1.values, s2_real], axis=1)
-                scores['partial_random'].append(self.get_aucs(s3_real, n_iters=1, test_size=test_size, scaler=scaler))
-            else:
-                pass # not enough interaction terms to sample from
-
-        scores['full_random'] = np.array(scores['full_random']).flatten()
-        scores['partial_random'] = np.array(scores['partial_random']).flatten()
-
-        Plotter.plot_controlplot(scores, outdir=outdir, title='control_plot')
-        return scores
-
     def save_params(self, outpath, scores):
         """
         Save the parameters and scores.
@@ -217,8 +141,8 @@ class SLIDE:
 
 
 class OptimizeSLIDE(SLIDE):
-    def __init__(self, input_params):
-        super().__init__(input_params)
+    def __init__(self, input_params, x=None, y=None):
+        super().__init__(input_params, x, y)
     
     def get_latent_factors(self, x, y, delta, mu=0.5, lbd=0.1, pure_homo=True, verbose=False, thresh_fdr=0.2, outpath='.'):
         """
@@ -302,13 +226,13 @@ class OptimizeSLIDE(SLIDE):
         machop = Knockoffs(y = self.data.Y.values, z2 = latent_factors.values)
 
         marginal_idxs = machop.select_short_freq(
-            z = latent_factors.values, 
-            y = self.data.Y.values,
-            spec = spec, 
-            fdr = fdr, 
-            niter = niter, 
-            f_size = f_size,
-            n_workers = n_workers
+            z=latent_factors.values,
+            y=self.data.Y.values,
+            spec=spec,
+            fdr=fdr,
+            niter=niter,
+            f_size=f_size,
+            n_workers=n_workers
         )
 
         self.marginal_idxs = marginal_idxs
@@ -318,22 +242,29 @@ class OptimizeSLIDE(SLIDE):
 
         machop.add_z1(marginal_idxs=self.marginal_idxs)
 
+        if machop.z2.shape[1] == 0:
+            print('All LFs are standalone, consider lowering delta for LOVE to find more LFs')
+            self.interaction_pairs = np.array([])
+            self.interaction_terms = np.array([])
+            return
+
         # Flatten interaction terms for knockoff selection
         interaction_terms = machop.interaction_terms.reshape(machop.n, -1)
 
         # Get significant interactions from flattened array
         sig_interactions = machop.select_short_freq(
-            z = interaction_terms,
-            y = self.data.Y.values,
-            spec = spec,
-            fdr = fdr,
-            niter = niter,
-            f_size = f_size,
-            n_workers = n_workers
+            z=interaction_terms,
+            y=self.data.Y.values,
+            spec=spec,
+            fdr=fdr,
+            niter=niter,
+            f_size=f_size,
+            n_workers=n_workers
         )
 
         if len(sig_interactions) == 0:
             self.interaction_pairs = np.array([])
+            self.interaction_terms = np.array([])
         else:
             n_candidates = machop.z2.shape[1]
             marginal_lf = self.marginal_idxs[sig_interactions // n_candidates]
@@ -486,15 +417,18 @@ class OptimizeSLIDE(SLIDE):
                 if len(sig_interact_genes) > 0:
                     Plotter.plot_latent_factors(sig_interact_genes, loadings=self.A, outdir=out_iter, title='interaction_LFs')
 
-                scores = self.score_performance(
-                    s1=self.latent_factors[self.sig_LFs], 
-                    s2=self.interaction_terms, 
-                    n_iters=10, 
+                scores = SLIDE_Estimator.score_performance(
+                    latent_factors=self.latent_factors,
+                    sig_LFs=self.sig_LFs,
+                    sig_interacts=self.sig_interacts,
+                    y=self.data.Y,
+                    n_iters=50, 
                     test_size=0.2,
                     scaler='standard', 
-                    outdir=out_iter
-                
                 )
+                
+                Plotter.plot_controlplot(scores, outdir=out_iter, title='control_plot')
+
             else:
                 scores = None
                 self.sig_interacts = []

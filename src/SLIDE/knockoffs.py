@@ -190,6 +190,7 @@ class Knockoffs():
 
         return LP, beta
 
+
     @staticmethod
     def select_short_freq(z, y, spec=0.3, fdr=0.1, niter=1000, f_size=100, n_workers=1):
         """
@@ -229,7 +230,7 @@ class Knockoffs():
         
         if isinstance(z, pd.DataFrame):
             z = z.values
-        
+
         n_features = z.shape[1]
         n_splits = math.ceil(n_features / f_size)
         feature_split = math.ceil(n_features / n_splits)

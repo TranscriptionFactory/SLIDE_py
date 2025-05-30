@@ -4,7 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 
-def init_data(input_params):
+def init_data(input_params, x=None, y=None):
     """
     Initialize the data object and set default parameters.
 
@@ -19,10 +19,10 @@ def init_data(input_params):
     data = EasyDict()
     input_params = defaultdict(lambda: None, input_params)
 
-    if input_params['x_path'] is None:
+    if input_params['x_path'] is None and x is None:
         raise ValueError("x_path is not provided")
     
-    if input_params['y_path'] is None:
+    if input_params['y_path'] is None and y is None:
         raise ValueError("y_path is not provided")
     
     if input_params['y_factor'] is None:
@@ -57,9 +57,16 @@ def init_data(input_params):
     
     if input_params['n_workers'] is None:
         input_params['n_workers'] = 1
+
+    if x is None:
+        data.X = pd.read_csv(input_params['x_path'], index_col=0)
+    else:
+        data.X = x
     
-    data.X = pd.read_csv(input_params['x_path'], index_col=0)
-    data.Y = pd.read_csv(input_params['y_path'], index_col=0)
+    if y is None:
+        data.Y = pd.read_csv(input_params['y_path'], index_col=0)
+    else:
+        data.Y = y
 
     if input_params['y_factor'] is True:
         data.Y = data.Y.replace({
