@@ -19,7 +19,7 @@ def yaml_to_dict(yaml_path):
         input_params = yaml.safe_load(file)   
     return(input_params)
     
-def init_data(input_params):
+def init_data(input_params, x=None, y=None):
     """
     Initialize the data object and set default parameters.
 
