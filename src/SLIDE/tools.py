@@ -3,22 +3,7 @@ from collections import defaultdict
 import os
 import numpy as np
 import pandas as pd
-import yaml
 
-def yaml_to_dict(yaml_path):
-    """
-    Convert a .yaml file to a dictionary
-    
-    Args:
-        yaml_path (string): String path to the file containing the input parameters.
-
-    Returns:
-        input_params (dict): Dictionary containing input parameters with default values.
-    """
-    with open(yaml_path, 'r') as file:
-        input_params = yaml.safe_load(file)   
-    return(input_params)
-    
 def init_data(input_params, x=None, y=None):
     """
     Initialize the data object and set default parameters.
@@ -72,6 +57,9 @@ def init_data(input_params, x=None, y=None):
     
     if input_params['n_workers'] is None:
         input_params['n_workers'] = 1
+    
+    if input_params['do_interacts'] is None:
+        input_params['do_interacts'] = True
 
     if x is None:
         data.X = pd.read_csv(input_params['x_path'], index_col=0)
@@ -87,6 +75,7 @@ def init_data(input_params, x=None, y=None):
         data.Y = data.Y.replace({
             orig_y: i for i, orig_y in enumerate(np.unique(data.Y))
         })
+        data.Y = data.Y.astype(int)
 
     return data, input_params
 

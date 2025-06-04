@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from tqdm import tqdm
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from knockoffs import Knockoffs
+from .knockoffs import Knockoffs
 
 
 class Estimator():

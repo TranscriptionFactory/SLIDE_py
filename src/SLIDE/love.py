@@ -43,7 +43,6 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
     r_nfolds = robjects.IntVector([nfolds])
     r_gene_names = robjects.StrVector(gene_names)
     r_sample_names = robjects.StrVector(sample_names)
-    r_outpath = robjects.StrVector([outpath])
     
     # Handle delta which can be None
     r_delta = robjects.NULL if delta is None else robjects.FloatVector([delta]) if not isinstance(delta, (list, np.ndarray)) else robjects.FloatVector(delta)
@@ -95,7 +94,7 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
                   lbd=r_lbd, 
                   thresh_fdr=r_thresh_fdr,
                   rep_cv=r_rep_CV,
-                  out_path=r_outpath,
+                  out_path=outpath,
                   verbose=r_verbose
                   )
     else:
@@ -115,7 +114,7 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
                   exact=r_exact, 
                   max_pure=r_max_pure, 
                   nfolds=r_nfolds,
-                  out_path=r_outpath,
+                  out_path=outpath,
                   gene_names=r_gene_names,
                   sample_names=r_sample_names
                 )

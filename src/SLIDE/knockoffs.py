@@ -75,34 +75,6 @@ class Knockoffs():
         assert z_matrix.shape[0] == plm_embedding.shape[0]
         return np.einsum('ij,ik->ijk', z_matrix, plm_embedding)
 
-    # @staticmethod
-    # def filter_knockoffs_knockpy(interaction_terms, y, fdr=0.05):
-    #     '''
-    #     The knockpy filter is too stringent, and not performing as well as expected.
-    #     @return: mask of 0,1 significant interaction terms where 1 is significant
-    #     '''
-
-    #     print('Warning: The knockpy filter is not recommended. Use the R knockoff filter instead.')
-
-    #     kfilter = KnockoffFilter(
-    #         ksampler='gaussian', 
-    #         fstat='lasso',
-    #         fstat_kwargs={
-    #             'zstat': 'lars_path',
-    #         },
-    #         knockoff_kwargs={'method': 'sdp'}
-    #     )
-    #     rejections = kfilter.forward(
-    #         X=interaction_terms, 
-    #         y=y.flatten(), 
-    #         fdr=fdr, 
-    #         knockoff_kwargs={
-    #             'offset': 0
-    #         },
-    #         shrinkage="ledoitwolf"
-    #     )
-    #     return rejections
-    
     @staticmethod 
     def filter_knockoffs_iterative(z, y, fdr=0.1, niter=1, spec=0.2, n_workers=1):
         '''
@@ -138,48 +110,8 @@ class Knockoffs():
 
         idx, counts = np.unique(results, return_counts=True)
         sig_idxs = idx[np.where(counts >= spec * niter)]
-        # sig_mask = np.zeros(z.shape[1], dtype=int)
-        # sig_mask[sig_idxs] = 1
 
         return sig_idxs
-    
-    # def filter_knockoffs_iterative(self, interaction_terms, y, fdr=0.05, niter=1000, spec=0.3, n_workers=None):
-    #     """
-    #     Run knockoff filter multiple times and select features that appear consistently.
-        
-    #     Parameters:
-    #     -----------
-    #     interaction_terms : numpy.ndarray
-    #         Feature matrix
-    #     y : numpy.ndarray
-    #         Target variable
-    #     fdr : float, default=0.05
-    #         False discovery rate threshold
-    #     niter : int, default=1000
-    #         Number of iterations to run
-    #     spec : float, default=0.3
-    #         Specificity threshold (proportion of iterations a feature must be selected)
-    #     n_workers : int, default=None
-    #         Number of parallel workers. If None, uses available CPU count
-            
-    #     Returns:
-    #     --------
-    #     dict
-    #         Contains 'selected_features' (binary mask) and 'selection_frequencies'
-    #     """
-    #     rejections_list = []
-    #     for _ in range(niter):
-    #         rejections_list.append(self.filter_knockoffs(interaction_terms, y, fdr))
-
-    #     # Convert to numpy array and calculate selection frequency
-    #     rejections_array = np.array(rejections_list)
-    #     selection_frequencies = np.sum(rejections_array, axis=0) / niter
-        
-    #     # Apply specificity threshold
-    #     sig_mask = np.where(selection_frequencies >= spec, 1, 0)
-        
-    #     return sig_mask
-
     
     def fit_linear(self, z_matrix, y):
         '''fit z-matrix in linear part to get LP'''

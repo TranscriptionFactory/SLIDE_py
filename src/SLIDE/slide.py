@@ -8,13 +8,12 @@ from tqdm import tqdm
 from itertools import product
 from collections import defaultdict
 
-from tools import init_data, calc_default_fsize, show_params
-from love import call_love
-from knockoffs import Knockoffs
+from .tools import init_data, calc_default_fsize, show_params
+from .love import call_love
+from .knockoffs import Knockoffs
 
-# from ER import EssentialRegression
-from plotting import Plotter
-from score import SLIDE_Estimator
+from .plotting import Plotter
+from .score import SLIDE_Estimator
 
 class SLIDE:
     def __init__(self, input_params, x=None, y=None):
@@ -59,6 +58,49 @@ class SLIDE:
             print(f"Error loading LOVE result: {e}")
             return
     
+    @staticmethod
+    def get_LF_genes(A, lf, lf_thresh=0.03, top_feats=20, outpath=None):
+        """
+        Returns a dictionary of lists, categorizing genes into positive and negative based on their loadings.
+        
+        Parameters:
+        - lf: The name of the latent factor (column name in self.latent_factors).
+        - lf_thresh: The threshold for the latent factor loadings.
+
+        Returns:
+        - Dictionary with 'positive' and 'negative' keys, containing lists of indices (gene names) for each.
+        """
+
+        if lf not in A.columns:
+            raise ValueError(f"Latent factor {lf} not found in A matrix")
+
+        contribution = A[lf]
+        positive_genes = contribution[contribution > lf_thresh]
+        negative_genes = contribution[contribution < -lf_thresh]
+
+        # group = self.love_result['group'][int(lf.replace('Z', ''))]
+        # genes = self.data.X.columns
+        # positive_genes = genes[np.array(group['pos']) - 1]
+        # negative_genes = genes[np.array(group['neg']) - 1] # +1 because LOVE uses 1-indexing
+
+        # Sort genes by absolute loading value in descending order
+    
+        if outpath is not None:
+            all_genes = pd.concat([positive_genes, negative_genes])
+            all_genes = all_genes.sort_values(key=abs, ascending=False)
+            # Save both gene names and their loading values
+            np.savetxt(os.path.join(outpath, f'feature_list_{lf}.txt'), 
+                      np.column_stack((all_genes.index, all_genes.values)), 
+                      fmt='%s\t%.6f')
+    
+        all_genes = all_genes[:top_feats]
+        
+        # Return as a dictionary
+        return {
+            'pos': [x for x in positive_genes.index if x in all_genes], 
+            'neg': [x for x in negative_genes.index if x in all_genes]
+        }
+    
     def save_params(self, outpath, scores):
         """
         Save the parameters and scores.
@@ -73,9 +115,18 @@ class SLIDE:
             full_random = scores['full_random'].mean()
 
         with open(os.path.join(outpath, 'scores.txt'), 'w') as f:
+            
+            f.write(f"Run completed: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write("\n#########################\n\n")
+
             f.write(f"True Scores: {true_scores}\n")
             f.write(f"Partial Random: {partial_random}\n")
             f.write(f"Full Random: {full_random}\n")
+            f.write("\n#########################\n\n")
+
+            f.write(f"Number of latent factors: {self.latent_factors.shape[1]}\n")
+            f.write(f"Number of marginals: {len(self.sig_LFs)}\n")
+            f.write(f"Number of interactions: {len(self.sig_interacts)}\n")
         
         with open(os.path.join(outpath, 'run_params.txt'), 'w') as f:
             
@@ -85,21 +136,9 @@ class SLIDE:
             
             for key, value in self.input_params.items():
                 f.write(f"{key}: {value}\n")
-            
-            f.write("\n#########################\n\n")
 
-            f.write(f"Number of latent factors: {self.latent_factors.shape[1]}\n")
-            f.write(f"Number of marginals: {len(self.sig_LFs)}\n")
-            f.write(f"Number of interactions: {len(self.sig_interacts)}\n")
-            
-            f.write("\n#########################\n\n")
-            
-            f.write(f"Partial Random: {partial_random}\n")
-            f.write(f"Full Random: {full_random}\n")
-            f.write(f"True Scores: {true_scores}\n")
-        
-
-    def create_summary_table(self, outpath):
+    @staticmethod
+    def create_summary_table(outpath):
         """
         Create a summary table of the results.
         """
@@ -135,7 +174,7 @@ class SLIDE:
         # df['full_random'] = df['full_random'].astype(float).round(3)
         # df['partial_random'] = df['partial_random'].astype(float).round(3)
         df['sampleCV_Performance'] = df['sampleCV_Performance'].astype(float).round(3)
-
+        df.sort_values(by='sampleCV_Performance', inplace=True)
         
         df.to_csv(os.path.join(outpath, 'summary_table.csv'), index=False)
 
@@ -226,13 +265,13 @@ class OptimizeSLIDE(SLIDE):
         machop = Knockoffs(y = self.data.Y.values, z2 = latent_factors.values)
 
         marginal_idxs = machop.select_short_freq(
-            z=latent_factors.values,
-            y=self.data.Y.values,
-            spec=spec,
-            fdr=fdr,
-            niter=niter,
-            f_size=f_size,
-            n_workers=n_workers
+            z = latent_factors.values, 
+            y = self.data.Y.values,
+            spec = spec, 
+            fdr = fdr, 
+            niter = niter, 
+            f_size = f_size,
+            n_workers = n_workers
         )
 
         self.marginal_idxs = marginal_idxs
@@ -253,13 +292,13 @@ class OptimizeSLIDE(SLIDE):
 
         # Get significant interactions from flattened array
         sig_interactions = machop.select_short_freq(
-            z=interaction_terms,
-            y=self.data.Y.values,
-            spec=spec,
-            fdr=fdr,
-            niter=niter,
-            f_size=f_size,
-            n_workers=n_workers
+            z = interaction_terms,
+            y = self.data.Y.values,
+            spec = spec,
+            fdr = fdr,
+            niter = niter,
+            f_size = f_size,
+            n_workers = n_workers
         )
 
         if len(sig_interactions) == 0:
@@ -277,7 +316,7 @@ class OptimizeSLIDE(SLIDE):
             self.interaction_terms = interaction_terms[:, sig_interactions]
     
 
-    def run_SLIDE(self, latent_factors, niter, spec, fdr, verbose=False, n_workers=1, outpath='.'):
+    def run_SLIDE(self, latent_factors, niter, spec, fdr, verbose=False, n_workers=1, outpath='.', do_interacts=True):
         
         f_size = self.calc_default_fsize(latent_factors.shape[1])
 
@@ -290,66 +329,34 @@ class OptimizeSLIDE(SLIDE):
 
         if len(self.marginal_idxs) == 0:
             print("No standalone LF found")
+            self.sig_LFs = []
+            self.sig_interacts = []
             return
         
         self.sig_LFs = [f"Z{i}" for i in self.marginal_idxs]
         np.savetxt(os.path.join(outpath, 'sig_LFs.txt'), self.sig_LFs, fmt='%s')
 
-        ### Find interacting LFs
         if verbose:
             print(f'Found {len(self.marginal_idxs)} standalone LF')
-            print(f'Finding interacting LF...')
 
-        self.find_interaction_LFs(machop, spec, fdr, niter, f_size, n_workers)
+        ### Find interacting LFs
 
-        if verbose:
-            print(f'Found {len(self.interaction_pairs)} interacting LF')
+        if do_interacts:
 
-        self.sig_interacts = [f"Z{j}" for i, j in self.interaction_pairs.T]
-        np.savetxt(os.path.join(outpath, 'sig_interacts.txt'), self.sig_interacts, fmt='%s')
+            if verbose:
+                print(f'Finding interacting LF...')
 
+            self.find_interaction_LFs(machop, spec, fdr, niter, f_size, n_workers)
 
-    def get_LF_genes(self, lf, lf_thresh=0.03, top_feats=10, outpath=None):
-        """
-        Returns a dictionary of lists, categorizing genes into positive and negative based on their loadings.
-        
-        Parameters:
-        - lf: The name of the latent factor (column name in self.latent_factors).
-        - lf_thresh: The threshold for the latent factor loadings.
+            if verbose:
+                print(f'Found {len(self.interaction_pairs)} interacting LF')
 
-        Returns:
-        - Dictionary with 'positive' and 'negative' keys, containing lists of indices (gene names) for each.
-        """
+            self.sig_interacts = [f"Z{j}" for i, j in self.interaction_pairs.T]
+            np.savetxt(os.path.join(outpath, 'sig_interacts.txt'), self.sig_interacts, fmt='%s')
 
-        if lf not in self.A.columns:
-            raise ValueError(f"Latent factor {lf} not found in A matrix")
+        else:
 
-        contribution = self.A[lf]
-        positive_genes = contribution[contribution > lf_thresh]
-        negative_genes = contribution[contribution < -lf_thresh]
-
-        # group = self.love_result['group'][int(lf.replace('Z', ''))]
-        # genes = self.data.X.columns
-        # positive_genes = genes[np.array(group['pos']) - 1]
-        # negative_genes = genes[np.array(group['neg']) - 1] # +1 because LOVE uses 1-indexing
-
-        # Sort genes by absolute loading value in descending order
-    
-        if outpath is not None:
-            all_genes = pd.concat([positive_genes, negative_genes])
-            all_genes = all_genes.sort_values(key=abs, ascending=False)
-            # Save both gene names and their loading values
-            np.savetxt(os.path.join(outpath, f'feature_list_{lf}.txt'), 
-                      np.column_stack((all_genes.index, all_genes.values)), 
-                      fmt='%s\t%.6f')
-    
-        all_genes = all_genes[:top_feats]
-        
-        # Return as a dictionary
-        return {
-            'pos': [x for x in positive_genes.index if x in all_genes], 
-            'neg': [x for x in negative_genes.index if x in all_genes]
-        }
+            self.sig_interacts = []
 
     def run_pipeline(self, verbose=True, n_workers=1):
         
@@ -395,7 +402,8 @@ class OptimizeSLIDE(SLIDE):
                 fdr=self.input_params['fdr'],
                 n_workers=self.input_params['n_workers'],
                 verbose=verbose,
-                outpath=out_iter
+                outpath=out_iter,
+                do_interacts=self.input_params['do_interacts']
             )
 
             if verbose:
@@ -403,13 +411,15 @@ class OptimizeSLIDE(SLIDE):
 
             if len(self.marginal_idxs) > 0:
 
-                sig_LF_genes = {str(lf): self.get_LF_genes(
+                sig_LF_genes = {str(lf): SLIDE.get_LF_genes(
+                    A=self.A,
                     lf=lf, 
                     top_feats=self.input_params['SLIDE_top_feats'],
                     outpath=out_iter) for lf in self.sig_LFs}
                 Plotter.plot_latent_factors(sig_LF_genes, loadings=self.A, outdir=out_iter, title='marginal_LFs')
 
-                sig_interact_genes = {str(lf): self.get_LF_genes(
+                sig_interact_genes = {str(lf): SLIDE.get_LF_genes(
+                    A=self.A,
                     lf=lf, 
                     top_feats=self.input_params['SLIDE_top_feats'],
                     outpath=out_iter) for lf in self.sig_interacts}
@@ -422,7 +432,7 @@ class OptimizeSLIDE(SLIDE):
                     sig_LFs=self.sig_LFs,
                     sig_interacts=self.sig_interacts,
                     y=self.data.Y,
-                    n_iters=50, 
+                    n_iters=100, 
                     test_size=0.2,
                     scaler='standard', 
                 )
@@ -433,7 +443,7 @@ class OptimizeSLIDE(SLIDE):
                 scores = None
                 self.sig_interacts = []
 
-            self.save_params(out_iter, scores)
+            SLIDE.save_params(out_iter, scores)
 
             if verbose:
                 print(f"\nCompleted {delta_iter}_{lambda_iter}\n")
@@ -441,39 +451,3 @@ class OptimizeSLIDE(SLIDE):
 
         self.create_summary_table(self.input_params['out_path'])
     
-
-
-if __name__ == "__main__":
-    
-    import argparse
-
-    parser = argparse.ArgumentParser(description='SLIDE pipeline parameters')
-    parser.add_argument('--x_path', type=str, required=True,
-                      help='Path to feature matrix CSV file')
-    parser.add_argument('--y_path', type=str, required=True,
-                      help='Path to response labels CSV file')
-    parser.add_argument('--fdr', type=float,
-                      help='False discovery rate threshold (Knockoffs)')
-    parser.add_argument('--thresh_fdr', type=float,
-                      help='FDR threshold for feature selection (LOVE)')
-    parser.add_argument('--spec', type=float,
-                      help='Minimum % times an LF found to be significant')
-    parser.add_argument('--y_factor', type=bool,
-                      help='Treat response as factor variable')
-    parser.add_argument('--niter', type=int,
-                      help='Number of iterations')
-    parser.add_argument('--SLIDE_top_feats', type=int,
-                      help='Number of top features to display')
-    parser.add_argument('--pure_homo', type=bool)
-    parser.add_argument('--delta', type=float, nargs='+')
-    parser.add_argument('--lambda', type=float, nargs='+')
-    parser.add_argument('--out_path', type=str, required=True,
-                      help='Output directory path')
-
-    args = parser.parse_args()
-    input_params = vars(args)
-
-    print(input_params)
-
-    slider = OptimizeSLIDE(input_params)
-    slider.run_pipeline(verbose=True, n_workers=1)

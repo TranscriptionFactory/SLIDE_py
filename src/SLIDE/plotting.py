@@ -176,7 +176,7 @@ class Plotter:
                 ax.axvline(x=scores[score_type][0], color=color, label=f'{score_type}', linewidth=2)
             else:
                 sns.kdeplot(scores[score_type], label=score_type, ax=ax, fill=True, alpha=0.3, color=color)
-        
+            
         s3_max = np.max(scores['s3'])
         ax.axvline(x=s3_max, color='red', linestyle='--', label=f's3 best: {s3_max:.3f}')
         
@@ -184,6 +184,7 @@ class Plotter:
         ax.set_title(title, fontsize=14, pad=15, fontweight='bold')
         ax.set_xlabel('Score', fontsize=12, labelpad=10)
         ax.set_ylabel('Density', fontsize=12, labelpad=10)
+        ax.set_xlim(-0.1, 1.1)
         
         # Customize grid and spines
         ax.grid(True, linestyle='--', alpha=0.3)
