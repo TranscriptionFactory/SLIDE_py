@@ -145,9 +145,12 @@ class SLIDE_Estimator(Estimator):
                     replace=False
                 )]
             ).reshape(n, -1)
+
+            s3_partial = (np.concatenate([s1, s2_real], axis=1) 
+                        if len(s2_real) > 0 else s1)
             
             scores['partial_random'].append(
-                Estimator.get_aucs(s2_real, y, 1, test_size, scaler)
+                Estimator.get_aucs(s3_partial, y, 1, test_size, scaler)
             )
 
         scores['partial_random'] = np.array(scores['partial_random']).flatten()

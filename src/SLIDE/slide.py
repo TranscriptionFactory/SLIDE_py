@@ -443,7 +443,7 @@ class OptimizeSLIDE(SLIDE):
                 scores = None
                 self.sig_interacts = []
 
-            SLIDE.save_params(out_iter, scores)
+            self.save_params(out_iter, scores)
 
             if verbose:
                 print(f"\nCompleted {delta_iter}_{lambda_iter}\n")
