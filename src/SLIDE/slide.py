@@ -142,7 +142,7 @@ class SLIDE:
         """
         Create a summary table of the results.
         """
-        outs = glob(os.path.join(outpath, '*_out/run_params.txt'))
+        outs = glob(os.path.join(outpath, '*_out/scores.txt'))
         df = pd.DataFrame(columns=['delta', 'lambda', 'num_of_LFs', 'num_of_Sig_LFs', 'num_of_Interactors', 'sampleCV_Performance'])
         
         for out in outs:
@@ -433,7 +433,7 @@ class OptimizeSLIDE(SLIDE):
                     sig_interacts=self.sig_interacts,
                     y=self.data.Y,
                     n_iters=100, 
-                    test_size=0.2,
+                    test_size=0.15,
                     scaler='standard', 
                 )
                 

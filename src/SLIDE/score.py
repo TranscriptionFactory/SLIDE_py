@@ -35,6 +35,7 @@ class Estimator():
     def score(self, yhat, y):
         yhat = [1 if i >= 0.5 else 0 for i in yhat]
         if len(np.unique(y)) == 1:
+            print('All same class')
             return None
         auc = roc_auc_score(y, yhat)
         return auc
@@ -54,7 +55,7 @@ class Estimator():
         scaler.fit(X)
         return scaler.transform(X)
 
-    def evaluate(self, X, y, n_iters=10, test_size=0.2):
+    def evaluate(self, X, y, n_iters=10, test_size=0.15):
         scores = [] 
         X = X.copy()
 

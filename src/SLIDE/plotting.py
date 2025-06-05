@@ -177,7 +177,7 @@ class Plotter:
             else:
                 sns.kdeplot(scores[score_type], label=score_type, ax=ax, fill=True, alpha=0.3, color=color)
             
-        s3_max = np.max(scores['s3'])
+        s3_max = np.max([x for x in scores['s3'] if x is not None])
         ax.axvline(x=s3_max, color='red', linestyle='--', label=f's3 best: {s3_max:.3f}')
         
         # Customize plot appearance
