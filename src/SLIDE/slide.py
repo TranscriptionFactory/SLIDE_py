@@ -7,13 +7,15 @@ import pickle
 from tqdm import tqdm
 from itertools import product
 from collections import defaultdict
+from contextlib import redirect_stdout
+from io import StringIO
 
 from .tools import init_data, calc_default_fsize, show_params
 from .love import call_love
 from .knockoffs import Knockoffs
 
 from .plotting import Plotter
-from .score import SLIDE_Estimator
+from .score import Estimator, SLIDE_Estimator
 
 class SLIDE:
     def __init__(self, input_params, x=None, y=None):
@@ -59,7 +61,7 @@ class SLIDE:
             return
     
     @staticmethod
-    def get_LF_genes(A, lf, lf_thresh=0.03, top_feats=20, outpath=None):
+    def get_LF_genes(A, lf, X, y, lf_thresh=0.03, top_feats=20, outpath=None):
         """
         Returns a dictionary of lists, categorizing genes into positive and negative based on their loadings.
         
@@ -74,32 +76,31 @@ class SLIDE:
         if lf not in A.columns:
             raise ValueError(f"Latent factor {lf} not found in A matrix")
 
-        contribution = A[lf]
-        positive_genes = contribution[contribution > lf_thresh]
-        negative_genes = contribution[contribution < -lf_thresh]
+        all_genes = A.loc[A[lf].abs() > 1e-10, lf]
+        scorer = Estimator(model='linear', scaler='standard')
 
-        # group = self.love_result['group'][int(lf.replace('Z', ''))]
-        # genes = self.data.X.columns
-        # positive_genes = genes[np.array(group['pos']) - 1]
-        # negative_genes = genes[np.array(group['neg']) - 1] # +1 because LOVE uses 1-indexing
-
-        # Sort genes by absolute loading value in descending order
-    
-        if outpath is not None:
-            all_genes = pd.concat([positive_genes, negative_genes])
-            all_genes = all_genes.sort_values(key=abs, ascending=False)
-            # Save both gene names and their loading values
-            np.savetxt(os.path.join(outpath, f'feature_list_{lf}.txt'), 
-                      np.column_stack((all_genes.index, all_genes.values)), 
-                      fmt='%s\t%.6f')
-    
-        all_genes = all_genes[:top_feats]
+        lf_info = pd.DataFrame(
+            index=A.index, columns=['loading', 'AUC', 'corr', 'color'])
         
-        # Return as a dictionary
-        return {
-            'pos': [x for x in positive_genes.index if x in all_genes], 
-            'neg': [x for x in negative_genes.index if x in all_genes]
-        }
+        lf_info['loading'] = all_genes
+        lf_info = lf_info[lf_info['loading'] != 0]
+
+
+        lf_info['AUC'] = np.array([scorer.evaluate(X[x], y) for x in all_genes.index]).mean(axis=1)
+        lf_info['corr'] = [np.corrcoef(
+                X[x].values.flatten(), y.values.flatten()
+            )[0, 1] for x in all_genes.index] # get the off diag element
+
+        lf_info['color'] = lf_info['corr'].apply(
+            lambda x: 'red' if x > lf_thresh else 'gray' if x > -lf_thresh else 'blue')
+
+        lf_info = lf_info.sort_values(by='loading', key=abs, ascending=False)
+        
+        if outpath is not None:
+            # Save gene names and their loading values
+            lf_info.to_csv(os.path.join(outpath, f'feature_list_{lf}.csv'), sep='\t')
+        
+        return lf_info[:top_feats]
     
     def save_params(self, outpath, scores):
         """
@@ -110,9 +111,9 @@ class SLIDE:
             partial_random = 'NA'
             full_random = 'NA'
         else:
-            true_scores = scores['s3'].mean()
-            partial_random = scores['partial_random'].mean()
-            full_random = scores['full_random'].mean()
+            true_scores = np.mean([x for x in scores['s3'] if x is not None])
+            partial_random = np.mean([x for x in scores['partial_random'] if x is not None])
+            full_random = np.mean([x for x in scores['full_random'] if x is not None])
 
         with open(os.path.join(outpath, 'scores.txt'), 'w') as f:
             
@@ -131,11 +132,12 @@ class SLIDE:
         with open(os.path.join(outpath, 'run_params.txt'), 'w') as f:
             
             f.write(f"Run completed: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-
-            f.write("\n#########################\n\n")
             
-            for key, value in self.input_params.items():
-                f.write(f"{key}: {value}\n")
+            # Capture show_params output
+            output = StringIO()
+            with redirect_stdout(output):
+                self.show_params()
+            f.write(output.getvalue())
 
     @staticmethod
     def create_summary_table(outpath):
@@ -146,7 +148,7 @@ class SLIDE:
         df = pd.DataFrame(columns=['delta', 'lambda', 'num_of_LFs', 'num_of_Sig_LFs', 'num_of_Interactors', 'sampleCV_Performance'])
         
         for out in outs:
-            basename = os.path.basename(out.replace('/run_params.txt', ''))
+            basename = os.path.basename(out.replace('/scores.txt', ''))
             delta_ = basename.split('_')[0]
             lambda_ = basename.split('_')[1]
             
@@ -173,7 +175,7 @@ class SLIDE:
 
         # df['full_random'] = df['full_random'].astype(float).round(3)
         # df['partial_random'] = df['partial_random'].astype(float).round(3)
-        df['sampleCV_Performance'] = df['sampleCV_Performance'].astype(float).round(3)
+        df['sampleCV_Performance'] = pd.to_numeric(df['sampleCV_Performance'].astype(str), errors='coerce').round(3)
         df.sort_values(by='sampleCV_Performance', inplace=True)
         
         df.to_csv(os.path.join(outpath, 'summary_table.csv'), index=False)
@@ -413,19 +415,23 @@ class OptimizeSLIDE(SLIDE):
 
                 sig_LF_genes = {str(lf): SLIDE.get_LF_genes(
                     A=self.A,
+                    X=self.data.X,
                     lf=lf, 
+                    y=self.data.Y,
                     top_feats=self.input_params['SLIDE_top_feats'],
                     outpath=out_iter) for lf in self.sig_LFs}
-                Plotter.plot_latent_factors(sig_LF_genes, loadings=self.A, outdir=out_iter, title='marginal_LFs')
+                Plotter.plot_latent_factors(sig_LF_genes, outdir=out_iter, title='marginal_LFs')
 
                 sig_interact_genes = {str(lf): SLIDE.get_LF_genes(
                     A=self.A,
+                    X=self.data.X,
                     lf=lf, 
+                    y=self.data.Y,
                     top_feats=self.input_params['SLIDE_top_feats'],
                     outpath=out_iter) for lf in self.sig_interacts}
                 
                 if len(sig_interact_genes) > 0:
-                    Plotter.plot_latent_factors(sig_interact_genes, loadings=self.A, outdir=out_iter, title='interaction_LFs')
+                    Plotter.plot_latent_factors(sig_interact_genes, outdir=out_iter, title='interaction_LFs')
 
                 scores = SLIDE_Estimator.score_performance(
                     latent_factors=self.latent_factors,

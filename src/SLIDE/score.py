@@ -42,8 +42,11 @@ class Estimator():
 
     @staticmethod
     def scale_features(X, scaler, feature_range=(-1, 1)):
-        if isinstance(X, pd.DataFrame):
+        if isinstance(X, pd.DataFrame) or isinstance(X, pd.Series):
             X = X.values
+        
+        if len(X.shape) == 1:
+            X = X.reshape(-1, 1)
             
         if scaler == 'minmax':
             scaler = MinMaxScaler(feature_range=feature_range)

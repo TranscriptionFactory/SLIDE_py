@@ -12,48 +12,41 @@ class Plotter:
         pass
     
     @staticmethod
-    def plot_latent_factors(lfs, loadings, outdir=None, title='Significant Latent Factors'):
+    def plot_latent_factors(lfs, outdir=None, title='Significant Latent Factors'):
         """
         Plot genes for each latent factor, colored by their sign and ordered by absolute loading values.
         
         Parameters:
-        - lfs: Dictionary where keys are latent factor names and values are dictionaries
-               containing 'positive' and 'negative' lists of genes
-        - loadings: Dictionary of gene loadings for each latent factor
+        - lfs: Dataframe where index is the latent factors name and columns are 'loading', 'AUC', 'corr', 'color'
         - outdir: Optional directory to save the plot
         - title: Title for the plot and output filename
         """
         # Set up colors and style
-        colors = {'pos': '#FF4B4B', 'neg': '#4B4BFF'}  # Bright red and blue
+        colors = {'red': '#FF4B4B', 'gray': '#808080', 'blue': '#4B4BFF'}  # Bright red and blue
         plt.style.use('default')
         
         # Calculate dimensions
         n_lfs = len(lfs)
-        max_genes = max(len(lf['pos']) + len(lf['neg']) for lf in lfs.values())
         fig_width = min(20, max(10, n_lfs * 1.5))
-        fig_height = min(15, max(8, max_genes * 0.3))
+        fig_height = 18
         
         # Create figure with white background
         fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=300)
         fig.patch.set_facecolor('white')
         
         # Plot each latent factor
-        for i, (lf_name, genes_dict) in enumerate(lfs.items()):
-            # Combine and sort genes by absolute loading value
-            all_genes = genes_dict['pos'] + genes_dict['neg']
-            sorted_genes = sorted(all_genes, 
-                                key=lambda x: abs(loadings[lf_name][x]), 
-                                reverse=False)
-            
+        for i, (lf_name, lr_info) in enumerate(lfs.items()):
+            # Reverse the order of genes (top to bottom, descending loading)
+            lr_info = lr_info.sort_values(by='loading', ascending=True)
+
             # Plot genes
-            for j, gene in enumerate(sorted_genes):
+            for j, (gene, row) in enumerate(lr_info.iterrows()):
                 # Determine color based on sign
-                color = colors['pos'] if loadings[lf_name][gene] > 0 else colors['neg']
-                
-                # Add gene name without background box
+                color = colors[row['color']] 
+
                 ax.text(i, j, gene, 
                        color=color,
-                       fontsize=14,  # Increased font size
+                       fontsize=14,  
                        fontweight='bold',
                        ha='center',
                        va='center')
@@ -61,7 +54,7 @@ class Plotter:
         # Customize plot appearance
         ax.set_title(title.replace('_', ' '), pad=20, fontsize=14, fontweight='bold')
         ax.set_xlim(-0.5, n_lfs - 0.5)
-        ax.set_ylim(-1, max_genes)
+        ax.set_ylim(-1, 20)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
