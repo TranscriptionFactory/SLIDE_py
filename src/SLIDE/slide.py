@@ -80,11 +80,9 @@ class SLIDE:
         scorer = Estimator(model='linear', scaler='standard')
 
         lf_info = pd.DataFrame(
-            index=A.index, columns=['loading', 'AUC', 'corr', 'color'])
+            index=all_genes.index, columns=['loading', 'AUC', 'corr', 'color'])
         
         lf_info['loading'] = all_genes
-        lf_info = lf_info[lf_info['loading'] != 0]
-
 
         lf_info['AUC'] = np.array([scorer.evaluate(X[x], y) for x in all_genes.index]).mean(axis=1)
         lf_info['corr'] = [np.corrcoef(
