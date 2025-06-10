@@ -10,12 +10,12 @@ from collections import defaultdict
 from contextlib import redirect_stdout
 from io import StringIO
 
-from tools import init_data, calc_default_fsize, show_params
-from love import call_love
-from knockoffs import Knockoffs
+from .tools import init_data, calc_default_fsize, show_params
+from .love import call_love
+from .knockoffs import Knockoffs
 
-from plotting import Plotter
-from score import Estimator, SLIDE_Estimator
+from .plotting import Plotter
+from .score import Estimator, SLIDE_Estimator
 
 class SLIDE:
     def __init__(self, input_params, x=None, y=None):

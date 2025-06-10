@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: loveslide
-Version: 0.0.1
+Version: 0.0.4
 Summary: Python version of R package SLIDE
 Author-email: Ally Wang <alw399@pitt.edu>, Swapnil Keshari <swk25@pitt.edu>
 License-Expression: MIT
@@ -46,6 +46,8 @@ Requires-Dist: numpy>=1.24.0
 Requires-Dist: anndata>=0.10.0
 Requires-Dist: matplotlib>=3.7.0
 Requires-Dist: altair>=5.0.0
+Requires-Dist: ipykernel
+Requires-Dist: knockoff
 
 # SLIDE_py
 

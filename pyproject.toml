@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "loveslide"
-version = "0.0.1"
+version = "0.0.4"
 authors = [
   { name="Ally Wang", email="alw399@pitt.edu" },
   { name="Swapnil Keshari", email="swk25@pitt.edu" },
@@ -55,7 +55,9 @@ dependencies = [
   "numpy>=1.24.0",
   "anndata>=0.10.0",
   "matplotlib>=3.7.0",
-  "altair>=5.0.0"
+  "altair>=5.0.0",
+  "ipykernel",
+  "knockoff",
 ]
 
 [tool.setuptools.packages.find]
