@@ -1,3 +1,52 @@
+Metadata-Version: 2.4
+Name: loveslide
+Version: 0.0.1
+Summary: Python version of R package SLIDE
+Author-email: Ally Wang <alw399@pitt.edu>, Swapnil Keshari <swk25@pitt.edu>
+License-Expression: MIT
+Project-URL: Homepage, https://github.com/alw399/SLIDE_py
+Project-URL: Issues, https://github.com/alw399/SLIDE_py/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: adjustText==1.2.0
+Requires-Dist: certifi==2024.2.2
+Requires-Dist: genomepy==0.16.1
+Requires-Dist: goatools==1.4.12
+Requires-Dist: h5py==3.11.0
+Requires-Dist: joblib==1.4.2
+Requires-Dist: networkx==3.2.1
+Requires-Dist: numba==0.60.0
+Requires-Dist: numpy==1.26.4
+Requires-Dist: pandas==2.2.2
+Requires-Dist: pysal==24.1
+Requires-Dist: pytest==8.3.2
+Requires-Dist: python_igraph==0.11.6
+Requires-Dist: scanpy==1.10.2
+Requires-Dist: scikit_learn==1.5.1
+Requires-Dist: scipy==1.12
+Requires-Dist: torch==2.4.0
+Requires-Dist: torchvision==0.19.0
+Requires-Dist: tqdm==4.66.4
+Requires-Dist: pyarrow==17.0.0
+Requires-Dist: enlighten
+Requires-Dist: pyro-ppl
+Requires-Dist: commot
+Requires-Dist: group-lasso
+Requires-Dist: pqdm
+Requires-Dist: magic-impute
+Requires-Dist: wordcloud
+Requires-Dist: pysankeybeta
+Requires-Dist: easydict
+Requires-Dist: shiny>=0.6.0
+Requires-Dist: scanpy>=1.10.0
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: anndata>=0.10.0
+Requires-Dist: matplotlib>=3.7.0
+Requires-Dist: altair>=5.0.0
+
 # SLIDE_py
 
 A bunch of python wrappers for R code
