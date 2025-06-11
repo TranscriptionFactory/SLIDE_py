@@ -60,7 +60,7 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
         love_directory = 'LOVE-master/R'
 
     file_dir = os.path.dirname(os.path.abspath(__file__))
-    love_path = os.path.join(file_dir, f"../{love_directory}")
+    love_path = os.path.join(file_dir, f"{love_directory}")
     
     # Source all R files in the directory - this will define the LOVE function
     r_files = [os.path.join(love_path, f) for f in os.listdir(love_path) 

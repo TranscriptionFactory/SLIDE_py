@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "loveslide"
-version = "0.0.4"
+version = "0.0.6"
 authors = [
   { name="Ally Wang", email="alw399@pitt.edu" },
   { name="Swapnil Keshari", email="swk25@pitt.edu" },
@@ -58,10 +58,14 @@ dependencies = [
   "altair>=5.0.0",
   "ipykernel",
   "knockoff",
+  "rpy2==3.5.17",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools]
+include-package-data = true
 
 [project.urls]
 Homepage = "https://github.com/alw399/SLIDE_py"

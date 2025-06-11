@@ -1,0 +1,2 @@
+recursive-include src/loveslide/LOVE-master *
+recursive-include src/loveslide/LOVE-SLIDE *
