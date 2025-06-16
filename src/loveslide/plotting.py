@@ -29,7 +29,7 @@ class Plotter:
         # Calculate dimensions
         n_lfs = len(lfs)
         fig_width = min(20, max(10, n_lfs * 2.5)) + 3 # for the title
-        fig_height = min(18, max(5, n_lfs * 1.5))
+        fig_height = min(18, max(5, n_lfs * 3.0))
         
         # Create figure with white background
         fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=300)
