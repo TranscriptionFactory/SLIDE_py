@@ -5,6 +5,7 @@ import os
 import numpy as np
 import pandas as pd
 import seaborn.objects as so
+import networkx as nx
 
 
 class Plotter:
@@ -27,8 +28,8 @@ class Plotter:
         
         # Calculate dimensions
         n_lfs = len(lfs)
-        fig_width = min(20, max(10, n_lfs * 1.5))
-        fig_height = 18
+        fig_width = min(20, max(10, n_lfs * 2.5)) + 3 # for the title
+        fig_height = min(18, max(5, n_lfs * 1.5))
         
         # Create figure with white background
         fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=300)
@@ -46,15 +47,18 @@ class Plotter:
 
                 ax.text(i, j, gene, 
                        color=color,
-                       fontsize=14,  
+                       fontsize=24,  
                        fontweight='bold',
                        ha='center',
                        va='center')
         
         # Customize plot appearance
-        ax.set_title(title.replace('_', ' '), pad=20, fontsize=14, fontweight='bold')
+        ax.text(-0.5, 2, title.replace('_', ' '), 
+                fontsize=14, fontweight='bold', 
+                rotation=90, va='center')
+        
         ax.set_xlim(-0.5, n_lfs - 0.5)
-        ax.set_ylim(-1, 20)
+        ax.set_ylim(-1, fig_height)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
@@ -76,76 +80,48 @@ class Plotter:
         return fig
     
     @staticmethod
-    def plot_scores(scores, outdir=None, title='AUC'):
-        """
-        Plot performance scores for different latent factor configurations using a boxplot.
-        
-        Parameters:
-        - scores: Dictionary where keys are latent factor configurations (e.g., 'z_matrix', 'marginals', 'marginals&interactions')
-                 and values are lists of performance scores (e.g., AUC values)
-        - outdir: Optional directory to save the plot
-        - title: Title for the plot and output filename
-        """
-        # Convert dictionary to DataFrame for plotting
-        color_dict = {
-            'X': '#c65999',
-            'z_matrix': '#7aa456',
-            's1': '#777acd',
-            's2': '#777acd',
-            's3': '#777acd',
-            's1_random': '#c96d44',
-            's2_random': '#c96d44',
-            's3_random': '#c96d44',
-        }
+    def plot_corr_network(X, lf_dict, outdir=None, minimum=0.25):
 
-        data = []
-        for config, score_list in scores.items():
-            for score in score_list:
-                data.append({'Configuration': config, 'Score': score})
-        df = pd.DataFrame(data)
+        colors = {'red': '#FF4B4B', 'gray': '#808080', 'blue': '#4B4BFF'}
         
-        # Create figure with white background
-        plt.style.use('default')
-        fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
-        fig.patch.set_facecolor('white')
-        
-        # Create boxplot with custom colors for each configuration
-        for i, config in enumerate(df['Configuration'].unique()):
-            config_data = df[df['Configuration'] == config]
-            sns.boxplot(data=config_data, x='Configuration', y='Score', ax=ax,
-                       color=color_dict[config], width=0.6, fliersize=3)
-        
-        # Add individual points with jitter
-        sns.stripplot(data=df, x='Configuration', y='Score',
-                     size=4, alpha=0.3, color='black', jitter=True)
-        
-        # Add mean values above boxes
-        means = df.groupby('Configuration')['Score'].mean()
-        for i, config in enumerate(df['Configuration'].unique()):
-            mean = means[config]
-            ax.text(i, 0.3, f'{mean:.3f}',
-                   ha='center', va='bottom', fontsize=10, fontweight='bold')
-        
-        # Customize plot appearance
-        ax.set_title(f'Performance plot', fontsize=14, pad=15, fontweight='bold')
-        ax.set_ylabel('AUC', fontsize=12, labelpad=10)
-        ax.set_xlabel('Group', fontsize=12, labelpad=10)
-        ax.set_ylim(0, 1.1) 
-        
-        # Customize grid and spines
-        ax.grid(True, linestyle='--', alpha=0.3)
-        for spine in ax.spines.values():
-            spine.set_linewidth(1.5)
-        
-        # Rotate x-axis labels for better readability
-        plt.xticks(ha='center')
-        plt.tight_layout()
-        
-        # Save plot if outdir is provided
-        if outdir:
-            plt.savefig(os.path.join(outdir, f'{title}.png'), 
+        for lf, lf_loadings in lf_dict.items():
+            lf_genes = lf_loadings.index.tolist()
+            color_dict = lf_loadings['color'].map(colors).to_dict()
+            
+            features = X[lf_genes]
+            corr = features.corr().where(lambda x: x > minimum, 0)
+            np.fill_diagonal(corr.values, 0)
+
+            G = nx.from_pandas_adjacency(corr)
+
+            for gene in G.nodes():
+                G.nodes[gene]['color'] = color_dict[gene]
+
+            fig, ax = plt.subplots(figsize=(8, 8), facecolor='white')
+            ax.grid(False)
+            # pos = nx.spring_layout(G, seed=42, k=1, iterations=50)
+            pos = nx.shell_layout(G)
+            nx.draw_networkx_nodes(G, pos, 
+                                 node_color=[G.nodes[node]['color'] for node in G.nodes()],
+                                 node_size=600,
+                                 alpha=0.4,
+                                 ax=ax)
+            # Draw edges with alpha based on correlation strength
+            for (node1, node2, data) in G.edges(data=True):
+                weight = abs(data['weight'])
+                nx.draw_networkx_edges(G, pos,
+                                     edgelist=[(node1, node2)],
+                                     width=weight*5,
+                                     alpha=min(weight, 1.0),
+                                     edge_color='gray')
+                
+            nx.draw_networkx_labels(G, pos, font_size=10)
+            # nx.draw_networkx_edge_labels(G, pos, font_size=10)
+
+            plt.tight_layout()
+            plt.gca().set_aspect('equal')
+            plt.savefig(os.path.join(outdir, f'corr_{lf}.png'), 
                        dpi=300, bbox_inches='tight', facecolor='white')
-        return fig
 
     @staticmethod
     def plot_controlplot(scores, outdir=None, title='Control Plot'):
@@ -193,3 +169,4 @@ class Plotter:
             plt.savefig(os.path.join(outdir, f'{title}.png'), 
                        dpi=300, bbox_inches='tight', facecolor='white')
         return fig
+    

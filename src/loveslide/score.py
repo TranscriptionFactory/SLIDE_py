@@ -11,7 +11,7 @@ from .knockoffs import Knockoffs
 
 
 class Estimator():
-    def __init__(self, model, scaler):
+    def __init__(self, model='linear', scaler='standard'):
         if model == 'linear':
             self.model = LinearRegression()
         elif model == 'logistic':

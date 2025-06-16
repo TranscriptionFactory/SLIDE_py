@@ -17,6 +17,7 @@ from .knockoffs import Knockoffs
 from .plotting import Plotter
 from .score import Estimator, SLIDE_Estimator
 
+
 class SLIDE:
     def __init__(self, input_params, x=None, y=None):
         self.data, self.input_params = init_data(input_params, x, y)
@@ -60,6 +61,24 @@ class SLIDE:
             print(f"Error loading LOVE result: {e}")
             return
     
+    def load_state(self, out_iter):
+        try:
+            self.A = pd.read_csv(os.path.join(out_iter, 'A.csv'), index_col=0)
+            self.latent_factors = pd.read_csv(os.path.join(out_iter, 'z_matrix.csv'), index_col=0)
+
+            interact_path = os.path.join(out_iter, 'sig_interacts.txt')
+            if os.path.exists(interact_path):
+                self.sig_interacts = np.loadtxt(interact_path, dtype=str).reshape(-1).tolist()
+            else:
+                self.sig_interacts = []
+            
+            self.sig_LFs = np.loadtxt(os.path.join(out_iter, 'sig_LFs.txt'), dtype=str).reshape(-1).tolist()
+            self.marginal_idxs = np.where(self.latent_factors.columns.isin(self.sig_LFs))[0]
+        
+        except Exception as e:
+            print(f"No previous state found for {out_iter}")
+            self.marginal_idxs = []
+
     @staticmethod
     def get_LF_genes(A, lf, X, y, lf_thresh=0.03, top_feats=20, outpath=None):
         """
@@ -98,6 +117,7 @@ class SLIDE:
             # Save gene names and their loading values
             lf_info.to_csv(os.path.join(outpath, f'feature_list_{lf}.csv'), sep='\t')
         
+        lf_info = lf_info[lf_info['loading'] > lf_thresh]
         return lf_info[:top_feats]
     
     def save_params(self, outpath, scores):
@@ -358,7 +378,7 @@ class OptimizeSLIDE(SLIDE):
 
             self.sig_interacts = []
 
-    def run_pipeline(self, verbose=True, n_workers=1):
+    def run_pipeline(self, verbose=True, n_workers=1, rerun=False):
         
         if verbose:
             self.show_params()
@@ -366,48 +386,66 @@ class OptimizeSLIDE(SLIDE):
         for delta_iter, lambda_iter in product(self.input_params['delta'], self.input_params['lambda']):
             
             out_iter = os.path.join(self.input_params['out_path'], f"{delta_iter}_{lambda_iter}_out")
-            os.makedirs(out_iter, exist_ok=True)
+            
+            if rerun and os.path.exists(out_iter):
 
-            if verbose:
-                print(f"Running LOVE with delta={delta_iter} and lambda={lambda_iter}")
+                self.load_state(out_iter)
 
-            try:
-                self.get_latent_factors(
-                    x=self.data.X, 
-                    y=self.data.Y, 
-                    delta=delta_iter,
-                    lbd=lambda_iter, 
-                    thresh_fdr=self.input_params['thresh_fdr'],
-                    pure_homo=self.input_params['pure_homo'],
+                try:
+                    self.data.Y = self.adata.Y.loc[self.latent_factors.index]
+                except:
+                    print('input data obs do not match previous results')
+                    continue
+
+                try:
+                    self.data.X = self.data.X[self.A.columns]
+                except:
+                    print('input data vars do not match previous results')
+                    continue
+            
+            else:
+                os.makedirs(out_iter, exist_ok=True)
+
+                if verbose:
+                    print(f"Running LOVE with delta={delta_iter} and lambda={lambda_iter}")
+
+                try:
+                    self.get_latent_factors(
+                        x=self.data.X, 
+                        y=self.data.Y, 
+                        delta=delta_iter,
+                        lbd=lambda_iter, 
+                        thresh_fdr=self.input_params['thresh_fdr'],
+                        pure_homo=self.input_params['pure_homo'],
+                        verbose=verbose,
+                        outpath=out_iter
+                    )
+
+                    if verbose:
+                        print(f"LOVE found {self.latent_factors.shape[1]} latent factors.")
+                
+                except Exception as e:
+                    print(f"\nError running LOVE: {e}\n")
+                    print('##################\n')
+
+                    continue
+                
+                if verbose:
+                    print("\nRunning SLIDE knockoffs...")
+
+                self.run_SLIDE(
+                    latent_factors=self.latent_factors, 
+                    niter=self.input_params['niter'], 
+                    spec=self.input_params['spec'], 
+                    fdr=self.input_params['fdr'],
+                    n_workers=self.input_params['n_workers'],
                     verbose=verbose,
-                    outpath=out_iter
+                    outpath=out_iter,
+                    do_interacts=self.input_params['do_interacts']
                 )
 
                 if verbose:
-                    print(f"LOVE found {self.latent_factors.shape[1]} latent factors.")
-            
-            except Exception as e:
-                print(f"\nError running LOVE: {e}\n")
-                print('##################\n')
-
-                continue
-            
-            if verbose:
-                print("\nRunning SLIDE knockoffs...")
-
-            self.run_SLIDE(
-                latent_factors=self.latent_factors, 
-                niter=self.input_params['niter'], 
-                spec=self.input_params['spec'], 
-                fdr=self.input_params['fdr'],
-                n_workers=self.input_params['n_workers'],
-                verbose=verbose,
-                outpath=out_iter,
-                do_interacts=self.input_params['do_interacts']
-            )
-
-            if verbose:
-                print("\nSLIDE complete.")
+                    print("\nSLIDE complete.")
 
             if len(self.marginal_idxs) > 0:
 
@@ -436,12 +474,18 @@ class OptimizeSLIDE(SLIDE):
                     sig_LFs=self.sig_LFs,
                     sig_interacts=self.sig_interacts,
                     y=self.data.Y,
-                    n_iters=100, 
+                    n_iters=2000, 
                     test_size=0.15,
                     scaler='standard', 
                 )
                 
                 Plotter.plot_controlplot(scores, outdir=out_iter, title='control_plot')
+
+                Plotter.plot_corr_network(
+                    self.data.X, 
+                    lf_dict = sig_LF_genes | sig_interact_genes,
+                    outdir=out_iter
+                )
 
             else:
                 scores = None
