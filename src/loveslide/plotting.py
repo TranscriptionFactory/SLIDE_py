@@ -16,68 +16,73 @@ class Plotter:
     def plot_latent_factors(lfs, outdir=None, title='Significant Latent Factors'):
         """
         Plot genes for each latent factor, colored by their sign and ordered by absolute loading values.
-        
+
         Parameters:
-        - lfs: Dataframe where index is the latent factors name and columns are 'loading', 'AUC', 'corr', 'color'
+        - lfs: Dictionary of DataFrames, where each key is a latent factor name and value is a DataFrame
+            with 'loading', 'AUC', 'corr', and 'color' columns. Index should be gene names.
         - outdir: Optional directory to save the plot
         - title: Title for the plot and output filename
         """
+
         # Set up colors and style
-        colors = {'red': '#FF4B4B', 'gray': '#808080', 'blue': '#4B4BFF'}  # Bright red and blue
+        colors = {'red': '#FF4B4B', 'gray': '#808080', 'blue': '#4B4BFF'}
         plt.style.use('default')
-        
-        # Calculate dimensions
+
+        # Determine plot dimensions based on number of factors and genes
         n_lfs = len(lfs)
-        fig_width = min(20, max(10, n_lfs * 2.5)) + 3 # for the title
-        fig_height = min(18, max(5, n_lfs * 3.0))
+        max_genes = max(len(df) for df in lfs.values())
         
-        # Create figure with white background
+        fig_width = min(20, max(10, n_lfs * 2.5)) + 2  # extra space for title
+        fig_height = min(30, max(6, max_genes * 0.6))  # scaled height for readability
+
         fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=300)
         fig.patch.set_facecolor('white')
-        
+
         # Plot each latent factor
         for i, (lf_name, lr_info) in enumerate(lfs.items()):
-            # Reverse the order of genes (top to bottom, descending loading)
+            # Sort genes by loading ascending (so highest loadings at top)
             lr_info = lr_info.sort_values(by='loading', ascending=True)
+            n_genes = len(lr_info)
 
-            # Plot genes
+            # Define vertical spacing
+            spacing = fig_height / (max_genes + 2)  # avoid edges
+            start_y = spacing  # bottom padding
+
             for j, (gene, row) in enumerate(lr_info.iterrows()):
-                # Determine color based on sign
-                color = colors[row['color']] 
+                y_pos = start_y + j * spacing
+                color = colors.get(row['color'], 'black')  # fallback to black
 
-                ax.text(i, j, gene, 
-                       color=color,
-                       fontsize=24,  
-                       fontweight='bold',
-                       ha='center',
-                       va='center')
-        
-        # Customize plot appearance
-        ax.text(-0.5, 2, title.replace('_', ' '), 
-                fontsize=14, fontweight='bold', 
-                rotation=90, va='center')
-        
+                ax.text(i, y_pos, gene,
+                        color=color,
+                        fontsize=10,
+                        fontweight='bold',
+                        ha='center',
+                        va='center')
+
+        # Title
+        ax.set_title(title.replace('_', ' '), fontsize=14, weight='bold')
+
+        # Customize appearance
         ax.set_xlim(-0.5, n_lfs - 0.5)
-        ax.set_ylim(-1, fig_height)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['bottom'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        
-        # Add grid and customize ticks
-        ax.grid(True, linestyle='--', alpha=0.3)
+        ax.set_ylim(0, fig_height)
         ax.set_xticks(range(n_lfs))
-        ax.set_xticklabels(lfs.keys(), ha='center')
+        ax.set_xticklabels(lfs.keys(), ha='center', rotation=45, fontsize=12)
         ax.set_yticks([])
-        
-        # Adjust layout and save
+
+        # Remove spines
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        ax.grid(False)
+
         plt.tight_layout()
         if outdir:
-            plt.savefig(os.path.join(outdir, f'{title}.png'), 
-                       dpi=300, 
-                       bbox_inches='tight',
-                       facecolor='white')
+            os.makedirs(outdir, exist_ok=True)
+            plt.savefig(os.path.join(outdir, f'{title}.png'),
+                        dpi=300, bbox_inches='tight', facecolor='white')
+
         return fig
+
     
     @staticmethod
     def plot_corr_network(X, lf_dict, outdir=None, minimum=0.25):
