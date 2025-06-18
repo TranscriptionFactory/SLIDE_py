@@ -94,7 +94,7 @@ class Plotter:
             color_dict = lf_loadings['color'].map(colors).to_dict()
             
             features = X[lf_genes]
-            corr = features.corr().where(lambda x: x > minimum, 0)
+            corr = features.corr().where(lambda x: abs(x) > minimum, 0)
             np.fill_diagonal(corr.values, 0)
 
             G = nx.from_pandas_adjacency(corr)
