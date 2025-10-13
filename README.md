@@ -30,7 +30,7 @@ Set up a compatible Python environment:
 
 ```bash
 module load anaconda3/2022.10
-conda create -n loveslide_env python=3.9
+conda create -n loveslide_env python=3.9 r-base
 conda activate loveslide_env
 pip install loveslide
 ```
