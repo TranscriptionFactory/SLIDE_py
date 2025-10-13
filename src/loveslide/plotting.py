@@ -118,7 +118,7 @@ class Plotter:
                                      edgelist=[(node1, node2)],
                                      width=weight*5,
                                      alpha=min(weight, 1.0),
-                                     edge_color='gray')
+                                     edge_color=['green' if data['weight'] < 0 else 'pink'])
                 
             nx.draw_networkx_labels(G, pos, font_size=10)
             # nx.draw_networkx_edge_labels(G, pos, font_size=10)
