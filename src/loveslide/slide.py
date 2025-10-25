@@ -117,7 +117,7 @@ class SLIDE:
             # Save gene names and their loading values
             lf_info.to_csv(os.path.join(outpath, f'feature_list_{lf}.csv'), sep='\t')
         
-        lf_info = lf_info[lf_info['loading'] > lf_thresh]
+        lf_info = lf_info[lf_info['loading'].abs() > lf_thresh]
         return lf_info[:top_feats]
     
     def save_params(self, outpath, scores):
