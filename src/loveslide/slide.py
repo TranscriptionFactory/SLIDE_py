@@ -120,7 +120,7 @@ class SLIDE:
             # Save gene names and their loading values
             lf_info.to_csv(os.path.join(outpath, f'feature_list_{lf}.csv'), sep='\t')
         
-        lf_info = lf_info[lf_info['loading'] > lf_thresh]
+        lf_info = lf_info[lf_info['loading'].abs() > lf_thresh]
 
         top_auc = lf_info.sort_values(by='AUC', ascending=False).head(top_feats // 2)
         top_loading = lf_info.drop(top_auc.index).sort_values(by='loading', key=abs, ascending=False).head(top_feats // 2)
@@ -475,6 +475,7 @@ class OptimizeSLIDE(SLIDE):
                 
                 if len(sig_interact_genes) > 0:
                     Plotter.plot_latent_factors(sig_interact_genes, outdir=out_iter, title='interaction_LFs')
+                    Plotter.plot_interactions(self.interaction_pairs, outdir=out_iter, title='interaction_pairs')
 
                 scores = SLIDE_Estimator.score_performance(
                     latent_factors=self.latent_factors,

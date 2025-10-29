@@ -88,7 +88,7 @@ class Plotter:
     def plot_corr_network(X, lf_dict, outdir=None, minimum=0.25):
 
         colors = {'red': '#FF4B4B', 'gray': '#808080', 'blue': '#4B4BFF'}
-        
+
         for lf, lf_loadings in lf_dict.items():
             lf_genes = lf_loadings.index.tolist()
             color_dict = lf_loadings['color'].map(colors).to_dict()
@@ -102,10 +102,10 @@ class Plotter:
             for gene in G.nodes():
                 G.nodes[gene]['color'] = color_dict[gene]
 
-            fig, ax = plt.subplots(figsize=(8, 8), facecolor='white')
+            fig, ax = plt.subplots(figsize=(5,5), facecolor='white')
             ax.grid(False)
             # pos = nx.spring_layout(G, seed=42, k=1, iterations=50)
-            pos = nx.shell_layout(G)
+            pos = nx.circular_layout(G)
             nx.draw_networkx_nodes(G, pos, 
                                  node_color=[G.nodes[node]['color'] for node in G.nodes()],
                                  node_size=600,
@@ -175,3 +175,57 @@ class Plotter:
                        dpi=300, bbox_inches='tight', facecolor='white')
         return fig
     
+    @staticmethod
+    def plot_interactions(interaction_pairs, outdir=None, title='Interaction Pairs'):
+        """
+        Plot interaction pairs for different latent factor configurations.
+        
+        Parameters:
+        - interaction_pairs: np array of [[marginal_lfs], [interaction_lfs]]
+        - outdir: Optional directory to save the plot
+        - title: Title for the plot and output filename
+        """
+        G = nx.Graph()
+        marginal_lfs = set(interaction_pairs[0])
+        interaction_lfs = set(interaction_pairs[1])
+        G.add_nodes_from(marginal_lfs | interaction_lfs)
+        for marginal_lf, interaction_lf in zip(interaction_pairs[0], interaction_pairs[1]):
+            G.add_edge(marginal_lf, interaction_lf)
+
+        node_colors = [
+            'salmon' if node in marginal_lfs else 'gray'
+            for node in G.nodes()
+        ]
+
+        fig, ax = plt.subplots(figsize=(5, 5), facecolor='white')
+        pos = nx.spring_layout(G, seed=42)
+        nx.draw_networkx(
+            G,
+            pos=pos,
+            with_labels=True,
+            node_size=600,
+            font_size=10,
+            node_color=node_colors,
+            edge_color='#888',
+            linewidths=1,
+            ax=ax
+        )
+
+        legend_elements = [
+            Patch(facecolor='salmon', edgecolor='k', label='Marginal LF'),
+            Patch(facecolor='gray', edgecolor='k', label='Interacting LF')
+        ]
+        ax.legend(handles=legend_elements, loc='best')
+        ax.set_axis_off()
+        plt.tight_layout()
+
+        if outdir:
+            plt.savefig(os.path.join(outdir, f'{title}.png'), dpi=300, bbox_inches='tight', facecolor='white')
+        return fig
+
+
+
+
+
+
+
