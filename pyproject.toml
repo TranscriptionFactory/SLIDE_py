@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "loveslide"
-version = "0.0.6"
+version = "0.0.7"
 authors = [
   { name="Ally Wang", email="alw399@pitt.edu" },
   { name="Swapnil Keshari", email="swk25@pitt.edu" },
