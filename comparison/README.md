@@ -37,17 +37,64 @@ pip install numpy scipy pandas networkx tqdm
 
 ## Running the Comparison
 
-### Step 1: Prepare Test Data
+### Quick Start (Recommended)
+
+The easiest way is to use the unified `run_comparison.sh` script:
+
+```bash
+cd /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison
+
+# Option 1: Edit defaults in run_comparison.sh, then run
+sbatch run_comparison.sh
+
+# Option 2: Use a YAML config file
+cp comparison_config.yaml my_config.yaml
+# Edit my_config.yaml with your paths/parameters
+sbatch run_comparison.sh my_config.yaml
+
+# Option 3: Set environment variables
+X_FILE=/path/to/X.csv Y_FILE=/path/to/Y.csv TAG=my_test sbatch run_comparison.sh
+```
+
+This will:
+1. Run R SLIDE with your parameters
+2. Run Python SLIDE with identical parameters
+3. Generate a detailed comparison report
+
+### Using the YAML Config
+
+Create a config file from the template:
+
+```yaml
+# my_config.yaml
+x_path: /path/to/X.csv
+y_path: /path/to/Y.csv
+tag: my_experiment
+delta: 0.1
+lambda: 0.5
+spec: 0.1
+fdr: 0.1
+niter: 500
+```
+
+Then run:
+```bash
+sbatch run_comparison.sh my_config.yaml
+```
+
+### Manual Step-by-Step (Alternative)
+
+If you prefer to run each step separately:
+
+#### Step 1: Prepare Test Data
 
 Your data should be in CSV format:
 - **X matrix**: Features as columns, samples as rows (with row names)
 - **Y vector**: Single column, samples as rows (with row names)
 
-### Step 2: Run R Implementation
+#### Step 2: Run R Implementation
 
 ```bash
-cd /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison
-
 Rscript run_slide_R.R /path/to/X.csv /path/to/Y.csv my_experiment \
     --delta 0.1 \
     --lambda 0.5 \
@@ -56,11 +103,7 @@ Rscript run_slide_R.R /path/to/X.csv /path/to/Y.csv my_experiment \
     --niter 500
 ```
 
-This will:
-- Run the full SLIDE pipeline in R
-- Save outputs to `outputs/my_experiment/`
-
-### Step 3: Run Python Implementation
+#### Step 3: Run Python Implementation
 
 ```bash
 python run_slide_py.py /path/to/X.csv /path/to/Y.csv my_experiment \
@@ -71,22 +114,11 @@ python run_slide_py.py /path/to/X.csv /path/to/Y.csv my_experiment \
     --niter 500
 ```
 
-This will:
-- Run the same pipeline in Python
-- Compare outputs with R reference values
-- Report differences
-
-### Step 4: Detailed Comparison (Optional)
-
-For a detailed comparison report:
+#### Step 4: Generate Comparison Report
 
 ```bash
-python compare_outputs.py my_experiment --tolerance 0.01 --detailed
-```
-
-Save results to a file:
-```bash
-python compare_outputs.py my_experiment --output-file comparison_report.txt
+python compare_outputs.py my_experiment --tolerance 0.01 --detailed \
+    --output-file outputs/my_experiment/comparison_report.txt
 ```
 
 ## Output Files

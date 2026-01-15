@@ -1,0 +1,36 @@
+# =============================================================================
+# SLIDE R vs Python Comparison Configuration
+# =============================================================================
+# Copy this file and modify for your experiment
+#
+# Usage:
+#   sbatch run_comparison.sh my_config.yaml
+#   bash run_comparison.sh my_config.yaml
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Data Paths (REQUIRED)
+# -----------------------------------------------------------------------------
+x_path: /ix/djishnu/Aaron/0_for_others/Shailja/20260109_data/X.csv
+y_path: /ix/djishnu/Aaron/0_for_others/Shailja/20260109_data/Y.csv
+
+# -----------------------------------------------------------------------------
+# Output Settings
+# -----------------------------------------------------------------------------
+tag: my_comparison          # Output subdirectory name
+out_path: ./outputs         # Base output directory
+
+# -----------------------------------------------------------------------------
+# SLIDE Parameters (same for R and Python)
+# -----------------------------------------------------------------------------
+delta: 0.1                  # Delta threshold for pure variable detection
+lambda: 0.5                 # Lambda regularization parameter
+spec: 0.1                   # Specificity threshold for knockoffs
+fdr: 0.1                    # False discovery rate threshold
+niter: 500                  # Number of SLIDE knockoff iterations
+thresh_fdr: 0.2             # FDR threshold for correlation matrix
+
+# -----------------------------------------------------------------------------
+# Environment (optional - uses defaults if not specified)
+# -----------------------------------------------------------------------------
+# python_env: /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python
