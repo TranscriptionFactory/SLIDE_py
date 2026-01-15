@@ -1,158 +1,114 @@
+"""
+Python wrapper for the LOVE algorithm.
+Uses the pure Python implementation instead of R.
+"""
+
+import warnings
 import numpy as np
-import os
-from rpy2 import robjects
-from rpy2.robjects import numpy2ri, packages, r
+
+from .love_pkg.love import LOVE
 
 
-def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose=False, 
-                    pure_homo=False, diagonal=False, delta=None, merge=False, 
-                    rep_CV=50, ndelta=50, q=2, exact=False, max_pure=None, nfolds=10, outpath='.'):
+def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose=False,
+              pure_homo=False, diagonal=False, delta=None, merge=False,
+              rep_CV=50, ndelta=50, q=2, exact=False, max_pure=None, nfolds=10,
+              outpath='.', **kwargs):
     """
-    Python wrapper for calling the LOVE function from local R scripts.
-    Need to use local due to edge case where only 1 pure variable is found in LOVE.
-    Sigma is also correlation (like in SLIDE) rather than covariance (like in LOVE)
-    
-    Returns:
-    --------
+    Python wrapper for calling the LOVE function.
+
+    Parameters
+    ----------
+    X : pd.DataFrame or np.ndarray
+        The input data matrix (n samples x p features).
+    lbd : float, optional
+        Leading constant for lambda (precision estimation). Default is 0.5.
+    mu : float, optional
+        Leading constant for thresholding the loading matrix. Default is 0.5.
+    est_non_pure_row : str, optional
+        Method for non-pure rows: "HT", "ST", or "Dantzig". Default is "HT".
+    thresh_fdr : float, optional
+        Deprecated. Was used in R implementation only.
+    verbose : bool, optional
+        If True, print progress. Default is False.
+    pure_homo : bool, optional
+        If True, pure loadings have the same magnitude. Default is False.
+    diagonal : bool, optional
+        If True, covariance matrix of Z is diagonal. Default is False.
+    delta : float, list, or np.ndarray, optional
+        Grid of delta values for thresholding. Default is None.
+    merge : bool, optional
+        If True, take union of candidate pure variables; else intersection.
+        Default is False.
+    rep_CV : int, optional
+        Number of repetitions for cross validation. Default is 50.
+    ndelta : int, optional
+        Length of delta grid. Default is 50.
+    q : int, optional
+        Type of score (2 or np.inf). Default is 2.
+    exact : bool, optional
+        Compute Inf score exactly via LP. Default is False.
+    max_pure : float, optional
+        Max proportion of pure variables. Default is None.
+    nfolds : int, optional
+        Number of folds for cross-validation. Default is 10.
+    outpath : str, optional
+        Deprecated. Was used in R implementation only.
+    **kwargs : dict
+        Additional keyword arguments (ignored for compatibility).
+
+    Returns
+    -------
     dict
-        Dictionary containing the results from the LOVE analysis
+        Dictionary containing the results from the LOVE analysis:
+        - K: int, estimated number of clusters
+        - pureVec: np.ndarray, indices of pure variables
+        - pureInd: list of dicts with 'pos' and 'neg' indices
+        - group: list of dicts with cluster assignments
+        - A: np.ndarray, p x K estimated assignment matrix
+        - C: np.ndarray, K x K covariance matrix of Z
+        - Omega: np.ndarray or None, K x K precision matrix of Z
+        - Gamma: np.ndarray, p-dim diagonal of error covariance
+        - optDelta: float, selected delta value
     """
 
-    gene_names = X.columns
-    sample_names = X.index
+    # Deprecation warnings for R-specific parameters
+    if thresh_fdr != 0.2:
+        warnings.warn(
+            "thresh_fdr parameter is deprecated (was R-only). It has no effect.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+    if outpath != '.':
+        warnings.warn(
+            "outpath parameter is deprecated (was R-only). It has no effect.",
+            DeprecationWarning,
+            stacklevel=2
+        )
 
-    X = X.values
-    
-    # Activate automatic conversion between R and NumPy objects
-    numpy2ri.activate()
+    # Extract numpy array from DataFrame if needed
+    X_array = X.values if hasattr(X, 'values') else np.asarray(X)
 
-    # Convert Python parameters to R values
-    r_X = numpy2ri.py2rpy(X)
-    r_lbd = robjects.FloatVector([lbd]) if not isinstance(lbd, (list, np.ndarray)) else robjects.FloatVector(lbd)
-    r_mu = robjects.FloatVector([mu])
-    r_est_non_pure_row = robjects.StrVector([est_non_pure_row])
-    r_thresh_fdr = robjects.FloatVector([thresh_fdr])
-    r_verbose = robjects.BoolVector([verbose])
-    r_pure_homo = robjects.BoolVector([pure_homo])
-    r_diagonal = robjects.BoolVector([diagonal])
-    r_merge = robjects.BoolVector([merge])
-    r_rep_CV = robjects.IntVector([rep_CV])
-    r_ndelta = robjects.IntVector([ndelta])
-    r_q = robjects.IntVector([q])
-    r_exact = robjects.BoolVector([exact])
-    r_nfolds = robjects.IntVector([nfolds])
-    r_gene_names = robjects.StrVector(gene_names)
-    r_sample_names = robjects.StrVector(sample_names)
-    
-    # Handle delta which can be None
-    r_delta = robjects.NULL if delta is None else robjects.FloatVector([delta]) if not isinstance(delta, (list, np.ndarray)) else robjects.FloatVector(delta)
-    
-    # Handle max_pure which can be None
-    r_max_pure = robjects.NULL if max_pure is None else robjects.IntVector([max_pure])
+    # Convert delta to numpy array if provided as scalar or list
+    if delta is not None and not isinstance(delta, np.ndarray):
+        delta = np.atleast_1d(delta)
 
+    # Call Python LOVE
+    result = LOVE(
+        X=X_array,
+        lbd=lbd,
+        mu=mu,
+        est_non_pure_row=est_non_pure_row,
+        verbose=verbose,
+        pure_homo=pure_homo,
+        diagonal=diagonal,
+        delta=delta,
+        merge=merge,
+        rep_CV=rep_CV,
+        ndelta=ndelta,
+        q=q,
+        exact=exact,
+        max_pure=max_pure,
+        nfolds=nfolds
+    )
 
-    # Source the correct LOVE function
-    if pure_homo is True:
-        love_function = 'getLatentFactors.R'
-        love_directory = 'LOVE-SLIDE'
-    else:
-        love_function = 'LOVE.R'
-        love_directory = 'LOVE-master/R'
-
-    file_dir = os.path.dirname(os.path.abspath(__file__))
-    love_path = os.path.join(file_dir, f"{love_directory}")
-    
-    # Source all R files in the directory - this will define the LOVE function
-    r_files = [os.path.join(love_path, f) for f in os.listdir(love_path) 
-               if f.endswith('.R')]
-    
-    love_main_file = None
-    for file in r_files:
-        if love_function in file:
-            love_main_file = file
-            break
-
-    # If we found a main file, source it first
-    if love_main_file:
-        r(f'source("{love_main_file}")')
-        r_files.remove(love_main_file)
-    
-    # Then source all other R files
-    for r_file in r_files:
-        r(f'source("{r_file}")')
-    
-    # Check if LOVE function is defined
-    try:
-        r("exists('LOVE')")
-    except:
-        raise ValueError("LOVE function not found. Please check the LOVE-master directory path.")
-    
-    # Now call the LOVE function directly using r.LOVE instead of r['LOVE']
-    if pure_homo is True:
-        result = r.getLatentFactors(r_X, 
-                  delta=r_delta,
-                  lbd=r_lbd, 
-                  thresh_fdr=r_thresh_fdr,
-                  rep_cv=r_rep_CV,
-                  out_path=outpath,
-                  verbose=r_verbose
-                  )
-    else:
-        result = r.LOVE(r_X, 
-                  delta=r_delta, 
-                  lbd=r_lbd, 
-                  mu=r_mu, 
-                  thresh_fdr=r_thresh_fdr,
-                  verbose=r_verbose,
-                  pure_homo=r_pure_homo, 
-                  est_non_pure_row=r_est_non_pure_row,
-                  diagonal=r_diagonal,
-                  merge=r_merge, 
-                  rep_CV=r_rep_CV,
-                  ndelta=r_ndelta, 
-                  q=r_q, 
-                  exact=r_exact, 
-                  max_pure=r_max_pure, 
-                  nfolds=r_nfolds,
-                  out_path=outpath,
-                  gene_names=r_gene_names,
-                  sample_names=r_sample_names
-                )
-    
-    # Convert R results to Python
-    python_result = {}
-
-    for i, key in enumerate(result.names):
-        value = result.rx2(i + 1)  # 1-based indexing (R style)
-
-        if key == "K":
-            python_result[key] = int(value[0])  # single integer
-
-        elif key in ["pureVec", "Gamma"]:
-            python_result[key] = np.array(value)
-
-        elif key in ["pureInd", "group"]:
-            parsed = []
-            for item in value:
-                pos = list(map(int, item.rx2("pos"))) if "pos" in item.names else []
-                neg = list(map(int, item.rx2("neg"))) if "neg" in item.names else []
-                parsed.append({"pos": pos, "neg": neg})
-            python_result[key] = parsed
-
-        elif key in ["A", "C", "Omega"]:
-            python_result[key] = np.array(value)
-
-        elif key == "optDelta":
-            python_result[key] = float(value[0])  # single float
-
-        else:
-            # Fallback: try conversion or store raw
-            try:
-                python_result[key] = np.array(value)
-            except Exception:
-                python_result[key] = value
-
-    # Deactivate automatic conversion
-    numpy2ri.deactivate()
-    
-    return python_result
+    return result

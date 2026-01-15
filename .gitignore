@@ -1,4 +1,4 @@
-__pycache__
+**/__pycache__
 *.txt
 !requirements.txt
 *.csv
@@ -6,3 +6,6 @@ example_data/*
 example_results/*
 test_results/*
 *.out
+
+**/*.out
+**/*.err
