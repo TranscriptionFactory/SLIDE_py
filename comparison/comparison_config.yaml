@@ -1,11 +1,10 @@
 # =============================================================================
 # SLIDE R vs Python Comparison Configuration
 # =============================================================================
-# Copy this file and modify for your experiment
+# This config is used by both R and Python SLIDE implementations
 #
 # Usage:
-#   sbatch run_comparison.sh my_config.yaml
-#   bash run_comparison.sh my_config.yaml
+#   sbatch run_comparison.sh comparison_config.yaml
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -17,34 +16,30 @@ y_path: /ix/djishnu/Aaron/1_general_use/SLIDE/Data_Scripts/SSc/UnTx/Y.csv
 # -----------------------------------------------------------------------------
 # Output Settings
 # -----------------------------------------------------------------------------
-# Output subdirectory name
-tag: SSc_comparison
-
-# Base output directory (use absolute path to avoid issues)
-out_path: /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/outputs
+out_path: /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/outputs/SSc_comparison
 
 # -----------------------------------------------------------------------------
-# SLIDE Parameters (same for R and Python)
+# SLIDE Parameters
 # -----------------------------------------------------------------------------
-# Delta threshold for pure variable detection
-delta: 0.1
+# Can be single value or list for grid search
+delta:
+  - 0.1
 
-# Lambda regularization parameter
-lambda: 0.5
+lambda:
+  - 0.5
 
-# Specificity threshold for knockoffs
+# Knockoff parameters
 spec: 0.1
-
-# False discovery rate threshold
 fdr: 0.1
-
-# Number of SLIDE knockoff iterations
-niter: 500
-
-# FDR threshold for correlation matrix
+SLIDE_iter: 500
 thresh_fdr: 0.2
 
 # -----------------------------------------------------------------------------
-# Environment (optional - uses defaults if not specified)
+# Model Settings
 # -----------------------------------------------------------------------------
-# python_env: /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python
+y_factor: true
+do_interacts: true
+pure_homo: true
+SLIDE_top_feats: 10
+sampleCV_iter: 500
+n_workers: 2

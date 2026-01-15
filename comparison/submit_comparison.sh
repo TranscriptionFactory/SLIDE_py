@@ -6,65 +6,51 @@
 # to run after both R and Python complete.
 #
 # Usage:
-#   ./submit_comparison.sh                      # Use defaults
-#   ./submit_comparison.sh config.yaml          # Use YAML config
-#   ./submit_comparison.sh config.yaml my_tag   # Override tag
+#   ./submit_comparison.sh                           # Use default config
+#   ./submit_comparison.sh my_config.yaml            # Use custom config
 #
 # This will:
 #   1. Submit run_comparison.sh as array job (tasks 0=R, 1=Python)
 #   2. Submit run_report.sh with dependency on array job
-
-
-
-# sbatch submit_comparison.sh comparison_config.yaml SSc_unTx
 # =============================================================================
 
 set -e
 
-SCRIPT_DIR=/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison #"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR=/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison
 cd "$SCRIPT_DIR"
 
-CONFIG_FILE="${1:-}"
-TAG_OVERRIDE="${2:-}"
+YAML_CONFIG="${1:-comparison_config.yaml}"
 
-# Parse tag from config if provided
-if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
-    TAG=$(grep -E "^tag:" "$CONFIG_FILE" | cut -d: -f2 | tr -d ' "'"'" | xargs)
+if [ ! -f "$YAML_CONFIG" ]; then
+    echo "ERROR: YAML config not found: $YAML_CONFIG"
+    exit 1
 fi
 
-# Use override if provided
-if [ -n "$TAG_OVERRIDE" ]; then
-    TAG="$TAG_OVERRIDE"
-fi
-
-# Default tag
-TAG="${TAG:-comparison_run}"
+# Parse output path from YAML
+OUT_PATH=$(grep "^out_path:" "$YAML_CONFIG" | sed 's/out_path: *//' | tr -d '"'"'" | xargs)
+OUT_PATH="${OUT_PATH:-$SCRIPT_DIR/outputs}"
 
 echo "=============================================================="
 echo "Submitting SLIDE R vs Python Comparison"
 echo "=============================================================="
-echo "Config: ${CONFIG_FILE:-defaults}"
-echo "Tag: $TAG"
+echo "Config: $YAML_CONFIG"
+echo "Output: $OUT_PATH"
 echo ""
 
 # Submit array job
-if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
-    ARRAY_JOB_ID=$(sbatch --parsable run_comparison.sh "$CONFIG_FILE")
-else
-    ARRAY_JOB_ID=$(sbatch --parsable run_comparison.sh)
-fi
+ARRAY_JOB_ID=$(sbatch --parsable run_comparison.sh "$YAML_CONFIG")
 
 echo "Submitted array job: $ARRAY_JOB_ID"
-echo "  Task 0: R implementation"
-echo "  Task 1: Python implementation"
+echo "  Task 0: R implementation  -> ${OUT_PATH}/R_outputs/"
+echo "  Task 1: Python implementation -> ${OUT_PATH}/Py_outputs/"
 
 # Submit report job with dependency (runs after ALL array tasks complete)
-REPORT_JOB_ID=$(sbatch --parsable --dependency=afterany:${ARRAY_JOB_ID} run_report.sh "$TAG")
+REPORT_JOB_ID=$(sbatch --parsable --dependency=afterany:${ARRAY_JOB_ID} run_report.sh "$OUT_PATH")
 
 echo ""
 echo "Submitted report job: $REPORT_JOB_ID"
 echo "  Dependency: afterany:${ARRAY_JOB_ID}"
-echo "  (Will run after both R and Python finish, regardless of success/failure)"
+echo "  (Will run after both R and Python finish)"
 
 echo ""
 echo "=============================================================="
@@ -72,5 +58,6 @@ echo "Monitor with:"
 echo "  squeue -u \$USER"
 echo ""
 echo "After completion, find outputs in:"
-echo "  outputs/${TAG}/"
+echo "  ${OUT_PATH}/R_outputs/"
+echo "  ${OUT_PATH}/Py_outputs/"
 echo "=============================================================="
