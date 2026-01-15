@@ -1,18 +1,118 @@
 """
 Python wrapper for the LOVE algorithm.
-Uses the pure Python implementation instead of R.
+Supports both pure Python and R backends.
 """
 
+import os
 import warnings
 import numpy as np
 
 from .love_pkg.love import LOVE
 
 
+def call_love_r(X, lbd=0.5, delta=None, thresh_fdr=0.2, rep_CV=50,
+                alpha_level=0.05, verbose=False, **kwargs):
+    """
+    Call R LOVE implementation via rpy2.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        The input data matrix (n samples x p features).
+    lbd : float
+        Lambda parameter for thresholding. Default is 0.5.
+    delta : float or list
+        Delta threshold value(s). Required.
+    thresh_fdr : float
+        FDR threshold for correlation matrix. Default is 0.2.
+    rep_CV : int
+        Number of CV replicates for delta selection. Default is 50.
+    alpha_level : float
+        Alpha level for confidence intervals. Default is 0.05.
+    verbose : bool
+        Print progress. Default is False.
+    **kwargs : dict
+        Additional arguments (ignored for compatibility).
+
+    Returns
+    -------
+    dict
+        Dictionary with LOVE results matching Python format.
+    """
+    import rpy2.robjects as robjects
+    from rpy2.robjects import numpy2ri
+    from rpy2.robjects.packages import importr
+
+    numpy2ri.activate()
+
+    # Get path to R scripts
+    r_script_dir = os.path.join(os.path.dirname(__file__), 'LOVE-SLIDE')
+
+    # Source all R scripts
+    r_source = robjects.r['source']
+    for script in ['estAI.R', 'estC.R', 'findPureNode.R', 'findRowMax.R',
+                   'findRowMaxInd.R', 'findSignPureNode.R', 'threshSigma.R',
+                   'corrToP.R', 'cvDelta.R', 'estSigmaTJ.R', 'estAJDant.R',
+                   'dantzig.R', 'recoverAI.R', 'makeHeatmap.R',
+                   'getLatentFactors.R']:
+        script_path = os.path.join(r_script_dir, script)
+        if os.path.exists(script_path):
+            r_source(script_path)
+
+    # Get the R function
+    getLatentFactors = robjects.globalenv['getLatentFactors']
+
+    # Convert delta to R vector
+    if delta is None:
+        delta = 0.1
+    if not hasattr(delta, '__iter__'):
+        delta = [delta]
+    delta_r = robjects.FloatVector(delta)
+
+    # Call R function
+    result = getLatentFactors(
+        x=X,
+        delta=delta_r,
+        thresh_fdr=thresh_fdr,
+        lbd=lbd,
+        rep_cv=rep_CV,
+        alpha_level=alpha_level,
+        verbose=verbose
+    )
+
+    # Convert R result to Python dict
+    result_dict = {
+        'K': int(result.rx2('K')[0]),
+        'pureVec': np.array(result.rx2('pureVec')) - 1,  # R is 1-indexed
+        'pureInd': _convert_r_pure_ind(result.rx2('purInd')),
+        'group': None,  # Not returned by R function
+        'A': np.array(result.rx2('A')),
+        'C': np.array(result.rx2('C')),
+        'Omega': None,  # Not returned by R function
+        'Gamma': np.array(result.rx2('Gamma')),
+        'optDelta': delta[0] if len(delta) == 1 else delta[0],
+    }
+
+    numpy2ri.deactivate()
+    return result_dict
+
+
+def _convert_r_pure_ind(r_list):
+    """Convert R pureInd list to Python format."""
+    import rpy2.robjects as robjects
+    result = []
+    for i in range(len(r_list)):
+        item = r_list[i]
+        pos = np.array(item.rx2('pos')) - 1 if item.rx2('pos') != robjects.NULL else np.array([])
+        neg = np.array(item.rx2('neg')) - 1 if item.rx2('neg') != robjects.NULL else np.array([])
+        result.append({'pos': pos.astype(int), 'neg': neg.astype(int)})
+    return result
+
+
 def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose=False,
               pure_homo=False, diagonal=False, delta=None, merge=False,
               rep_CV=50, ndelta=50, q=2, exact=False, max_pure=None, nfolds=10,
-              outpath='.', **kwargs):
+              outpath='.', backend='python', **kwargs):
     """
     Python wrapper for calling the LOVE function.
 
@@ -52,9 +152,12 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
     nfolds : int, optional
         Number of folds for cross-validation. Default is 10.
     outpath : str, optional
-        Deprecated. Was used in R implementation only.
+        Output path (used by R backend only). Default is '.'.
+    backend : str, optional
+        Which LOVE implementation to use: 'python' (default) or 'r'.
+        The 'r' backend requires rpy2 and R with the LOVE scripts.
     **kwargs : dict
-        Additional keyword arguments (ignored for compatibility).
+        Additional keyword arguments passed to backend.
 
     Returns
     -------
@@ -71,20 +174,6 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
         - optDelta: float, selected delta value
     """
 
-    # Deprecation warnings for R-specific parameters
-    if thresh_fdr != 0.2:
-        warnings.warn(
-            "thresh_fdr parameter is deprecated (was R-only). It has no effect.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-    if outpath != '.':
-        warnings.warn(
-            "outpath parameter is deprecated (was R-only). It has no effect.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-
     # Extract numpy array from DataFrame if needed
     X_array = X.values if hasattr(X, 'values') else np.asarray(X)
 
@@ -92,23 +181,52 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
     if delta is not None and not isinstance(delta, np.ndarray):
         delta = np.atleast_1d(delta)
 
-    # Call Python LOVE
-    result = LOVE(
-        X=X_array,
-        lbd=lbd,
-        mu=mu,
-        est_non_pure_row=est_non_pure_row,
-        verbose=verbose,
-        pure_homo=pure_homo,
-        diagonal=diagonal,
-        delta=delta,
-        merge=merge,
-        rep_CV=rep_CV,
-        ndelta=ndelta,
-        q=q,
-        exact=exact,
-        max_pure=max_pure,
-        nfolds=nfolds
-    )
+    # Dispatch to appropriate backend
+    if backend == 'r':
+        if verbose:
+            print("Using R LOVE backend via rpy2")
+        result = call_love_r(
+            X=X_array,
+            lbd=lbd,
+            delta=delta,
+            thresh_fdr=thresh_fdr,
+            rep_CV=rep_CV,
+            verbose=verbose,
+            **kwargs
+        )
+    else:
+        # Deprecation warnings only apply to Python backend
+        if thresh_fdr != 0.2:
+            warnings.warn(
+                "thresh_fdr parameter is deprecated (Python backend). It has no effect.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+        if outpath != '.':
+            warnings.warn(
+                "outpath parameter is deprecated (Python backend). It has no effect.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+
+        if verbose:
+            print("Using Python LOVE backend")
+        result = LOVE(
+            X=X_array,
+            lbd=lbd,
+            mu=mu,
+            est_non_pure_row=est_non_pure_row,
+            verbose=verbose,
+            pure_homo=pure_homo,
+            diagonal=diagonal,
+            delta=delta,
+            merge=merge,
+            rep_CV=rep_CV,
+            ndelta=ndelta,
+            q=q,
+            exact=exact,
+            max_pure=max_pure,
+            nfolds=nfolds
+        )
 
     return result

@@ -210,7 +210,8 @@ class OptimizeSLIDE(SLIDE):
     def __init__(self, input_params, x=None, y=None):
         super().__init__(input_params, x, y)
     
-    def get_latent_factors(self, x, y, delta, mu=0.5, lbd=0.1, pure_homo=True, verbose=False, thresh_fdr=0.2, outpath='.'):
+    def get_latent_factors(self, x, y, delta, mu=0.5, lbd=0.1, pure_homo=True, verbose=False,
+                           thresh_fdr=0.2, outpath='.', love_backend='python'):
         """
         Get the latent factors (aka z_matrix) from the LOVE algorithm.
 
@@ -225,17 +226,19 @@ class OptimizeSLIDE(SLIDE):
             thresh_fdr (float): a numerical constant used for thresholding the correlation matrix to
                                 control the false discovery rate
             outpath (str): The path to save the LOVE result.
+            love_backend (str): Which LOVE implementation to use: 'python' (default) or 'r'.
         """
 
         love_result = call_love(
-            X=x, 
-            lbd=lbd, 
-            mu=mu, 
-            pure_homo=pure_homo, 
-            delta=delta, 
+            X=x,
+            lbd=lbd,
+            mu=mu,
+            pure_homo=pure_homo,
+            delta=delta,
             verbose=verbose,
             thresh_fdr=thresh_fdr,
-            outpath=outpath
+            outpath=outpath,
+            backend=love_backend
         )
         self.love_result = love_result
 
@@ -418,14 +421,15 @@ class OptimizeSLIDE(SLIDE):
 
                 try:
                     self.get_latent_factors(
-                        x=self.data.X, 
-                        y=self.data.Y, 
+                        x=self.data.X,
+                        y=self.data.Y,
                         delta=delta_iter,
-                        lbd=lambda_iter, 
+                        lbd=lambda_iter,
                         thresh_fdr=self.input_params['thresh_fdr'],
                         pure_homo=self.input_params['pure_homo'],
                         verbose=verbose,
-                        outpath=out_iter
+                        outpath=out_iter,
+                        love_backend=self.input_params.get('love_backend', 'python')
                     )
 
                     if verbose:
