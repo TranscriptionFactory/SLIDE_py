@@ -13,11 +13,15 @@
 # This will:
 #   1. Submit run_comparison.sh as array job (tasks 0=R, 1=Python)
 #   2. Submit run_report.sh with dependency on array job
+
+
+
+# sbatch submit_comparison.sh comparison_config.yaml SSc_unTx
 # =============================================================================
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR=/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison #"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 CONFIG_FILE="${1:-}"

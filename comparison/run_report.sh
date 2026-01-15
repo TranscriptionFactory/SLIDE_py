@@ -31,7 +31,7 @@ set -e
 
 # Get tag from argument or use default
 TAG="${1:-comparison_run}"
-OUTPUT_DIR="${OUTPUT_DIR:-$(dirname $0)/outputs}"
+OUTPUT_DIR="${OUTPUT_DIR:-/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/outputs}"
 PYTHON_ENV="${PYTHON_ENV:-/ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

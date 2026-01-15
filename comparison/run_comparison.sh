@@ -5,8 +5,8 @@
 #SBATCH --mail-type=FAIL,END
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --mem=50G
-#SBATCH --cpus-per-task=10
+#SBATCH --mem=75G
+#SBATCH --cpus-per-task=4
 #SBATCH --array=0-1
 #SBATCH --output=comparison_%A_%a.out
 #SBATCH --error=comparison_%A_%a.err
@@ -36,8 +36,8 @@ set -e  # Exit on error
 # SHARED PARAMETERS - Edit these or use a config YAML
 # -----------------------------------------------------------------------------
 # Data paths (REQUIRED - must point to actual files)
-X_FILE="${X_FILE:-/ix/djishnu/Aaron/0_for_others/Shailja/20260109_data/X.csv}"
-Y_FILE="${Y_FILE:-/ix/djishnu/Aaron/0_for_others/Shailja/20260109_data/Y.csv}"
+X_FILE="${X_FILE:-/ix/djishnu/Aaron/1_general_use/SLIDE/Data_Scripts/SSc/UnTx/X.csv}"
+Y_FILE="${Y_FILE:-/ix/djishnu/Aaron/1_general_use/SLIDE/Data_Scripts/SSc/UnTx/Y.csv}"
 
 # Run tag (output subdirectory name)
 TAG="${TAG:-comparison_run}"
@@ -50,8 +50,8 @@ FDR="${FDR:-0.1}"
 NITER="${NITER:-500}"
 THRESH_FDR="${THRESH_FDR:-0.2}"
 
-# Output directory
-OUTPUT_DIR="${OUTPUT_DIR:-$(dirname $0)/outputs}"
+# Output directory (use absolute path)
+OUTPUT_DIR="${OUTPUT_DIR:-/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/outputs}"
 
 # Python environment
 PYTHON_ENV="${PYTHON_ENV:-/ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python}"
@@ -67,8 +67,12 @@ if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
         # Skip comments and empty lines
         [[ "$key" =~ ^#.*$ ]] && continue
         [[ -z "$key" ]] && continue
+        # Strip inline comments (everything after #)
+        value="${value%%#*}"
         # Remove quotes and whitespace
         value=$(echo "$value" | tr -d '"' | tr -d "'" | xargs)
+        # Skip if value is empty after stripping
+        [[ -z "$value" ]] && continue
         case "$key" in
             x_path|X_FILE)     X_FILE="$value" ;;
             y_path|Y_FILE)     Y_FILE="$value" ;;
