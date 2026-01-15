@@ -1,10 +1,15 @@
 # =============================================================================
 # SLIDE R vs Python Comparison Configuration
 # =============================================================================
-# This config is used by both R and Python SLIDE implementations
+# This config is used by R and Python SLIDE implementations
 #
 # Usage:
 #   sbatch run_comparison.sh comparison_config.yaml
+#
+# Compares 3 implementations:
+#   Task 0: R SLIDE (native R package)
+#   Task 1: Python SLIDE with R LOVE backend
+#   Task 2: Python SLIDE with Python LOVE backend
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -19,14 +24,17 @@ y_path: /ix/djishnu/Aaron/1_general_use/SLIDE/Data_Scripts/SSc/UnTx/Y.csv
 out_path: /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/outputs/SSc_comparison
 
 # -----------------------------------------------------------------------------
-# SLIDE Parameters
+# SLIDE Parameters - Grid Search
 # -----------------------------------------------------------------------------
-# Can be single value or list for grid search
 delta:
+  - 0.05
   - 0.1
+  - 0.2
 
 lambda:
+  - 0.1
   - 0.5
+  - 1.0
 
 # Knockoff parameters
 spec: 0.1
@@ -38,9 +46,9 @@ eval_type: corr  # Must specify: "corr" for continuous Y, "auc" for binary Y
 # -----------------------------------------------------------------------------
 # Model Settings
 # -----------------------------------------------------------------------------
-y_factor: true
+y_factor: false
 do_interacts: true
 pure_homo: true
 SLIDE_top_feats: 10
 sampleCV_iter: 500
-n_workers: 2
+n_workers: 4

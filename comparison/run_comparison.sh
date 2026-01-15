@@ -7,18 +7,19 @@
 #SBATCH --ntasks=1
 #SBATCH --mem=75G
 #SBATCH --cpus-per-task=4
-#SBATCH --array=0-1
+#SBATCH --array=0-2
 #SBATCH --output=logs/comparison_%A_%a.out
 #SBATCH --error=logs/comparison_%A_%a.err
 
 # =============================================================================
-# SLIDE R vs Python Comparison Script (Array Job Version)
+# SLIDE 3-Way Comparison Script (Array Job Version)
 # =============================================================================
-# Runs R and Python as independent array tasks so one failure doesn't kill both.
+# Compares LOVE implementations across R and Python backends.
 #
 # Array tasks:
-#   0 = R implementation
-#   1 = Python implementation
+#   0 = R SLIDE (native R package - R LOVE + R knockoffs)
+#   1 = Python SLIDE with R LOVE backend
+#   2 = Python SLIDE with Python LOVE backend
 #
 # Usage:
 #   sbatch run_comparison.sh <yaml_config>
@@ -42,8 +43,7 @@ if [ ! -f "$YAML_CONFIG" ]; then
     exit 1
 fi
 
-# Parse output paths from YAML for R and Python
-# Using simple grep/sed to extract values
+# Parse output paths from YAML
 OUT_PATH=$(grep "^out_path:" "$YAML_CONFIG" | sed 's/out_path: *//' | tr -d '"'"'" | xargs)
 OUT_PATH="${OUT_PATH:-$SCRIPT_DIR/outputs}"
 
@@ -53,6 +53,7 @@ mkdir -p "$OUT_PATH"
 # Load modules
 module load gcc/12.2.0
 module load python/ondemand-jupyter-python3.11
+module load r/4.4.0  # Needed for all tasks (R native, and rpy2 for Python)
 
 # Python environment
 PYTHON_ENV="${PYTHON_ENV:-/ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python}"
@@ -60,10 +61,13 @@ PYTHON_ENV="${PYTHON_ENV:-/ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/
 # -----------------------------------------------------------------------------
 # Print configuration
 # -----------------------------------------------------------------------------
+TASK_NAMES=("R_native" "Py_R_LOVE" "Py_Py_LOVE")
+TASK_ID="${SLURM_ARRAY_TASK_ID:-0}"
+
 echo "=============================================================="
-echo "SLIDE R vs Python Comparison"
+echo "SLIDE 3-Way Comparison"
 echo "=============================================================="
-echo "Array Task ID: ${SLURM_ARRAY_TASK_ID:-N/A}"
+echo "Task ID: ${TASK_ID} (${TASK_NAMES[$TASK_ID]})"
 echo "Job ID: ${SLURM_ARRAY_JOB_ID:-N/A}"
 echo ""
 echo "YAML config: $YAML_CONFIG"
@@ -75,45 +79,56 @@ echo "=============================================================="
 # -----------------------------------------------------------------------------
 START_TIME=$(date +%s)
 
-if [ "${SLURM_ARRAY_TASK_ID:-0}" -eq 0 ]; then
+if [ "$TASK_ID" -eq 0 ]; then
     # =========================================================================
-    # Task 0: R Implementation
+    # Task 0: R SLIDE (Native R package)
     # =========================================================================
     echo ""
     echo "=============================================================="
-    echo "Running R SLIDE Implementation"
+    echo "Running R SLIDE (Native R Implementation)"
     echo "=============================================================="
-    module load r/4.4.0
 
-    R_OUT="${OUT_PATH}/R_outputs"
+    R_OUT="${OUT_PATH}/R_native"
     mkdir -p "$R_OUT"
 
     Rscript run_slide_R.R "$YAML_CONFIG" "$R_OUT"
 
-    # Mark R as complete
-    touch "${OUT_PATH}/.r_complete"
-    echo "R outputs saved to: $R_OUT"
+    touch "${OUT_PATH}/.r_native_complete"
+    echo "R native outputs saved to: $R_OUT"
 
-elif [ "${SLURM_ARRAY_TASK_ID:-1}" -eq 1 ]; then
+elif [ "$TASK_ID" -eq 1 ]; then
     # =========================================================================
-    # Task 1: Python Implementation
+    # Task 1: Python SLIDE with R LOVE backend
     # =========================================================================
     echo ""
     echo "=============================================================="
-    echo "Running Python SLIDE Implementation"
+    echo "Running Python SLIDE with R LOVE Backend"
     echo "=============================================================="
 
-    # Load R for rpy2 (loveslide uses rpy2 for LOVE integration)
-    module load r/4.4.0
+    PY_R_OUT="${OUT_PATH}/Py_R_LOVE"
+    mkdir -p "$PY_R_OUT"
 
-    PY_OUT="${OUT_PATH}/Py_outputs"
-    mkdir -p "$PY_OUT"
+    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$PY_R_OUT" --love-backend r
 
-    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$PY_OUT"
+    touch "${OUT_PATH}/.py_r_love_complete"
+    echo "Python (R LOVE) outputs saved to: $PY_R_OUT"
 
-    # Mark Python as complete
-    touch "${OUT_PATH}/.py_complete"
-    echo "Python outputs saved to: $PY_OUT"
+elif [ "$TASK_ID" -eq 2 ]; then
+    # =========================================================================
+    # Task 2: Python SLIDE with Python LOVE backend
+    # =========================================================================
+    echo ""
+    echo "=============================================================="
+    echo "Running Python SLIDE with Python LOVE Backend"
+    echo "=============================================================="
+
+    PY_PY_OUT="${OUT_PATH}/Py_Py_LOVE"
+    mkdir -p "$PY_PY_OUT"
+
+    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$PY_PY_OUT" --love-backend python
+
+    touch "${OUT_PATH}/.py_py_love_complete"
+    echo "Python (Python LOVE) outputs saved to: $PY_PY_OUT"
 
 fi
 
@@ -122,5 +137,5 @@ ELAPSED=$((END_TIME - START_TIME))
 
 echo ""
 echo "=============================================================="
-echo "Task ${SLURM_ARRAY_TASK_ID:-0} completed in ${ELAPSED} seconds"
+echo "Task ${TASK_ID} (${TASK_NAMES[$TASK_ID]}) completed in ${ELAPSED} seconds"
 echo "=============================================================="

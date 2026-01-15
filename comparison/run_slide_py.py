@@ -3,18 +3,19 @@
 Python script to run SLIDE on input data and compare with R outputs.
 
 Usage:
-    python run_slide_py.py <yaml_path> [out_path]
+    python run_slide_py.py <yaml_path> [out_path] [--love-backend python|r]
 
 Arguments:
-    yaml_path       Path to YAML config file
-    out_path        Optional output path override
+    yaml_path           Path to YAML config file
+    out_path            Optional output path override
+    --love-backend      Which LOVE implementation to use: 'python' (default) or 'r'
 
 Examples:
     python run_slide_py.py config.yaml
-    python run_slide_py.py config.yaml /path/to/outputs
+    python run_slide_py.py config.yaml /path/to/outputs --love-backend r
 """
 
-import sys
+import argparse
 import os
 import yaml
 import logging
@@ -26,30 +27,40 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
-def main():
-    if len(sys.argv) < 2:
-        logger.error("Usage: python run_slide_py.py <yaml_path> [out_path]")
-        sys.exit(1)
+def parse_args():
+    parser = argparse.ArgumentParser(description='Run Python SLIDE implementation')
+    parser.add_argument('yaml_path', help='Path to YAML config file')
+    parser.add_argument('out_path', nargs='?', default=None, help='Output path override')
+    parser.add_argument('--love-backend', dest='love_backend', choices=['python', 'r'],
+                        default='python', help='LOVE implementation: python (default) or r')
+    return parser.parse_args()
 
-    yaml_path = sys.argv[1]
+
+def main():
+    args = parse_args()
 
     # Load parameters from YAML
-    with open(yaml_path, 'r') as f:
+    with open(args.yaml_path, 'r') as f:
         params = yaml.safe_load(f)
 
     # Override out_path if provided as argument
-    out_path = sys.argv[2] if len(sys.argv) >= 3 else params.get('out_path')
+    out_path = args.out_path if args.out_path else params.get('out_path')
     params['out_path'] = out_path
 
+    # Set love_backend from CLI argument
+    love_backend = args.love_backend
+    params['love_backend'] = love_backend
+
     print("=" * 60)
-    print("SLIDE Python Analysis")
+    print(f"SLIDE Python Analysis (LOVE backend: {love_backend})")
     print("=" * 60)
-    print(f"YAML config: {yaml_path}")
+    print(f"YAML config: {args.yaml_path}")
     print(f"Output path: {out_path}")
     print(f"X path: {params.get('x_path')}")
     print(f"Y path: {params.get('y_path')}")
     print(f"Delta: {params.get('delta')}")
     print(f"Lambda: {params.get('lambda')}")
+    print(f"LOVE backend: {love_backend}")
     print("=" * 60)
 
     # Create output directory
@@ -75,6 +86,7 @@ def main():
         'do_interacts': params.get('do_interacts', True),
         'n_workers': params.get('n_workers', 2),
         'spec': params.get('spec', 0.1),
+        'love_backend': love_backend,
         # Handle delta/lambda - can be single value or list
         'delta': params.get('delta') if isinstance(params.get('delta'), list) else [params.get('delta', 0.1)],
         'lambda': params.get('lambda') if isinstance(params.get('lambda'), list) else [params.get('lambda', 0.5)],
@@ -100,7 +112,7 @@ def main():
 
     print()
     print("=" * 60)
-    print(f"Python SLIDE completed in {t_end - t_start:.2f} seconds")
+    print(f"Python SLIDE ({love_backend} LOVE) completed in {t_end - t_start:.2f} seconds")
     print(f"Outputs saved to: {out_path}")
     print("=" * 60)
 
