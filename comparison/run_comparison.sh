@@ -7,19 +7,27 @@
 #SBATCH --ntasks=1
 #SBATCH --mem=50G
 #SBATCH --cpus-per-task=10
-#SBATCH --output=comparison_%j.out
-#SBATCH --error=comparison_%j.err
+#SBATCH --array=0-1
+#SBATCH --output=comparison_%A_%a.out
+#SBATCH --error=comparison_%A_%a.err
 
 # =============================================================================
-# SLIDE R vs Python Comparison Script
+# SLIDE R vs Python Comparison Script (Array Job Version)
 # =============================================================================
-# This script runs both R and Python SLIDE implementations on the same data
-# with identical parameters for direct comparison.
+# Runs R and Python as independent array tasks so one failure doesn't kill both.
+#
+# Array tasks:
+#   0 = R implementation
+#   1 = Python implementation
 #
 # Usage:
 #   sbatch run_comparison.sh                    # Use defaults below
 #   sbatch run_comparison.sh config.yaml        # Load from YAML config
-#   bash run_comparison.sh                      # Run interactively
+#
+# After both complete, run the comparison report manually:
+#   python compare_outputs.py <tag> --detailed
+#
+# Or use run_compare_report.sh (submitted automatically as dependency)
 # =============================================================================
 
 set -e  # Exit on error
@@ -51,8 +59,9 @@ PYTHON_ENV="${PYTHON_ENV:-/ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/
 # -----------------------------------------------------------------------------
 # Load config from YAML if provided
 # -----------------------------------------------------------------------------
-if [ -n "$1" ] && [ -f "$1" ]; then
-    echo "Loading config from: $1"
+CONFIG_FILE="${1:-}"
+if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
+    echo "Loading config from: $CONFIG_FILE"
     # Parse YAML (simple key: value format)
     while IFS=': ' read -r key value; do
         # Skip comments and empty lines
@@ -73,7 +82,7 @@ if [ -n "$1" ] && [ -f "$1" ]; then
             out_path)          OUTPUT_DIR="$value" ;;
             python_env)        PYTHON_ENV="$value" ;;
         esac
-    done < "$1"
+    done < "$CONFIG_FILE"
 fi
 
 # -----------------------------------------------------------------------------
@@ -96,6 +105,9 @@ mkdir -p "${OUTPUT_DIR}/${TAG}"
 echo "=============================================================="
 echo "SLIDE R vs Python Comparison"
 echo "=============================================================="
+echo "Array Task ID: ${SLURM_ARRAY_TASK_ID:-N/A}"
+echo "Job ID: ${SLURM_ARRAY_JOB_ID:-N/A}"
+echo ""
 echo "X file:      $X_FILE"
 echo "Y file:      $Y_FILE"
 echo "Tag:         $TAG"
@@ -121,73 +133,65 @@ if [ ! -f "$Y_FILE" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# Step 1: Run R Implementation
+# Run based on array task ID
 # -----------------------------------------------------------------------------
+START_TIME=$(date +%s)
+
+if [ "${SLURM_ARRAY_TASK_ID:-0}" -eq 0 ]; then
+    # =========================================================================
+    # Task 0: R Implementation
+    # =========================================================================
+    echo ""
+    echo "=============================================================="
+    echo "Running R SLIDE Implementation"
+    echo "=============================================================="
+
+    Rscript run_slide_R.R \
+        "$X_FILE" \
+        "$Y_FILE" \
+        "$TAG" \
+        --delta "$DELTA" \
+        --lambda "$LAMBDA" \
+        --spec "$SPEC" \
+        --fdr "$FDR" \
+        --niter "$NITER" \
+        --thresh-fdr "$THRESH_FDR"
+
+    # Mark R as complete
+    touch "${OUTPUT_DIR}/${TAG}/.r_complete"
+    echo "R outputs saved. Completion marker: ${OUTPUT_DIR}/${TAG}/.r_complete"
+
+elif [ "${SLURM_ARRAY_TASK_ID:-1}" -eq 1 ]; then
+    # =========================================================================
+    # Task 1: Python Implementation
+    # =========================================================================
+    echo ""
+    echo "=============================================================="
+    echo "Running Python SLIDE Implementation"
+    echo "=============================================================="
+
+    "$PYTHON_ENV" run_slide_py.py \
+        "$X_FILE" \
+        "$Y_FILE" \
+        "$TAG" \
+        --delta "$DELTA" \
+        --lambda "$LAMBDA" \
+        --spec "$SPEC" \
+        --fdr "$FDR" \
+        --niter "$NITER" \
+        --thresh-fdr "$THRESH_FDR" \
+        --generate-only
+
+    # Mark Python as complete
+    touch "${OUTPUT_DIR}/${TAG}/.py_complete"
+    echo "Python outputs saved. Completion marker: ${OUTPUT_DIR}/${TAG}/.py_complete"
+
+fi
+
+END_TIME=$(date +%s)
+ELAPSED=$((END_TIME - START_TIME))
+
 echo ""
 echo "=============================================================="
-echo "Step 1: Running R SLIDE"
-echo "=============================================================="
-
-R_START=$(date +%s)
-
-Rscript run_slide_R.R \
-    "$X_FILE" \
-    "$Y_FILE" \
-    "$TAG" \
-    --delta "$DELTA" \
-    --lambda "$LAMBDA" \
-    --spec "$SPEC" \
-    --fdr "$FDR" \
-    --niter "$NITER" \
-    --thresh-fdr "$THRESH_FDR"
-
-R_END=$(date +%s)
-echo "R completed in $((R_END - R_START)) seconds"
-
-# -----------------------------------------------------------------------------
-# Step 2: Run Python Implementation
-# -----------------------------------------------------------------------------
-echo ""
-echo "=============================================================="
-echo "Step 2: Running Python SLIDE"
-echo "=============================================================="
-
-PY_START=$(date +%s)
-
-"$PYTHON_ENV" run_slide_py.py \
-    "$X_FILE" \
-    "$Y_FILE" \
-    "$TAG" \
-    --delta "$DELTA" \
-    --lambda "$LAMBDA" \
-    --spec "$SPEC" \
-    --fdr "$FDR" \
-    --niter "$NITER" \
-    --thresh-fdr "$THRESH_FDR"
-
-PY_END=$(date +%s)
-echo "Python completed in $((PY_END - PY_START)) seconds"
-
-# -----------------------------------------------------------------------------
-# Step 3: Generate Comparison Report
-# -----------------------------------------------------------------------------
-echo ""
-echo "=============================================================="
-echo "Step 3: Generating Comparison Report"
-echo "=============================================================="
-
-"$PYTHON_ENV" compare_outputs.py \
-    "$TAG" \
-    --detailed \
-    --output-file "${OUTPUT_DIR}/${TAG}/comparison_report.txt"
-
-echo ""
-echo "=============================================================="
-echo "Comparison Complete!"
-echo "=============================================================="
-echo "Outputs saved to: ${OUTPUT_DIR}/${TAG}/"
-echo "Report: ${OUTPUT_DIR}/${TAG}/comparison_report.txt"
-echo ""
-echo "R time:     $((R_END - R_START)) seconds"
-echo "Python time: $((PY_END - PY_START)) seconds"
+echo "Task ${SLURM_ARRAY_TASK_ID:-0} completed in ${ELAPSED} seconds"
 echo "=============================================================="
