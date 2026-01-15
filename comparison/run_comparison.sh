@@ -8,8 +8,8 @@
 #SBATCH --mem=75G
 #SBATCH --cpus-per-task=4
 #SBATCH --array=0-1
-#SBATCH --output=comparison_%A_%a.out
-#SBATCH --error=comparison_%A_%a.err
+#SBATCH --output=logs/comparison_%A_%a.out
+#SBATCH --error=logs/comparison_%A_%a.err
 
 # =============================================================================
 # SLIDE R vs Python Comparison Script (Array Job Version)
@@ -28,6 +28,7 @@
 #   x_path, y_path, out_path, delta, lambda, spec, fdr, etc.
 # =============================================================================
 
+mkdir -p logs/
 set -e  # Exit on error
 
 SCRIPT_DIR=/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison
@@ -51,8 +52,7 @@ mkdir -p "$OUT_PATH"
 
 # Load modules
 module load gcc/12.2.0
-module load r/4.4.0
-module load python/ondemand-jupyter-python3.11 2>/dev/null || true
+module load python/ondemand-jupyter-python3.11
 
 # Python environment
 PYTHON_ENV="${PYTHON_ENV:-/ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python}"
@@ -83,6 +83,7 @@ if [ "${SLURM_ARRAY_TASK_ID:-0}" -eq 0 ]; then
     echo "=============================================================="
     echo "Running R SLIDE Implementation"
     echo "=============================================================="
+    module load r/4.4.0
 
     R_OUT="${OUT_PATH}/R_outputs"
     mkdir -p "$R_OUT"
@@ -101,6 +102,9 @@ elif [ "${SLURM_ARRAY_TASK_ID:-1}" -eq 1 ]; then
     echo "=============================================================="
     echo "Running Python SLIDE Implementation"
     echo "=============================================================="
+
+    # Load R for rpy2 (loveslide uses rpy2 for LOVE integration)
+    module load r/4.4.0
 
     PY_OUT="${OUT_PATH}/Py_outputs"
     mkdir -p "$PY_OUT"
