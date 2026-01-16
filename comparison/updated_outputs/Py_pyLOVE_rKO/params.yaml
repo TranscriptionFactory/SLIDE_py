@@ -1,0 +1,22 @@
+SLIDE_iter: 500
+SLIDE_top_feats: 10
+delta:
+- 0.05
+- 0.1
+- 0.2
+do_interacts: true
+eval_type: auc
+fdr: 0.1
+lambda:
+- 0.1
+- 0.5
+- 1.0
+n_workers: 4
+out_path: /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/updated_outputs/Py_pyLOVE_rKO
+pure_homo: true
+sampleCV_iter: 500
+spec: 0.1
+thresh_fdr: 0.2
+x_path: /ix/djishnu/Aaron/0_for_others/Crystal/SLIDE/Scleroderma_Control/Scleroderma_Control_x_filtered.csv
+y_factor: true
+y_path: /ix/djishnu/Aaron/0_for_others/Crystal/SLIDE/Scleroderma_Control/Scleroderma_Control_y.csv

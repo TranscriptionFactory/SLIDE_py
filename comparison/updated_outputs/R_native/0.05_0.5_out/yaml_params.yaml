@@ -1,0 +1,16 @@
+x_path: /ix/djishnu/Aaron/1_general_use/SLIDE/Data_Scripts/SSc/UnTx/X.csv
+y_path: /ix/djishnu/Aaron/1_general_use/SLIDE/Data_Scripts/SSc/UnTx/Y.csv
+out_path: /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/updated_outputs/R_native/0.05_0.5_out/
+delta: 0.05
+lambda: 0.5
+spec: 0.1
+fdr: 0.1
+SLIDE_iter: 500
+thresh_fdr: 0.2
+eval_type: corr
+y_factor: no
+do_interacts: yes
+pure_homo: yes
+SLIDE_top_feats: 10
+sampleCV_iter: 500
+n_workers: 4

@@ -26,6 +26,29 @@
 # Usage:
 #   sbatch run_comparison.sh <yaml_config>
 #   sbatch run_comparison.sh comparison_config.yaml
+
+
+# sbatch <<'EOF'
+# #!/bin/bash
+# #SBATCH -t 24:00:00
+# #SBATCH --job-name=submit_compare
+# #SBATCH --mem=5G
+# #SBATCH --cpus-per-task=1
+
+# cd /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison
+
+# JOB1=$(sbatch --parsable run_comparison.sh comparison_config_continuous.yaml)
+# JOB2=$(sbatch --parsable run_comparison.sh comparison_config_binary.yaml)
+
+# echo "Submitted continuous comparison: $JOB1"
+# echo "Submitted binary comparison: $JOB2"
+
+# sbatch --dependency=afterok:${JOB1}_0:${JOB1}_1:${JOB1}_2:${JOB1}_3:${JOB1}_4 run_report.sh /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/outputs/SSc_continuous_comparison
+# sbatch --dependency=afterok:${JOB2}_0:${JOB2}_1:${JOB2}_2:${JOB2}_3:${JOB2}_4 run_report.sh /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/outputs/SSc_binary_comparison
+
+# echo "Reports queued with dependencies"
+# EOF
+
 # =============================================================================
 
 mkdir -p logs/
