@@ -34,6 +34,7 @@ cd "$SCRIPT_DIR"
 # Load modules
 module load gcc/12.2.0
 module load python/ondemand-jupyter-python3.11 2>/dev/null || true
+module load r/4.4.0 2>/dev/null || true
 
 PYTHON_ENV="${PYTHON_ENV:-/ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python}"
 
@@ -46,6 +47,34 @@ TASK_DESCRIPTIONS=(
     "Python (Py LOVE + R Knockoffs)"
     "Python (Py LOVE + Py Knockoffs)"
 )
+
+# Extract performance metrics from R output folder
+# Generates performance_metrics.csv if not present
+extract_r_metrics() {
+    local R_DIR="$1"
+    local PERF_CSV="${R_DIR}/performance_metrics.csv"
+
+    # Generate CSV if not present (requires SLIDE_LFs.rds)
+    if [ ! -f "$PERF_CSV" ] && [ -f "${R_DIR}/SLIDE_LFs.rds" ]; then
+        Rscript "${SCRIPT_DIR}/extract_r_performance.R" "$R_DIR" 2>/dev/null
+    fi
+
+    # Return CSV path if exists
+    if [ -f "$PERF_CSV" ]; then
+        echo "$PERF_CSV"
+    fi
+}
+
+# Read metric from performance_metrics.csv
+# Usage: read_r_metric <csv_path> <column_name>
+read_r_metric() {
+    local CSV="$1"
+    local COL="$2"
+    if [ -f "$CSV" ]; then
+        # Get column index (handle quoted headers), then extract value (skip header)
+        awk -F',' -v col="$COL" 'NR==1 {for(i=1;i<=NF;i++) {gsub(/"/,"",$i); if($i==col) c=i}} NR==2 && c {print $c}' "$CSV"
+    fi
+}
 
 echo "=============================================================="
 echo "SLIDE 5-Way Comparison Report"
@@ -152,25 +181,55 @@ if [ "$COMPLETED" -ge 2 ]; then
             COMBO=$(basename "$ref_dir")
             echo ""
             echo "Parameter: $COMBO"
-            echo "  Significant LFs found:"
+            echo "  Performance metrics:"
 
             for i in "${!TASK_NAMES[@]}"; do
                 TASK_NAME="${TASK_NAMES[$i]}"
                 TASK_DIR="${OUT_PATH}/${TASK_NAME}/${COMBO}"
-                LF_FILE="${TASK_DIR}/sig_LFs.txt"
 
-                if [ -f "$LF_FILE" ]; then
-                    # Python output: read from sig_LFs.txt
-                    NUM_LFS=$(wc -l < "$LF_FILE" 2>/dev/null || echo 0)
-                    LFS=$(cat "$LF_FILE" 2>/dev/null | tr '\n' ' ' | head -c 50)
-                    printf "    %-20s: %d LFs [%s]\n" "$TASK_NAME" "$NUM_LFS" "$LFS"
-                elif ls "$TASK_DIR"/feature_list_Z*.txt &>/dev/null 2>&1; then
-                    # R output: extract LF names from feature_list_Z*.txt filenames
-                    LFS=$(ls "$TASK_DIR"/feature_list_Z*.txt 2>/dev/null | xargs -n1 basename | sed 's/feature_list_//' | sed 's/\.txt//' | tr '\n' ' ')
-                    NUM_LFS=$(echo "$LFS" | wc -w)
-                    printf "    %-20s: %d LFs [%s]\n" "$TASK_NAME" "$NUM_LFS" "$LFS"
+                if [ "$TASK_NAME" = "R_native" ]; then
+                    # R output: extract from RDS via performance_metrics.csv
+                    PERF_CSV=$(extract_r_metrics "$TASK_DIR")
+                    if [ -n "$PERF_CSV" ]; then
+                        TRUE_SCORE=$(read_r_metric "$PERF_CSV" "true_score")
+                        NUM_MARG=$(read_r_metric "$PERF_CSV" "num_marginals")
+                        NUM_INT=$(read_r_metric "$PERF_CSV" "num_interactors")
+                        PARTIAL=$(read_r_metric "$PERF_CSV" "partial_random")
+                        FULL=$(read_r_metric "$PERF_CSV" "full_random")
+                        # Format output, handling NA values
+                        [[ "$TRUE_SCORE" == "NA" || -z "$TRUE_SCORE" ]] && TRUE_SCORE="-"
+                        [[ "$PARTIAL" == "NA" || -z "$PARTIAL" ]] && PARTIAL="-"
+                        [[ "$FULL" == "NA" || -z "$FULL" ]] && FULL="-"
+                        [[ -z "$NUM_MARG" ]] && NUM_MARG="-"
+                        [[ -z "$NUM_INT" ]] && NUM_INT="-"
+                        if [[ "$TRUE_SCORE" == "-" ]]; then
+                            printf "    %-20s: AUC=%s (P=%s F=%s) M=%s I=%s\n" \
+                                   "$TASK_NAME" "$TRUE_SCORE" "$PARTIAL" "$FULL" "$NUM_MARG" "$NUM_INT"
+                        else
+                            printf "    %-20s: AUC=%.3f (P=%.3f F=%.3f) M=%s I=%s\n" \
+                                   "$TASK_NAME" "$TRUE_SCORE" "$PARTIAL" "$FULL" "$NUM_MARG" "$NUM_INT"
+                        fi
+                    else
+                        printf "    %-20s: (no metrics extracted)\n" "$TASK_NAME"
+                    fi
                 else
-                    printf "    %-20s: (no results)\n" "$TASK_NAME"
+                    # Python output: read from scores.txt and sig_LFs.txt
+                    SCORES_FILE="${TASK_DIR}/scores.txt"
+                    LF_FILE="${TASK_DIR}/sig_LFs.txt"
+                    if [ -f "$SCORES_FILE" ]; then
+                        TRUE_SCORE=$(grep -oP 'True Scores:\s*\K[\d.]+' "$SCORES_FILE")
+                        PARTIAL=$(grep -oP 'Partial Random:\s*\K[\d.]+' "$SCORES_FILE")
+                        FULL=$(grep -oP 'Full Random:\s*\K[\d.]+' "$SCORES_FILE")
+                        NUM_MARG=$(grep -oP 'Number of marginals:\s*\K\d+' "$SCORES_FILE")
+                        NUM_INT=$(grep -oP 'Number of interactions:\s*\K\d+' "$SCORES_FILE")
+                        printf "    %-20s: AUC=%.3f (P=%.3f F=%.3f) M=%s I=%s\n" \
+                               "$TASK_NAME" "$TRUE_SCORE" "$PARTIAL" "$FULL" "$NUM_MARG" "$NUM_INT"
+                    elif [ -f "$LF_FILE" ]; then
+                        NUM_LFS=$(wc -l < "$LF_FILE")
+                        printf "    %-20s: %d LFs (no scores)\n" "$TASK_NAME" "$NUM_LFS"
+                    else
+                        printf "    %-20s: (no results)\n" "$TASK_NAME"
+                    fi
                 fi
             done
         done

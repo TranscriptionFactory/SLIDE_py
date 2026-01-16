@@ -33,7 +33,7 @@ lambda:
 
 # Knockoff parameters
 spec: 0.1
-fdr: 0.1
+fdr: 0.2
 SLIDE_iter: 500
 thresh_fdr: 0.2
 eval_type: auc  # Binary classification uses AUC
