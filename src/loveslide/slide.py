@@ -290,24 +290,25 @@ class OptimizeSLIDE(SLIDE):
         )
         return Z
     
-    def find_standalone_LFs(self, latent_factors, spec, fdr, niter, f_size, n_workers=1):
+    def find_standalone_LFs(self, latent_factors, spec, fdr, niter, f_size, n_workers=1, knockoff_backend='r'):
 
-        machop = Knockoffs(y = self.data.Y.values, z2 = latent_factors.values)
+        machop = Knockoffs(y=self.data.Y.values, z2=latent_factors.values)
 
         marginal_idxs = machop.select_short_freq(
-            z = latent_factors.values, 
-            y = self.data.Y.values,
-            spec = spec, 
-            fdr = fdr, 
-            niter = niter, 
-            f_size = f_size,
-            n_workers = n_workers
+            z=latent_factors.values,
+            y=self.data.Y.values,
+            spec=spec,
+            fdr=fdr,
+            niter=niter,
+            f_size=f_size,
+            n_workers=n_workers,
+            backend=knockoff_backend
         )
 
         self.marginal_idxs = marginal_idxs
         return machop
-    
-    def find_interaction_LFs(self, machop, spec, fdr, niter, f_size, n_workers=1):
+
+    def find_interaction_LFs(self, machop, spec, fdr, niter, f_size, n_workers=1, knockoff_backend='r'):
 
         machop.add_z1(marginal_idxs=self.marginal_idxs)
 
@@ -322,13 +323,14 @@ class OptimizeSLIDE(SLIDE):
 
         # Get significant interactions from flattened array
         sig_interactions = machop.select_short_freq(
-            z = interaction_terms,
-            y = self.data.Y.values,
-            spec = spec,
-            fdr = fdr,
-            niter = niter,
-            f_size = f_size,
-            n_workers = n_workers
+            z=interaction_terms,
+            y=self.data.Y.values,
+            spec=spec,
+            fdr=fdr,
+            niter=niter,
+            f_size=f_size,
+            n_workers=n_workers,
+            backend=knockoff_backend
         )
 
         if len(sig_interactions) == 0:
@@ -346,23 +348,26 @@ class OptimizeSLIDE(SLIDE):
             self.interaction_terms = interaction_terms[:, sig_interactions]
     
 
-    def run_SLIDE(self, latent_factors, niter, spec, fdr, verbose=False, n_workers=1, outpath='.', do_interacts=True):
-        
+    def run_SLIDE(self, latent_factors, niter, spec, fdr, verbose=False, n_workers=1, outpath='.',
+                   do_interacts=True, knockoff_backend='r'):
+
         f_size = self.calc_default_fsize(latent_factors.shape[1])
 
         if verbose:
             print(f'Calculated f_size: {f_size}')
+            print(f'Knockoff backend: {knockoff_backend}')
             print(f'Finding standalone LF...')
 
         ### Find standalone LFs
-        machop = self.find_standalone_LFs(latent_factors, spec, fdr, niter, f_size, n_workers)
+        machop = self.find_standalone_LFs(latent_factors, spec, fdr, niter, f_size, n_workers,
+                                          knockoff_backend=knockoff_backend)
 
         if len(self.marginal_idxs) == 0:
             print("No standalone LF found")
             self.sig_LFs = []
             self.sig_interacts = []
             return
-        
+
         self.sig_LFs = [f"Z{i}" for i in self.marginal_idxs]
         np.savetxt(os.path.join(outpath, 'sig_LFs.txt'), self.sig_LFs, fmt='%s')
 
@@ -376,7 +381,8 @@ class OptimizeSLIDE(SLIDE):
             if verbose:
                 print(f'Finding interacting LF...')
 
-            self.find_interaction_LFs(machop, spec, fdr, niter, f_size, n_workers)
+            self.find_interaction_LFs(machop, spec, fdr, niter, f_size, n_workers,
+                                      knockoff_backend=knockoff_backend)
 
             if verbose:
                 print(f'Found {len(self.interaction_pairs)} interacting LF')
@@ -445,14 +451,15 @@ class OptimizeSLIDE(SLIDE):
                     print("\nRunning SLIDE knockoffs...")
 
                 self.run_SLIDE(
-                    latent_factors=self.latent_factors, 
-                    niter=self.input_params['niter'], 
-                    spec=self.input_params['spec'], 
+                    latent_factors=self.latent_factors,
+                    niter=self.input_params['niter'],
+                    spec=self.input_params['spec'],
                     fdr=self.input_params['fdr'],
                     n_workers=self.input_params['n_workers'],
                     verbose=verbose,
                     outpath=out_iter,
-                    do_interacts=self.input_params['do_interacts']
+                    do_interacts=self.input_params['do_interacts'],
+                    knockoff_backend=self.input_params.get('knockoff_backend', 'r')
                 )
 
                 if verbose:
