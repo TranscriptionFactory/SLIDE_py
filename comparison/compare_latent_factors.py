@@ -1,15 +1,10 @@
 #!/usr/bin/env python3
 """
-Compare latent factor content across SLIDE implementations.
+SLIDE Implementation Comparison Report Generator
 
-This script compares the actual latent factor content (features, loadings, sample scores)
-across different SLIDE implementations, not just performance metrics.
-
-Key comparisons:
-1. Feature overlap (Jaccard similarity) - What features does each LF contain?
-2. A matrix correlation - How similar are the loading values?
-3. Z matrix agreement - Do sample scores correlate across implementations?
-4. LF matching - Identify corresponding LFs across implementations (may have different indices)
+This script generates a comprehensive comparison report across SLIDE implementations,
+including completion status, output summaries, performance metrics, and latent factor
+content comparisons.
 
 Usage:
     python compare_latent_factors.py <output_path> [options]
@@ -20,11 +15,14 @@ Arguments:
 Options:
     --detailed      Show detailed per-LF comparison
     --param COMBO   Only compare specific parameter combination (e.g., "0.05_0.1_out")
+    --lf-only       Only run latent factor comparison (skip status/metrics)
 """
 
 import argparse
 import logging
 import re
+import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -35,6 +33,167 @@ from scipy.optimize import linear_sum_assignment
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
+
+# =============================================================================
+# Task Configuration
+# =============================================================================
+
+@dataclass
+class TaskConfig:
+    """Configuration for a SLIDE implementation task."""
+    name: str
+    description: str
+    is_r: bool = False
+
+
+# Default task configuration (matches run_comparison.sh)
+DEFAULT_TASKS = [
+    TaskConfig("R_native", "R SLIDE (native R LOVE + R Knockoffs)", is_r=True),
+    TaskConfig("Py_rLOVE_rKO", "Python (R LOVE + R Knockoffs)"),
+    TaskConfig("Py_rLOVE_knockpy", "Python (R LOVE + knockpy Knockoffs)"),
+    TaskConfig("Py_pyLOVE_rKO", "Python (Py LOVE + R Knockoffs)"),
+    TaskConfig("Py_pyLOVE_knockpy", "Python (Py LOVE + knockpy Knockoffs)"),
+]
+
+# Additional known patterns for discovery
+KNOWN_IMPL_PATTERNS = [
+    "R_native", "R_outputs",
+    "Py_rLOVE_rKO", "Py_rLOVE_knockpy", "Py_rLOVE_pyKO",
+    "Py_pyLOVE_rKO", "Py_pyLOVE_knockpy", "Py_pyLOVE_pyKO",
+    "Py_Py_LOVE", "Py_R_LOVE", "Py_outputs"
+]
+
+
+# =============================================================================
+# Performance Metrics
+# =============================================================================
+
+@dataclass
+class PerformanceMetrics:
+    """Performance metrics for a SLIDE run."""
+    true_score: Optional[float] = None
+    partial_random: Optional[float] = None
+    full_random: Optional[float] = None
+    num_marginals: Optional[int] = None
+    num_interactions: Optional[int] = None
+    num_lfs: Optional[int] = None
+
+    def format_line(self, name: str) -> str:
+        """Format metrics as a single line for reporting."""
+        auc = f"{self.true_score:.3f}" if self.true_score is not None else "-"
+        partial = f"{self.partial_random:.3f}" if self.partial_random is not None else "-"
+        full = f"{self.full_random:.3f}" if self.full_random is not None else "-"
+        marg = str(self.num_marginals) if self.num_marginals is not None else "-"
+        inter = str(self.num_interactions) if self.num_interactions is not None else "-"
+        return f"    {name:20s}: AUC={auc} (P={partial} F={full}) M={marg} I={inter}"
+
+
+class MetricsExtractor:
+    """Extract performance metrics from SLIDE outputs."""
+
+    def __init__(self, script_dir: Optional[Path] = None, **kwargs):
+        self.script_dir = script_dir or Path(__file__).parent
+
+    def extract_python_metrics(self, path: Path) -> Optional[PerformanceMetrics]:
+        """Extract metrics from Python SLIDE output (scores.txt, sig_LFs.txt)."""
+        scores_file = path / 'scores.txt'
+        lf_file = path / 'sig_LFs.txt'
+        interact_file = path / 'sig_interacts.txt'
+
+        metrics = PerformanceMetrics()
+
+        if scores_file.exists():
+            content = scores_file.read_text()
+
+            # Parse scores
+            for pattern, attr in [
+                (r'True Scores?:\s*(-?[\d.]+)', 'true_score'),
+                (r'Partial Random:\s*(-?[\d.]+)', 'partial_random'),
+                (r'Full Random:\s*(-?[\d.]+)', 'full_random'),
+                (r'Number of marginals:\s*(\d+)', 'num_marginals'),
+                (r'Number of interactions:\s*(\d+)', 'num_interactions'),
+            ]:
+                match = re.search(pattern, content)
+                if match:
+                    val = match.group(1)
+                    if attr in ('num_marginals', 'num_interactions'):
+                        setattr(metrics, attr, int(val))
+                    else:
+                        setattr(metrics, attr, float(val))
+
+        # Count LFs from sig_LFs.txt
+        if lf_file.exists():
+            lines = [l.strip() for l in lf_file.read_text().splitlines() if l.strip()]
+            metrics.num_lfs = len(lines)
+
+        # Count interactions from sig_interacts.txt if not in scores
+        if metrics.num_interactions is None and interact_file.exists():
+            lines = [l.strip() for l in interact_file.read_text().splitlines() if l.strip()]
+            metrics.num_interactions = len(lines)
+
+        return metrics if any([
+            metrics.true_score, metrics.num_lfs, metrics.num_marginals
+        ]) else None
+
+    def extract_r_metrics(self, path: Path) -> Optional[PerformanceMetrics]:
+        """Extract metrics from R SLIDE output.
+
+        First tries to read performance_metrics.csv. If not present, attempts
+        to generate it using extract_r_performance.R.
+        """
+        perf_csv = path / 'performance_metrics.csv'
+        slide_lfs = path / 'SLIDE_LFs.rds'
+        all_lfs = path / 'AllLatentFactors.rds'
+
+        # Try to generate metrics CSV if needed
+        if not perf_csv.exists() and slide_lfs.exists():
+            r_script = self.script_dir / 'extract_r_performance.R'
+            if r_script.exists():
+                try:
+                    subprocess.run(
+                        ['Rscript', str(r_script), str(path)],
+                        capture_output=True, timeout=30
+                    )
+                except (subprocess.TimeoutExpired, FileNotFoundError):
+                    pass
+
+        # Read metrics from CSV
+        if perf_csv.exists():
+            try:
+                df = pd.read_csv(perf_csv)
+                metrics = PerformanceMetrics()
+
+                for col, attr in [
+                    ('true_score', 'true_score'),
+                    ('partial_random', 'partial_random'),
+                    ('full_random', 'full_random'),
+                    ('num_marginals', 'num_marginals'),
+                    ('num_interactors', 'num_interactions'),
+                    ('num_LFs', 'num_lfs'),
+                ]:
+                    if col in df.columns:
+                        val = df[col].iloc[0]
+                        if pd.notna(val):
+                            if attr in ('num_marginals', 'num_interactions', 'num_lfs'):
+                                setattr(metrics, attr, int(val))
+                            else:
+                                setattr(metrics, attr, float(val))
+
+                return metrics
+            except Exception:
+                pass
+
+        # Fallback: count feature_list files for LF count
+        feature_files = list(path.glob('feature_list_Z*.txt'))
+        if feature_files:
+            return PerformanceMetrics(num_lfs=len(feature_files))
+
+        return None
+
+
+# =============================================================================
+# Latent Factor Loading
+# =============================================================================
 
 class LatentFactorLoader:
     """Load and normalize latent factor outputs from R and Python SLIDE implementations."""
@@ -218,6 +377,10 @@ class LatentFactorLoader:
         return int(match.group(1))
 
 
+# =============================================================================
+# Latent Factor Matching
+# =============================================================================
+
 class LatentFactorMatcher:
     """Match corresponding LFs across implementations based on feature overlap or correlation."""
 
@@ -233,13 +396,7 @@ class LatentFactorMatcher:
         return len(set1 & set2) / len(set1 | set2)
 
     def feature_overlap_matrix(self, features1: dict, features2: dict) -> tuple:
-        """Compute pairwise Jaccard similarity matrix between all LFs.
-
-        Returns:
-            similarity_matrix: np.ndarray of shape (n_lf1, n_lf2)
-            lf_names1: list of LF names from impl1
-            lf_names2: list of LF names from impl2
-        """
+        """Compute pairwise Jaccard similarity matrix between all LFs."""
         lf_names1 = sorted(features1.keys(), key=lambda x: int(x[1:]))
         lf_names2 = sorted(features2.keys(), key=lambda x: int(x[1:]))
 
@@ -256,13 +413,7 @@ class LatentFactorMatcher:
         return sim_matrix, lf_names1, lf_names2
 
     def a_correlation_matrix(self, A1: pd.DataFrame, A2: pd.DataFrame) -> tuple:
-        """Compute pairwise correlation between A matrix columns.
-
-        Returns:
-            correlation_matrix: np.ndarray of shape (n_lf1, n_lf2)
-            lf_names1: list of LF names from impl1
-            lf_names2: list of LF names from impl2
-        """
+        """Compute pairwise correlation between A matrix columns."""
         if A1 is None or A2 is None:
             return np.array([[]]), [], []
 
@@ -293,20 +444,7 @@ class LatentFactorMatcher:
     def compute_optimal_matching(self, similarity_matrix: np.ndarray,
                                   lf_names1: list, lf_names2: list,
                                   threshold: float = 0.1) -> dict:
-        """Find optimal bipartite matching using Hungarian algorithm.
-
-        Args:
-            similarity_matrix: (n1, n2) similarity scores
-            lf_names1: names for rows
-            lf_names2: names for columns
-            threshold: minimum similarity to consider a valid match
-
-        Returns:
-            dict with:
-                - 'matches': list of (lf1, lf2, similarity) tuples
-                - 'unmatched1': LFs from impl1 without match
-                - 'unmatched2': LFs from impl2 without match
-        """
+        """Find optimal bipartite matching using Hungarian algorithm."""
         if similarity_matrix.size == 0:
             return {
                 'matches': [],
@@ -374,6 +512,10 @@ class LatentFactorMatcher:
         corr_matrix, names1, names2 = self.a_correlation_matrix(A1, A2)
         return self.compute_optimal_matching(corr_matrix, names1, names2, threshold)
 
+
+# =============================================================================
+# Latent Factor Comparator
+# =============================================================================
 
 class LatentFactorComparator:
     """Compare latent factors across implementations."""
@@ -487,33 +629,349 @@ class LatentFactorComparator:
         return '\n'.join(lines)
 
 
-def find_param_dir(base_path: Path, combo: str) -> Optional[Path]:
-    """Find parameter directory handling R vs Python naming differences.
+# =============================================================================
+# Report Generator
+# =============================================================================
 
-    R uses: 0.05_1_out, Python uses: 0.05_1.0_out
-    """
-    direct = base_path / combo
-    if direct.is_dir():
-        return direct
+@dataclass
+class OutputFiles:
+    """Check for presence of key output files."""
+    has_a: bool = False  # A.csv or AllLatentFactors.rds
+    has_z: bool = False  # z_matrix.csv or feature_list_Z*.txt
+    has_lf: bool = False  # sig_LFs.txt or SLIDE_LFs.rds
 
-    # Try converting integer to decimal: 0.05_1_out -> 0.05_1.0_out
-    alt_combo = re.sub(r'_(\d+)_out$', r'_\1.0_out', combo)
-    alt_path = base_path / alt_combo
-    if alt_path.is_dir():
-        return alt_path
+    def status_str(self) -> str:
+        a = "A" if self.has_a else "-"
+        z = "Z" if self.has_z else "-"
+        lf = "LF" if self.has_lf else "-"
+        return f"[{a} {z} {lf}]"
 
-    # Try converting decimal to integer: 0.05_1.0_out -> 0.05_1_out
-    alt_combo = re.sub(r'_(\d+)\.0_out$', r'_\1_out', combo)
-    alt_path = base_path / alt_combo
-    if alt_path.is_dir():
-        return alt_path
 
-    return None
+class ReportGenerator:
+    """Generate comprehensive SLIDE comparison report."""
 
+    def __init__(self, output_path: Path, tasks: Optional[list] = None,
+                 detailed: bool = False, **kwargs):
+        self.output_path = Path(output_path)
+        self.tasks = tasks or DEFAULT_TASKS
+        self.detailed = detailed
+        self.metrics_extractor = MetricsExtractor(script_dir=Path(__file__).parent)
+        self.lf_loader = LatentFactorLoader()
+        self.lf_comparator = LatentFactorComparator(detailed=detailed)
+
+    def find_param_dir(self, base_path: Path, combo: str) -> Optional[Path]:
+        """Find parameter directory handling R vs Python naming differences."""
+        direct = base_path / combo
+        if direct.is_dir():
+            return direct
+
+        # Try converting integer to decimal: 0.05_1_out -> 0.05_1.0_out
+        alt_combo = re.sub(r'_(\d+)_out$', r'_\1.0_out', combo)
+        alt_path = base_path / alt_combo
+        if alt_path.is_dir():
+            return alt_path
+
+        # Try converting decimal to integer: 0.05_1.0_out -> 0.05_1_out
+        alt_combo = re.sub(r'_(\d+)\.0_out$', r'_\1_out', combo)
+        alt_path = base_path / alt_combo
+        if alt_path.is_dir():
+            return alt_path
+
+        return None
+
+    def check_output_files(self, path: Path) -> OutputFiles:
+        """Check for presence of key output files in a directory."""
+        files = OutputFiles()
+
+        # A matrix
+        files.has_a = (path / 'A.csv').exists() or (path / 'AllLatentFactors.rds').exists()
+
+        # Z matrix
+        files.has_z = (path / 'z_matrix.csv').exists() or bool(list(path.glob('feature_list_Z*.txt')))
+
+        # Significant LFs
+        files.has_lf = (path / 'sig_LFs.txt').exists() or (path / 'SLIDE_LFs.rds').exists()
+
+        return files
+
+    def discover_implementations(self) -> dict:
+        """Discover available implementations in output path."""
+        available = {}
+
+        # Try known patterns first
+        for pattern in KNOWN_IMPL_PATTERNS:
+            impl_path = self.output_path / pattern
+            if impl_path.is_dir():
+                available[pattern] = impl_path
+
+        # Discover other directories with *_out subdirectories
+        for child in self.output_path.iterdir():
+            if child.is_dir() and child.name not in available:
+                try:
+                    has_outputs = any(d.name.endswith('_out') for d in child.iterdir() if d.is_dir())
+                    if has_outputs:
+                        available[child.name] = child
+                except PermissionError:
+                    pass
+
+        return available
+
+    def get_completion_status(self) -> tuple:
+        """Check completion status for each task.
+
+        Returns:
+            (completed_count, status_dict)
+        """
+        completed = 0
+        status = {}
+
+        for i, task in enumerate(self.tasks):
+            task_out = self.output_path / task.name
+            marker = self.output_path / f".task{i}_complete"
+
+            if marker.exists():
+                status[task.name] = ("COMPLETED", task.description)
+                completed += 1
+            elif task_out.is_dir():
+                status[task.name] = ("PARTIAL", task.description)
+            else:
+                status[task.name] = ("NOT_STARTED", task.description)
+
+        return completed, status
+
+    def print_header(self):
+        """Print report header."""
+        logger.info("=" * 62)
+        logger.info("SLIDE Implementation Comparison Report")
+        logger.info("=" * 62)
+        logger.info(f"Output path: {self.output_path}")
+        logger.info("=" * 62)
+        logger.info("")
+
+    def print_completion_status(self):
+        """Print completion status section."""
+        logger.info("Completion Status:")
+        logger.info("------------------")
+
+        completed, status = self.get_completion_status()
+
+        for i, task in enumerate(self.tasks):
+            name = task.name
+            if name in status:
+                state, desc = status[name]
+                if state == "COMPLETED":
+                    symbol = "+"
+                elif state == "PARTIAL":
+                    symbol = "?"
+                else:
+                    symbol = "x"
+                logger.info(f"  [{i}] {symbol} {name:20s}")
+                logger.info(f"      {desc}")
+
+        logger.info("")
+        logger.info(f"Completed: {completed}/{len(self.tasks)}")
+        logger.info("")
+
+        return completed
+
+    def print_output_summary(self):
+        """Print output summary section."""
+        logger.info("=" * 62)
+        logger.info("Output Summary")
+        logger.info("=" * 62)
+
+        available = self.discover_implementations()
+
+        for i, task in enumerate(self.tasks):
+            task_out = self.output_path / task.name
+
+            if not task_out.is_dir():
+                # Try to find under different name
+                if task.name not in available:
+                    continue
+                task_out = available[task.name]
+
+            logger.info("")
+            logger.info(f"[{i}] {task.name}:")
+            logger.info(f"    Directory: {task_out}")
+
+            # List parameter combinations
+            combos = sorted([d for d in task_out.iterdir()
+                           if d.is_dir() and d.name.endswith('_out')])
+            logger.info(f"    Parameter combinations: {len(combos)}")
+
+            if combos:
+                logger.info("    Subdirectories:")
+                for combo_dir in combos:
+                    files = self.check_output_files(combo_dir)
+                    logger.info(f"      {combo_dir.name:20s} {files.status_str()}")
+
+    def print_performance_comparison(self, param_filter: Optional[str] = None):
+        """Print cross-implementation performance comparison."""
+        available = self.discover_implementations()
+
+        if len(available) < 2:
+            return
+
+        logger.info("")
+        logger.info("=" * 62)
+        logger.info("Cross-Implementation Performance Comparison")
+        logger.info("=" * 62)
+
+        # Get reference implementation
+        ref_name = list(available.keys())[0]
+        ref_path = available[ref_name]
+
+        # Get parameter combinations
+        combos = sorted([d.name for d in ref_path.iterdir()
+                        if d.is_dir() and d.name.endswith('_out')])
+
+        if param_filter:
+            combos = [c for c in combos if c == param_filter or
+                     self.find_param_dir(ref_path, param_filter) and
+                     self.find_param_dir(ref_path, param_filter).name == c]
+
+        for combo in combos:
+            logger.info("")
+            logger.info(f"Parameter: {combo}")
+            logger.info("  Performance metrics:")
+
+            for task in self.tasks:
+                name = task.name
+                if name not in available:
+                    logger.info(f"    {name:20s}: (no results)")
+                    continue
+
+                param_dir = self.find_param_dir(available[name], combo)
+                if param_dir is None:
+                    logger.info(f"    {name:20s}: (no results)")
+                    continue
+
+                # Extract metrics
+                if task.is_r:
+                    metrics = self.metrics_extractor.extract_r_metrics(param_dir)
+                else:
+                    metrics = self.metrics_extractor.extract_python_metrics(param_dir)
+
+                if metrics:
+                    logger.info(metrics.format_line(name))
+                else:
+                    logger.info(f"    {name:20s}: (no metrics)")
+
+    def print_lf_comparison(self, param_filter: Optional[str] = None):
+        """Print latent factor content comparison."""
+        available = self.discover_implementations()
+
+        if len(available) < 2:
+            logger.info("")
+            logger.info("Insufficient implementations for LF comparison")
+            return
+
+        logger.info("")
+        logger.info("=" * 62)
+        logger.info("Latent Factor Content Comparison")
+        logger.info("=" * 62)
+
+        # Get reference implementation
+        ref_name = list(available.keys())[0]
+        ref_path = available[ref_name]
+
+        # Get parameter combinations
+        combos = sorted([d.name for d in ref_path.iterdir()
+                        if d.is_dir() and d.name.endswith('_out')])
+
+        if param_filter:
+            found = self.find_param_dir(ref_path, param_filter)
+            combos = [found.name] if found else []
+
+        for combo in combos:
+            logger.info("")
+            logger.info("=" * 62)
+            logger.info(f"Parameter: {combo}")
+            logger.info("=" * 62)
+
+            # Load all implementations for this combo
+            impl_data = {}
+            for name, base_path in available.items():
+                param_path = self.find_param_dir(base_path, combo)
+                if param_path is None:
+                    continue
+
+                # Determine if R or Python
+                is_r = name.startswith('R_') or name == 'R_native' or name == 'R_outputs'
+                if not is_r and list(param_path.glob('feature_list_Z*.txt')):
+                    is_r = True
+                elif is_r and (param_path / 'A.csv').exists() and (param_path / 'sig_LFs.txt').exists():
+                    is_r = False
+
+                if is_r:
+                    data = self.lf_loader.load_r_outputs(param_path)
+                else:
+                    data = self.lf_loader.load_python_outputs(param_path)
+
+                if data:
+                    impl_data[name] = data
+
+            if len(impl_data) < 2:
+                logger.info(f"  Insufficient data for comparison (found {len(impl_data)} impls)")
+                continue
+
+            # Print LF count summary
+            logger.info("\nLF Count Summary:")
+            for name, data in impl_data.items():
+                n_lfs = len(data.get('sig_LFs', []))
+                logger.info(f"  {name:20s}: {n_lfs} significant LFs")
+
+            # Compare R_native to each Python implementation
+            if 'R_native' in impl_data:
+                for py_name in impl_data:
+                    if py_name == 'R_native':
+                        continue
+                    results = self.lf_comparator.compare_implementations(
+                        impl_data['R_native'], impl_data[py_name],
+                        'R_native', py_name
+                    )
+                    logger.info(self.lf_comparator.format_report(results))
+
+            # Compare Python implementations to each other
+            py_impls = [n for n in impl_data if n != 'R_native']
+            if len(py_impls) >= 2:
+                logger.info("\nPython Implementation Cross-Comparison:")
+                for i, name1 in enumerate(py_impls):
+                    for name2 in py_impls[i+1:]:
+                        results = self.lf_comparator.compare_implementations(
+                            impl_data[name1], impl_data[name2],
+                            name1, name2
+                        )
+                        logger.info(self.lf_comparator.format_report(results))
+
+    def generate_full_report(self, param_filter: Optional[str] = None,
+                              lf_only: bool = False):
+        """Generate the full comparison report."""
+        self.print_header()
+
+        if not lf_only:
+            completed = self.print_completion_status()
+            self.print_output_summary()
+
+            if completed >= 2:
+                self.print_performance_comparison(param_filter)
+
+        self.print_lf_comparison(param_filter)
+
+        logger.info("")
+        logger.info("=" * 62)
+        logger.info("Report complete")
+        logger.info("=" * 62)
+
+
+# =============================================================================
+# Main
+# =============================================================================
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Compare latent factor content across SLIDE implementations'
+        description='SLIDE Implementation Comparison Report Generator'
     )
     parser.add_argument('output_path', type=Path,
                        help='Path containing implementation subdirectories')
@@ -521,6 +979,8 @@ def main():
                        help='Show detailed per-LF comparison')
     parser.add_argument('--param', type=str, default=None,
                        help='Only compare specific parameter combination (e.g., "0.05_0.1_out")')
+    parser.add_argument('--lf-only', action='store_true',
+                       help='Only run latent factor comparison (skip status/metrics)')
 
     args = parser.parse_args()
 
@@ -529,128 +989,15 @@ def main():
         logger.error(f"Output path not found: {output_path}")
         return 1
 
-    # Known implementation name patterns (order matters for comparison priority)
-    known_patterns = [
-        "R_native", "R_outputs",
-        "Py_rLOVE_rKO", "Py_rLOVE_knockpy", "Py_rLOVE_pyKO",
-        "Py_pyLOVE_rKO", "Py_pyLOVE_knockpy", "Py_pyLOVE_pyKO",
-        "Py_Py_LOVE", "Py_R_LOVE", "Py_outputs"
-    ]
+    report = ReportGenerator(
+        output_path=output_path,
+        detailed=args.detailed
+    )
 
-    # Find available implementations - try known names first, then discover others
-    available = {}
-    for name in known_patterns:
-        impl_path = output_path / name
-        if impl_path.is_dir():
-            available[name] = impl_path
-
-    # Also discover any other *_out parent directories
-    for child in output_path.iterdir():
-        if child.is_dir() and child.name not in available:
-            # Check if it has *_out subdirectories (sign of SLIDE output)
-            has_outputs = any(d.name.endswith('_out') for d in child.iterdir() if d.is_dir())
-            if has_outputs:
-                available[child.name] = child
-
-    if len(available) < 2:
-        logger.error(f"Need at least 2 implementations to compare, found: {list(available.keys())}")
-        return 1
-
-    logger.info("=" * 60)
-    logger.info("Latent Factor Comparison")
-    logger.info("=" * 60)
-    logger.info(f"Output path: {output_path}")
-    logger.info(f"Available implementations: {', '.join(available.keys())}")
-
-    loader = LatentFactorLoader()
-    comparator = LatentFactorComparator(detailed=args.detailed)
-
-    # Find parameter combinations
-    ref_impl = list(available.keys())[0]
-    ref_path = available[ref_impl]
-    param_combos = sorted([d.name for d in ref_path.iterdir()
-                          if d.is_dir() and d.name.endswith('_out')])
-
-    if args.param:
-        param_combos = [args.param] if args.param in param_combos else []
-        if not param_combos:
-            # Try to find it
-            found = find_param_dir(ref_path, args.param)
-            if found:
-                param_combos = [found.name]
-
-    if not param_combos:
-        logger.error("No parameter combinations found")
-        return 1
-
-    # Compare each parameter combination
-    for combo in param_combos:
-        logger.info("")
-        logger.info("=" * 60)
-        logger.info(f"Parameter: {combo}")
-        logger.info("=" * 60)
-
-        # Load all implementations for this combo
-        impl_data = {}
-        for name, base_path in available.items():
-            param_path = find_param_dir(base_path, combo)
-            if param_path is None:
-                continue
-
-            # Determine if R or Python based on name and files present
-            # R outputs have feature_list_Z*.txt, Python has A.csv and sig_LFs.txt
-            is_r = (name.startswith('R_') or name == 'R_native' or name == 'R_outputs')
-            # Also check file presence as fallback
-            if not is_r and list(param_path.glob('feature_list_Z*.txt')):
-                is_r = True
-            elif is_r and (param_path / 'A.csv').exists() and (param_path / 'sig_LFs.txt').exists():
-                is_r = False
-
-            if is_r:
-                data = loader.load_r_outputs(param_path)
-            else:
-                data = loader.load_python_outputs(param_path)
-
-            if data:
-                impl_data[name] = data
-
-        if len(impl_data) < 2:
-            logger.info(f"  Insufficient data for comparison (found {len(impl_data)} impls)")
-            continue
-
-        # Print LF count summary
-        logger.info("\nLF Count Summary:")
-        for name, data in impl_data.items():
-            n_lfs = len(data.get('sig_LFs', []))
-            logger.info(f"  {name:20s}: {n_lfs} significant LFs")
-
-        # Compare R_native to each Python implementation
-        if 'R_native' in impl_data:
-            for py_name in impl_data:
-                if py_name == 'R_native':
-                    continue
-                results = comparator.compare_implementations(
-                    impl_data['R_native'], impl_data[py_name],
-                    'R_native', py_name
-                )
-                logger.info(comparator.format_report(results))
-
-        # Also compare Python implementations to each other
-        py_impls = [n for n in impl_data if n != 'R_native']
-        if len(py_impls) >= 2:
-            logger.info("\nPython Implementation Cross-Comparison:")
-            for i, name1 in enumerate(py_impls):
-                for name2 in py_impls[i+1:]:
-                    results = comparator.compare_implementations(
-                        impl_data[name1], impl_data[name2],
-                        name1, name2
-                    )
-                    logger.info(comparator.format_report(results))
-
-    logger.info("")
-    logger.info("=" * 60)
-    logger.info("Comparison complete")
-    logger.info("=" * 60)
+    report.generate_full_report(
+        param_filter=args.param,
+        lf_only=args.lf_only
+    )
 
     return 0
 
