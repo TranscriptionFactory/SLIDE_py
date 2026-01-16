@@ -70,7 +70,7 @@ for i in "${!TASK_NAMES[@]}"; do
 
     if [ -f "$MARKER" ]; then
         STATUS="✓ COMPLETED"
-        ((COMPLETED++))
+        COMPLETED=$((COMPLETED + 1))
     elif [ -d "$TASK_OUT" ]; then
         STATUS="? PARTIAL (dir exists, no marker)"
     else

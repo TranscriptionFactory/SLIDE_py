@@ -44,7 +44,8 @@ fi
 
 # Parse output paths from YAML
 OUT_PATH=$(grep "^out_path:" "$YAML_CONFIG" | sed 's/out_path: *//' | tr -d '"'"'" | xargs)
-OUT_PATH="${OUT_PATH:-$SCRIPT_DIR/outputs}"
+# OUT_PATH="${OUT_PATH:-$SCRIPT_DIR/outputs}"
+OUT_PATH='/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/updated_outputs'
 
 # Create base output directory
 mkdir -p "$OUT_PATH"
