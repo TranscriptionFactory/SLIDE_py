@@ -23,6 +23,9 @@
 #   Py_rLOVE_pyKO/  - Python (R LOVE + Py Knockoffs)
 #   Py_pyLOVE_rKO/  - Python (Py LOVE + R Knockoffs)
 #   Py_pyLOVE_pyKO/ - Python (Py LOVE + Py Knockoffs)
+
+# OUT_PATH="/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-16_13-27-33/SSc_continuous_comparison"
+# bash /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/run_report.sh $OUT_PATH >> $OUT_PATH/comparison_report_intermediate.txt
 # =============================================================================
 
 set -e
@@ -39,13 +42,13 @@ module load r/4.4.0 2>/dev/null || true
 PYTHON_ENV="${PYTHON_ENV:-/ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python}"
 
 # Task configuration (must match run_comparison.sh)
-TASK_NAMES=("R_native" "Py_rLOVE_rKO" "Py_rLOVE_pyKO" "Py_pyLOVE_rKO" "Py_pyLOVE_pyKO")
+TASK_NAMES=("R_native" "Py_rLOVE_rKO" "Py_rLOVE_knockpy" "Py_pyLOVE_rKO" "Py_pyLOVE_knockpy")
 TASK_DESCRIPTIONS=(
     "R SLIDE (native R LOVE + R Knockoffs)"
     "Python (R LOVE + R Knockoffs)"
-    "Python (R LOVE + Py Knockoffs)"
+    "Python (R LOVE + knockpy Knockoffs)"
     "Python (Py LOVE + R Knockoffs)"
-    "Python (Py LOVE + Py Knockoffs)"
+    "Python (Py LOVE + knockpy Knockoffs)"
 )
 
 # Extract performance metrics from R output folder
