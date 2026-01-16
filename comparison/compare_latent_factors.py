@@ -647,6 +647,49 @@ class OutputFiles:
         return f"[{a} {z} {lf}]"
 
 
+@dataclass
+class ReportSummary:
+    """Collect summary statistics during report generation."""
+    n_implementations: int = 0
+    n_completed: int = 0
+    n_param_combos: int = 0
+    best_lf_match: Optional[tuple] = None  # (impl1, impl2, jaccard, z_corr)
+    best_performance: Optional[tuple] = None  # (impl, param, auc)
+    total_comparisons: int = 0
+    avg_jaccard: float = 0.0
+    avg_z_corr: float = 0.0
+    _jaccard_values: list = field(default_factory=list)
+    _z_corr_values: list = field(default_factory=list)
+
+    def update_lf_comparison(self, impl1: str, impl2: str,
+                              mean_jaccard: float, mean_z_corr: float):
+        """Track LF comparison results."""
+        self.total_comparisons += 1
+        if mean_jaccard > 0:
+            self._jaccard_values.append(mean_jaccard)
+        if mean_z_corr > 0:
+            self._z_corr_values.append(mean_z_corr)
+
+        # Track best match
+        if mean_jaccard > 0 or mean_z_corr > 0:
+            score = mean_jaccard + mean_z_corr
+            if self.best_lf_match is None or score > (self.best_lf_match[2] + self.best_lf_match[3]):
+                self.best_lf_match = (impl1, impl2, mean_jaccard, mean_z_corr)
+
+    def update_performance(self, impl: str, param: str, auc: Optional[float]):
+        """Track performance results."""
+        if auc is not None and auc > 0:
+            if self.best_performance is None or auc > self.best_performance[2]:
+                self.best_performance = (impl, param, auc)
+
+    def finalize(self):
+        """Calculate final averages."""
+        if self._jaccard_values:
+            self.avg_jaccard = np.mean(self._jaccard_values)
+        if self._z_corr_values:
+            self.avg_z_corr = np.mean(self._z_corr_values)
+
+
 class ReportGenerator:
     """Generate comprehensive SLIDE comparison report."""
 
@@ -658,6 +701,7 @@ class ReportGenerator:
         self.metrics_extractor = MetricsExtractor(script_dir=Path(__file__).parent)
         self.lf_loader = LatentFactorLoader()
         self.lf_comparator = LatentFactorComparator(detailed=detailed)
+        self.summary = ReportSummary()
 
     def find_param_dir(self, base_path: Path, combo: str) -> Optional[Path]:
         """Find parameter directory handling R vs Python naming differences."""
@@ -772,6 +816,10 @@ class ReportGenerator:
         logger.info(f"Completed: {completed}/{len(self.tasks)}")
         logger.info("")
 
+        # Track in summary
+        self.summary.n_completed = completed
+        self.summary.n_implementations = len([s for s in status.values() if s[0] != "NOT_STARTED"])
+
         return completed
 
     def print_output_summary(self):
@@ -855,6 +903,8 @@ class ReportGenerator:
 
                 if metrics:
                     logger.info(metrics.format_line(name))
+                    # Track best performance
+                    self.summary.update_performance(name, combo, metrics.true_score)
                 else:
                     logger.info(f"    {name:20s}: (no metrics)")
 
@@ -932,6 +982,11 @@ class ReportGenerator:
                         'R_native', py_name
                     )
                     logger.info(self.lf_comparator.format_report(results))
+                    # Track summary stats
+                    self.summary.update_lf_comparison(
+                        'R_native', py_name,
+                        results['mean_jaccard'], results['mean_z_corr']
+                    )
 
             # Compare Python implementations to each other
             py_impls = [n for n in impl_data if n != 'R_native']
@@ -944,6 +999,62 @@ class ReportGenerator:
                             name1, name2
                         )
                         logger.info(self.lf_comparator.format_report(results))
+                        # Track summary stats
+                        self.summary.update_lf_comparison(
+                            name1, name2,
+                            results['mean_jaccard'], results['mean_z_corr']
+                        )
+
+    def print_summary(self):
+        """Print summary of key findings."""
+        self.summary.finalize()
+
+        logger.info("")
+        logger.info("=" * 62)
+        logger.info("SUMMARY")
+        logger.info("=" * 62)
+
+        logger.info(f"\nImplementations analyzed: {self.summary.n_implementations}")
+        logger.info(f"Completed tasks: {self.summary.n_completed}/{len(self.tasks)}")
+        logger.info(f"Total pairwise comparisons: {self.summary.total_comparisons}")
+
+        if self.summary.avg_jaccard > 0:
+            logger.info(f"\nOverall average Jaccard similarity: {self.summary.avg_jaccard:.3f}")
+        if self.summary.avg_z_corr > 0:
+            logger.info(f"Overall average Z correlation: {self.summary.avg_z_corr:.3f}")
+
+        if self.summary.best_lf_match:
+            impl1, impl2, jaccard, z_corr = self.summary.best_lf_match
+            logger.info(f"\nBest LF match: {impl1} <-> {impl2}")
+            logger.info(f"  Jaccard: {jaccard:.3f}, Z correlation: {z_corr:.3f}")
+
+        if self.summary.best_performance:
+            impl, param, auc = self.summary.best_performance
+            logger.info(f"\nBest performance: {impl} @ {param}")
+            logger.info(f"  AUC/Score: {auc:.3f}")
+
+        # Key insights
+        logger.info("\n" + "-" * 62)
+        logger.info("Key Insights:")
+        logger.info("-" * 62)
+
+        if self.summary.avg_jaccard > 0.5:
+            logger.info("  + High feature overlap across implementations")
+        elif self.summary.avg_jaccard > 0.2:
+            logger.info("  ~ Moderate feature overlap across implementations")
+        elif self.summary.avg_jaccard > 0:
+            logger.info("  - Low feature overlap - implementations finding different features")
+
+        if self.summary.avg_z_corr > 0.8:
+            logger.info("  + High Z matrix correlation - similar sample scores")
+        elif self.summary.avg_z_corr > 0.5:
+            logger.info("  ~ Moderate Z matrix correlation")
+        elif self.summary.avg_z_corr > 0:
+            logger.info("  - Low Z correlation - sample scores differ between implementations")
+
+        if self.summary.best_lf_match and self.summary.best_lf_match[3] > 0.9:
+            impl1, impl2 = self.summary.best_lf_match[:2]
+            logger.info(f"  * {impl1} and {impl2} produce nearly identical LFs")
 
     def generate_full_report(self, param_filter: Optional[str] = None,
                               lf_only: bool = False):
@@ -958,6 +1069,7 @@ class ReportGenerator:
                 self.print_performance_comparison(param_filter)
 
         self.print_lf_comparison(param_filter)
+        self.print_summary()
 
         logger.info("")
         logger.info("=" * 62)
@@ -968,6 +1080,15 @@ class ReportGenerator:
 # =============================================================================
 # Main
 # =============================================================================
+
+def setup_file_logging(output_file: Path):
+    """Add file handler to logger for writing report to file."""
+    file_handler = logging.FileHandler(output_file, mode='w')
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter('%(message)s'))
+    logger.addHandler(file_handler)
+    return file_handler
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -981,6 +1102,10 @@ def main():
                        help='Only compare specific parameter combination (e.g., "0.05_0.1_out")')
     parser.add_argument('--lf-only', action='store_true',
                        help='Only run latent factor comparison (skip status/metrics)')
+    parser.add_argument('--output', '-o', type=Path, default=None,
+                       help='Output file path (default: <output_path>/comparison_report.txt)')
+    parser.add_argument('--no-file', action='store_true',
+                       help='Do not write to file, only print to stdout')
 
     args = parser.parse_args()
 
@@ -988,6 +1113,13 @@ def main():
     if not output_path.is_dir():
         logger.error(f"Output path not found: {output_path}")
         return 1
+
+    # Set up file output
+    file_handler = None
+    output_file = None
+    if not args.no_file:
+        output_file = args.output or (output_path / 'comparison_report.txt')
+        file_handler = setup_file_logging(output_file)
 
     report = ReportGenerator(
         output_path=output_path,
@@ -998,6 +1130,12 @@ def main():
         param_filter=args.param,
         lf_only=args.lf_only
     )
+
+    # Clean up and show output file location
+    if file_handler:
+        file_handler.close()
+        logger.removeHandler(file_handler)
+        print(f"\nReport saved to: {output_file}")
 
     return 0
 
