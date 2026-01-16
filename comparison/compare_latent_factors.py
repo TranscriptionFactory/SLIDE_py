@@ -660,9 +660,14 @@ class ReportSummary:
     avg_z_corr: float = 0.0
     _jaccard_values: list = field(default_factory=list)
     _z_corr_values: list = field(default_factory=list)
+    # Detailed comparison tracking
+    pairwise_results: dict = field(default_factory=dict)  # (impl1, impl2) -> {jaccard, z_corr, matched, ...}
+    lf_counts: dict = field(default_factory=dict)  # impl -> [lf_counts per param]
+    performance_scores: dict = field(default_factory=dict)  # impl -> [(param, score), ...]
 
     def update_lf_comparison(self, impl1: str, impl2: str,
-                              mean_jaccard: float, mean_z_corr: float):
+                              mean_jaccard: float, mean_z_corr: float,
+                              n_matched: int = 0, lf_count1: int = 0, lf_count2: int = 0):
         """Track LF comparison results."""
         self.total_comparisons += 1
         if mean_jaccard > 0:
@@ -676,11 +681,34 @@ class ReportSummary:
             if self.best_lf_match is None or score > (self.best_lf_match[2] + self.best_lf_match[3]):
                 self.best_lf_match = (impl1, impl2, mean_jaccard, mean_z_corr)
 
+        # Store detailed pairwise results
+        key = (impl1, impl2)
+        if key not in self.pairwise_results:
+            self.pairwise_results[key] = []
+        self.pairwise_results[key].append({
+            'jaccard': mean_jaccard,
+            'z_corr': mean_z_corr,
+            'n_matched': n_matched,
+            'lf_count1': lf_count1,
+            'lf_count2': lf_count2,
+        })
+
+    def update_lf_count(self, impl: str, param: str, count: int):
+        """Track LF counts per implementation."""
+        if impl not in self.lf_counts:
+            self.lf_counts[impl] = []
+        self.lf_counts[impl].append((param, count))
+
     def update_performance(self, impl: str, param: str, auc: Optional[float]):
         """Track performance results."""
-        if auc is not None and auc > 0:
-            if self.best_performance is None or auc > self.best_performance[2]:
-                self.best_performance = (impl, param, auc)
+        if auc is not None:
+            if impl not in self.performance_scores:
+                self.performance_scores[impl] = []
+            self.performance_scores[impl].append((param, auc))
+
+            if auc > 0:
+                if self.best_performance is None or auc > self.best_performance[2]:
+                    self.best_performance = (impl, param, auc)
 
     def finalize(self):
         """Calculate final averages."""
@@ -688,6 +716,28 @@ class ReportSummary:
             self.avg_jaccard = np.mean(self._jaccard_values)
         if self._z_corr_values:
             self.avg_z_corr = np.mean(self._z_corr_values)
+
+    def get_similarity_ranking(self) -> list:
+        """Return implementation pairs ranked by similarity (Jaccard + Z_corr)."""
+        rankings = []
+        for (impl1, impl2), results in self.pairwise_results.items():
+            avg_jaccard = np.mean([r['jaccard'] for r in results if r['jaccard'] > 0]) if any(r['jaccard'] > 0 for r in results) else 0
+            avg_z_corr = np.mean([r['z_corr'] for r in results if r['z_corr'] > 0]) if any(r['z_corr'] > 0 for r in results) else 0
+            combined_score = avg_jaccard + avg_z_corr
+            rankings.append((impl1, impl2, avg_jaccard, avg_z_corr, combined_score))
+        return sorted(rankings, key=lambda x: -x[4])
+
+    def get_avg_lf_counts(self) -> dict:
+        """Return average LF count per implementation."""
+        return {impl: np.mean([c for _, c in counts]) for impl, counts in self.lf_counts.items()}
+
+    def get_avg_performance(self) -> dict:
+        """Return average performance per implementation."""
+        result = {}
+        for impl, scores in self.performance_scores.items():
+            valid_scores = [s for _, s in scores if s is not None and s > 0]
+            result[impl] = np.mean(valid_scores) if valid_scores else None
+        return result
 
 
 class ReportGenerator:
@@ -966,11 +1016,12 @@ class ReportGenerator:
                 logger.info(f"  Insufficient data for comparison (found {len(impl_data)} impls)")
                 continue
 
-            # Print LF count summary
+            # Print LF count summary and track counts
             logger.info("\nLF Count Summary:")
             for name, data in impl_data.items():
                 n_lfs = len(data.get('sig_LFs', []))
                 logger.info(f"  {name:20s}: {n_lfs} significant LFs")
+                self.summary.update_lf_count(name, combo, n_lfs)
 
             # Compare R_native to each Python implementation
             if 'R_native' in impl_data:
@@ -985,7 +1036,10 @@ class ReportGenerator:
                     # Track summary stats
                     self.summary.update_lf_comparison(
                         'R_native', py_name,
-                        results['mean_jaccard'], results['mean_z_corr']
+                        results['mean_jaccard'], results['mean_z_corr'],
+                        n_matched=len(results['feature_matches']['matches']),
+                        lf_count1=results['lf_count1'],
+                        lf_count2=results['lf_count2']
                     )
 
             # Compare Python implementations to each other
@@ -1002,7 +1056,10 @@ class ReportGenerator:
                         # Track summary stats
                         self.summary.update_lf_comparison(
                             name1, name2,
-                            results['mean_jaccard'], results['mean_z_corr']
+                            results['mean_jaccard'], results['mean_z_corr'],
+                            n_matched=len(results['feature_matches']['matches']),
+                            lf_count1=results['lf_count1'],
+                            lf_count2=results['lf_count2']
                         )
 
     def print_summary(self):
@@ -1017,6 +1074,48 @@ class ReportGenerator:
         logger.info(f"\nImplementations analyzed: {self.summary.n_implementations}")
         logger.info(f"Completed tasks: {self.summary.n_completed}/{len(self.tasks)}")
         logger.info(f"Total pairwise comparisons: {self.summary.total_comparisons}")
+
+        # Average LF counts per implementation
+        avg_lf_counts = self.summary.get_avg_lf_counts()
+        if avg_lf_counts:
+            logger.info("\n" + "-" * 62)
+            logger.info("Average LF Counts per Implementation:")
+            logger.info("-" * 62)
+            for impl, count in sorted(avg_lf_counts.items(), key=lambda x: -x[1]):
+                logger.info(f"  {impl:25s}: {count:.1f} LFs")
+
+        # Average performance per implementation
+        avg_perf = self.summary.get_avg_performance()
+        if avg_perf and any(v is not None for v in avg_perf.values()):
+            logger.info("\n" + "-" * 62)
+            logger.info("Average Performance per Implementation:")
+            logger.info("-" * 62)
+            for impl, score in sorted(avg_perf.items(), key=lambda x: -(x[1] or 0)):
+                if score is not None:
+                    logger.info(f"  {impl:25s}: {score:.3f}")
+                else:
+                    logger.info(f"  {impl:25s}: -")
+
+        # Similarity ranking (most similar pairs)
+        rankings = self.summary.get_similarity_ranking()
+        if rankings:
+            logger.info("\n" + "-" * 62)
+            logger.info("Implementation Similarity Ranking:")
+            logger.info("-" * 62)
+            logger.info("  (Ranked by combined Jaccard + Z-correlation score)")
+            logger.info("")
+            logger.info(f"  {'Pair':<45} {'Jaccard':>8} {'Z-corr':>8} {'Score':>8}")
+            logger.info(f"  {'-'*45} {'-'*8} {'-'*8} {'-'*8}")
+            for impl1, impl2, jaccard, z_corr, score in rankings[:10]:  # Top 10
+                pair_name = f"{impl1} <-> {impl2}"
+                j_str = f"{jaccard:.3f}" if jaccard > 0 else "-"
+                z_str = f"{z_corr:.3f}" if z_corr > 0 else "-"
+                s_str = f"{score:.3f}" if score > 0 else "-"
+                logger.info(f"  {pair_name:<45} {j_str:>8} {z_str:>8} {s_str:>8}")
+
+        # Pairwise comparison matrix
+        if self.summary.pairwise_results:
+            self._print_comparison_matrix()
 
         if self.summary.avg_jaccard > 0:
             logger.info(f"\nOverall average Jaccard similarity: {self.summary.avg_jaccard:.3f}")
@@ -1055,6 +1154,80 @@ class ReportGenerator:
         if self.summary.best_lf_match and self.summary.best_lf_match[3] > 0.9:
             impl1, impl2 = self.summary.best_lf_match[:2]
             logger.info(f"  * {impl1} and {impl2} produce nearly identical LFs")
+
+        # Identify clusters of similar implementations
+        if rankings:
+            high_sim_pairs = [(i1, i2) for i1, i2, j, z, s in rankings if s > 0.5]
+            if high_sim_pairs:
+                logger.info("\n  Similar implementation groups:")
+                for i1, i2 in high_sim_pairs[:3]:
+                    logger.info(f"    - {i1} ~ {i2}")
+
+    def _print_comparison_matrix(self):
+        """Print a pairwise comparison matrix."""
+        # Get unique implementations
+        impls = set()
+        for (i1, i2) in self.summary.pairwise_results.keys():
+            impls.add(i1)
+            impls.add(i2)
+        impls = sorted(impls)
+
+        if len(impls) < 2:
+            return
+
+        # Create short names for display
+        short_names = {}
+        for impl in impls:
+            if impl == 'R_native':
+                short_names[impl] = 'R_nat'
+            elif impl.startswith('Py_'):
+                # Py_rLOVE_rKO -> r_r, Py_pyLOVE_knockpy -> py_kpy
+                parts = impl[3:].split('_')
+                if len(parts) >= 2:
+                    love = 'r' if parts[0].startswith('r') else 'py'
+                    ko = 'r' if 'rKO' in impl else 'kpy' if 'knockpy' in impl else 'py'
+                    short_names[impl] = f"{love}_{ko}"
+                else:
+                    short_names[impl] = impl[:8]
+            else:
+                short_names[impl] = impl[:8]
+
+        logger.info("\n" + "-" * 62)
+        logger.info("Pairwise Similarity Matrix (Jaccard | Z-corr):")
+        logger.info("-" * 62)
+
+        # Header
+        header = "              "
+        for impl in impls:
+            header += f"{short_names[impl]:>12}"
+        logger.info(header)
+
+        # Rows
+        for i, impl1 in enumerate(impls):
+            row = f"{short_names[impl1]:<12}  "
+            for j, impl2 in enumerate(impls):
+                if i == j:
+                    row += f"{'---':>12}"
+                elif i < j:
+                    key = (impl1, impl2)
+                    if key not in self.summary.pairwise_results:
+                        key = (impl2, impl1)
+                    if key in self.summary.pairwise_results:
+                        results = self.summary.pairwise_results[key]
+                        avg_j = np.mean([r['jaccard'] for r in results])
+                        avg_z = np.mean([r['z_corr'] for r in results])
+                        if avg_j > 0 or avg_z > 0:
+                            row += f"{avg_j:.2f}|{avg_z:.2f}".rjust(12)
+                        else:
+                            row += f"{'0|0':>12}"
+                    else:
+                        row += f"{'n/a':>12}"
+                else:
+                    row += f"{'':>12}"  # Lower triangle empty
+            logger.info(row)
+
+        logger.info("\n  Legend: Jaccard similarity | Z-matrix correlation")
+        logger.info("  Higher values = more similar outputs")
 
     def generate_full_report(self, param_filter: Optional[str] = None,
                               lf_only: bool = False):
