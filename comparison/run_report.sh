@@ -282,6 +282,28 @@ if [ "$COMPLETED" -ge 2 ]; then
     fi
 fi
 
+# -----------------------------------------------------------------------------
+# Latent Factor Content Comparison (if multiple completed)
+# -----------------------------------------------------------------------------
+if [ "$COMPLETED" -ge 2 ]; then
+    echo ""
+    echo "=============================================================="
+    echo "Latent Factor Content Comparison"
+    echo "=============================================================="
+    echo ""
+    echo "Running compare_latent_factors.py for detailed LF comparison..."
+    echo ""
+
+    # Run the Python comparison script
+    if [ -f "${SCRIPT_DIR}/compare_latent_factors.py" ]; then
+        $PYTHON_ENV "${SCRIPT_DIR}/compare_latent_factors.py" "$OUT_PATH" --detailed 2>&1 || {
+            echo "Warning: compare_latent_factors.py failed or not available"
+        }
+    else
+        echo "Warning: compare_latent_factors.py not found at ${SCRIPT_DIR}"
+    fi
+fi
+
 echo ""
 echo "=============================================================="
 echo "Report complete"
