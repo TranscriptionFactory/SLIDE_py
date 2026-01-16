@@ -18,11 +18,24 @@ Examples:
 
 import argparse
 import os
+import sys
 import yaml
 import logging
 import time
 
-from loveslide import OptimizeSLIDE
+# Determine which loveslide to use based on backends
+# R LOVE + R knockoffs: use installed package (baseline)
+# All others: use local source with fixes
+def setup_loveslide_import(love_backend, knockoff_backend):
+    if love_backend == 'r' and knockoff_backend == 'r':
+        # Use installed package as baseline
+        print("Using installed loveslide package (baseline)")
+    else:
+        # Use local source with our fixes
+        local_src = '/ix/djishnu/Aaron/1_general_use/SLIDE_py/src'
+        if local_src not in sys.path:
+            sys.path.insert(0, local_src)
+        print(f"Using local loveslide source: {local_src}")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -42,6 +55,16 @@ def parse_args():
 def main():
     args = parse_args()
 
+    # Set backends from CLI arguments
+    love_backend = args.love_backend
+    knockoff_backend = args.knockoff_backend
+
+    # Setup import path based on backends
+    setup_loveslide_import(love_backend, knockoff_backend)
+
+    # Import after path setup
+    from loveslide import OptimizeSLIDE
+
     # Load parameters from YAML
     with open(args.yaml_path, 'r') as f:
         params = yaml.safe_load(f)
@@ -49,10 +72,6 @@ def main():
     # Override out_path if provided as argument
     out_path = args.out_path if args.out_path else params.get('out_path')
     params['out_path'] = out_path
-
-    # Set backends from CLI arguments
-    love_backend = args.love_backend
-    knockoff_backend = args.knockoff_backend
 
     print("=" * 60)
     print(f"SLIDE Python Analysis")
