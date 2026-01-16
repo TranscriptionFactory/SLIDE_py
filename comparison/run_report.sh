@@ -220,13 +220,17 @@ if [ "$COMPLETED" -ge 2 ]; then
                     SCORES_FILE="${TASK_DIR}/scores.txt"
                     LF_FILE="${TASK_DIR}/sig_LFs.txt"
                     if [ -f "$SCORES_FILE" ]; then
-                        TRUE_SCORE=$(grep -oP 'True Scores:\s*\K[\d.]+' "$SCORES_FILE")
-                        PARTIAL=$(grep -oP 'Partial Random:\s*\K[\d.]+' "$SCORES_FILE")
-                        FULL=$(grep -oP 'Full Random:\s*\K[\d.]+' "$SCORES_FILE")
-                        NUM_MARG=$(grep -oP 'Number of marginals:\s*\K\d+' "$SCORES_FILE")
-                        NUM_INT=$(grep -oP 'Number of interactions:\s*\K\d+' "$SCORES_FILE")
-                        printf "    %-20s: AUC=%.3f (P=%.3f F=%.3f) M=%s I=%s\n" \
-                               "$TASK_NAME" "$TRUE_SCORE" "$PARTIAL" "$FULL" "$NUM_MARG" "$NUM_INT"
+                        TRUE_SCORE=$(grep -oP 'True Scores:\s*\K-?[\d.]+' "$SCORES_FILE" || echo "")
+                        PARTIAL=$(grep -oP 'Partial Random:\s*\K-?[\d.]+' "$SCORES_FILE" || echo "")
+                        FULL=$(grep -oP 'Full Random:\s*\K-?[\d.]+' "$SCORES_FILE" || echo "")
+                        NUM_MARG=$(grep -oP 'Number of marginals:\s*\K\d+' "$SCORES_FILE" || echo "-")
+                        NUM_INT=$(grep -oP 'Number of interactions:\s*\K\d+' "$SCORES_FILE" || echo "-")
+                        if [[ -n "$TRUE_SCORE" && -n "$PARTIAL" && -n "$FULL" ]]; then
+                            printf "    %-20s: AUC=%.3f (P=%.3f F=%.3f) M=%s I=%s\n" \
+                                   "$TASK_NAME" "$TRUE_SCORE" "$PARTIAL" "$FULL" "$NUM_MARG" "$NUM_INT"
+                        else
+                            printf "    %-20s: (incomplete scores)\n" "$TASK_NAME"
+                        fi
                     elif [ -f "$LF_FILE" ]; then
                         NUM_LFS=$(wc -l < "$LF_FILE")
                         printf "    %-20s: %d LFs (no scores)\n" "$TASK_NAME" "$NUM_LFS"
