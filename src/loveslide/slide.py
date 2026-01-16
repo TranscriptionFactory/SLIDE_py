@@ -290,7 +290,8 @@ class OptimizeSLIDE(SLIDE):
         )
         return Z
     
-    def find_standalone_LFs(self, latent_factors, spec, fdr, niter, f_size, n_workers=1, knockoff_backend='r'):
+    def find_standalone_LFs(self, latent_factors, spec, fdr, niter, f_size, n_workers=1,
+                            knockoff_backend='r', knockoff_method='asdp', knockoff_shrink=False):
 
         machop = Knockoffs(y=self.data.Y.values, z2=latent_factors.values)
 
@@ -302,13 +303,16 @@ class OptimizeSLIDE(SLIDE):
             niter=niter,
             f_size=f_size,
             n_workers=n_workers,
-            backend=knockoff_backend
+            backend=knockoff_backend,
+            method=knockoff_method,
+            shrink=knockoff_shrink
         )
 
         self.marginal_idxs = marginal_idxs
         return machop
 
-    def find_interaction_LFs(self, machop, spec, fdr, niter, f_size, n_workers=1, knockoff_backend='r'):
+    def find_interaction_LFs(self, machop, spec, fdr, niter, f_size, n_workers=1,
+                             knockoff_backend='r', knockoff_method='asdp', knockoff_shrink=False):
 
         machop.add_z1(marginal_idxs=self.marginal_idxs)
 
@@ -330,7 +334,9 @@ class OptimizeSLIDE(SLIDE):
             niter=niter,
             f_size=f_size,
             n_workers=n_workers,
-            backend=knockoff_backend
+            backend=knockoff_backend,
+            method=knockoff_method,
+            shrink=knockoff_shrink
         )
 
         if len(sig_interactions) == 0:
@@ -349,18 +355,23 @@ class OptimizeSLIDE(SLIDE):
     
 
     def run_SLIDE(self, latent_factors, niter, spec, fdr, verbose=False, n_workers=1, outpath='.',
-                   do_interacts=True, knockoff_backend='r'):
+                   do_interacts=True, knockoff_backend='r', knockoff_method='asdp', knockoff_shrink=False):
 
         f_size = self.calc_default_fsize(latent_factors.shape[1])
 
         if verbose:
             print(f'Calculated f_size: {f_size}')
             print(f'Knockoff backend: {knockoff_backend}')
+            if knockoff_backend == 'python':
+                print(f'Knockoff method: {knockoff_method}')
+                print(f'Knockoff shrink: {knockoff_shrink}')
             print(f'Finding standalone LF...')
 
         ### Find standalone LFs
         machop = self.find_standalone_LFs(latent_factors, spec, fdr, niter, f_size, n_workers,
-                                          knockoff_backend=knockoff_backend)
+                                          knockoff_backend=knockoff_backend,
+                                          knockoff_method=knockoff_method,
+                                          knockoff_shrink=knockoff_shrink)
 
         if len(self.marginal_idxs) == 0:
             print("No standalone LF found")
@@ -382,7 +393,9 @@ class OptimizeSLIDE(SLIDE):
                 print(f'Finding interacting LF...')
 
             self.find_interaction_LFs(machop, spec, fdr, niter, f_size, n_workers,
-                                      knockoff_backend=knockoff_backend)
+                                      knockoff_backend=knockoff_backend,
+                                      knockoff_method=knockoff_method,
+                                      knockoff_shrink=knockoff_shrink)
 
             if verbose:
                 print(f'Found {len(self.interaction_pairs)} interacting LF')
@@ -459,7 +472,9 @@ class OptimizeSLIDE(SLIDE):
                     verbose=verbose,
                     outpath=out_iter,
                     do_interacts=self.input_params['do_interacts'],
-                    knockoff_backend=self.input_params.get('knockoff_backend', 'r')
+                    knockoff_backend=self.input_params.get('knockoff_backend', 'r'),
+                    knockoff_method=self.input_params.get('knockoff_method', 'asdp'),
+                    knockoff_shrink=self.input_params.get('knockoff_shrink', False)
                 )
 
                 if verbose:

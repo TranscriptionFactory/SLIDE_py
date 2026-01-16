@@ -3,17 +3,29 @@
 Python script to run SLIDE on input data and compare with R outputs.
 
 Usage:
-    python run_slide_py.py <yaml_path> [out_path] [--love-backend python|r] [--knockoff-backend python|r]
+    python run_slide_py.py <yaml_path> [out_path] [options]
 
 Arguments:
     yaml_path             Path to YAML config file
     out_path              Optional output path override
     --love-backend        Which LOVE implementation: 'python' (default) or 'r'
     --knockoff-backend    Which knockoff implementation: 'r' (default) or 'python'
+    --knockoff-method     Knockoff construction method (Python backend only):
+                          'asdp' (default), 'sdp', or 'equi'. Use 'equi' to avoid SDP failures.
+    --knockoff-shrink     Use Ledoit-Wolf covariance shrinkage (Python backend only)
 
 Examples:
+    # Default: Python LOVE, R knockoffs
     python run_slide_py.py config.yaml
-    python run_slide_py.py config.yaml /path/to/outputs --love-backend r --knockoff-backend python
+
+    # Python knockoffs with default asdp method
+    python run_slide_py.py config.yaml --knockoff-backend python
+
+    # Python knockoffs with equicorrelated method (avoids SDP failures)
+    python run_slide_py.py config.yaml --knockoff-backend python --knockoff-method equi
+
+    # Python knockoffs with covariance shrinkage
+    python run_slide_py.py config.yaml --knockoff-backend python --knockoff-shrink
 """
 
 import argparse
@@ -24,18 +36,13 @@ import logging
 import time
 
 # Determine which loveslide to use based on backends
-# R LOVE + R knockoffs: use installed package (baseline)
-# All others: use local source with fixes
+# Always use local source since it has the regression scoring fix
 def setup_loveslide_import(love_backend, knockoff_backend):
-    if love_backend == 'r' and knockoff_backend == 'r':
-        # Use installed package as baseline
-        print("Using installed loveslide package (baseline)")
-    else:
-        # Use local source with our fixes
-        local_src = '/ix/djishnu/Aaron/1_general_use/SLIDE_py/src'
-        if local_src not in sys.path:
-            sys.path.insert(0, local_src)
-        print(f"Using local loveslide source: {local_src}")
+    # Always use local source with our fixes (regression scoring, etc.)
+    local_src = '/ix/djishnu/Aaron/1_general_use/SLIDE_py/src'
+    if local_src not in sys.path:
+        sys.path.insert(0, local_src)
+    print(f"Using local loveslide source: {local_src}")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -49,6 +56,13 @@ def parse_args():
                         default='python', help='LOVE implementation: python (default) or r')
     parser.add_argument('--knockoff-backend', dest='knockoff_backend', choices=['python', 'r'],
                         default='r', help='Knockoff implementation: r (default) or python')
+    parser.add_argument('--knockoff-method', dest='knockoff_method',
+                        choices=['asdp', 'sdp', 'equi'], default='asdp',
+                        help='Knockoff construction method (Python backend only): '
+                             'asdp (default), sdp, or equi. Use equi to avoid SDP failures.')
+    parser.add_argument('--knockoff-shrink', dest='knockoff_shrink',
+                        action='store_true',
+                        help='Use Ledoit-Wolf covariance shrinkage (Python backend only)')
     return parser.parse_args()
 
 
@@ -58,6 +72,8 @@ def main():
     # Set backends from CLI arguments
     love_backend = args.love_backend
     knockoff_backend = args.knockoff_backend
+    knockoff_method = args.knockoff_method
+    knockoff_shrink = args.knockoff_shrink
 
     # Setup import path based on backends
     setup_loveslide_import(love_backend, knockoff_backend)
@@ -77,6 +93,9 @@ def main():
     print(f"SLIDE Python Analysis")
     print(f"  LOVE backend: {love_backend}")
     print(f"  Knockoff backend: {knockoff_backend}")
+    if knockoff_backend == 'python':
+        print(f"  Knockoff method: {knockoff_method}")
+        print(f"  Knockoff shrink: {knockoff_shrink}")
     print("=" * 60)
     print(f"YAML config: {args.yaml_path}")
     print(f"Output path: {out_path}")
@@ -111,6 +130,8 @@ def main():
         'spec': params.get('spec', 0.1),
         'love_backend': love_backend,
         'knockoff_backend': knockoff_backend,
+        'knockoff_method': knockoff_method,
+        'knockoff_shrink': knockoff_shrink,
         # Handle delta/lambda - can be single value or list
         'delta': params.get('delta') if isinstance(params.get('delta'), list) else [params.get('delta', 0.1)],
         'lambda': params.get('lambda') if isinstance(params.get('lambda'), list) else [params.get('lambda', 0.5)],
