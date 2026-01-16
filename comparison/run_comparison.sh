@@ -18,13 +18,14 @@
 # Array tasks:
 #   0 = R SLIDE (native R package - R LOVE + R knockoffs)
 #   1 = Python SLIDE (R LOVE + R Knockoffs)
-#   2 = Python SLIDE (R LOVE + Py Knockoffs)
+#   2 = Python SLIDE (R LOVE + Py Knockoffs, equicorrelated method)
 #   3 = Python SLIDE (Py LOVE + R Knockoffs)
-#   4 = Python SLIDE (Py LOVE + Py Knockoffs)
+#   4 = Python SLIDE (Py LOVE + Py Knockoffs, equicorrelated method)
 #
 # Usage:
-#   sbatch run_comparison.sh <yaml_config>
+#   sbatch run_comparison.sh <yaml_config> [output_path]
 #   sbatch run_comparison.sh comparison_config.yaml
+#   sbatch run_comparison.sh comparison_config.yaml /path/to/output  # override out_path
 
 # sbatch <<'EOF'
 # #!/bin/bash
@@ -36,21 +37,27 @@
 
 # cd /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison
 
-# # Common output directory
-# OUTPUT_DIR="/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison"
+# # Generate timestamp once
+# TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
+
+# # Use it in the output directory
+# OUTPUT_DIR="/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/${TIMESTAMP}"
 # CONTINUOUS_OUT="${OUTPUT_DIR}/SSc_continuous_comparison"
 # BINARY_OUT="${OUTPUT_DIR}/SSc_binary_comparison"
 
-# # Submit array jobs
-# JOB1=$(sbatch --parsable run_comparison.sh comparison_config_continuous.yaml)
-# JOB2=$(sbatch --parsable run_comparison.sh comparison_config_binary.yaml)
+# # Create the base directory
+# mkdir -p "$OUTPUT_DIR"
+
+# # Submit array jobs (pass output path as second argument)
+# JOB1=$(sbatch --parsable run_comparison.sh comparison_config_continuous.yaml "$CONTINUOUS_OUT")
+# JOB2=$(sbatch --parsable run_comparison.sh comparison_config_binary.yaml "$BINARY_OUT")
 
 # echo "Submitted continuous comparison: $JOB1"
 # echo "Submitted binary comparison: $JOB2"
 
 # # Queue reports with dependencies
-# sbatch --dependency=afterany:$JOB1 run_report.sh "$CONTINUOUS_OUT" >> "$CONTINUOUS_OUT/report_submission.log"
-# sbatch --dependency=afterany:$JOB2 run_report.sh "$BINARY_OUT" >> "$BINARY_OUT/report_submission.log"
+# sbatch --dependency=afterany:$JOB1 --output="$CONTINUOUS_OUT/report_submission.log" run_report.sh "$CONTINUOUS_OUT"
+# sbatch --dependency=afterany:$JOB2 --output="$BINARY_OUT/report_submission.log" run_report.sh "$BINARY_OUT"
 
 # echo "Reports queued with dependencies"
 # EOF
@@ -64,15 +71,20 @@ cd "$SCRIPT_DIR"
 
 # Get YAML config from argument
 YAML_CONFIG="${1:-comparison_config.yaml}"
+OUT_PATH_OVERRIDE="${2:-}"  # Optional output path override
 
 if [ ! -f "$YAML_CONFIG" ]; then
     echo "ERROR: YAML config not found: $YAML_CONFIG"
     exit 1
 fi
 
-# Parse output paths from YAML
-OUT_PATH=$(grep "^out_path:" "$YAML_CONFIG" | sed 's/out_path: *//' | tr -d '"'"'" | xargs)
-OUT_PATH="${OUT_PATH:-$SCRIPT_DIR/outputs}"  # fallback if not in YAML
+# Use override if provided, otherwise parse from YAML
+if [ -n "$OUT_PATH_OVERRIDE" ]; then
+    OUT_PATH="$OUT_PATH_OVERRIDE"
+else
+    OUT_PATH=$(grep "^out_path:" "$YAML_CONFIG" | sed 's/out_path: *//' | tr -d '"'"'" | xargs)
+    OUT_PATH="${OUT_PATH:-$SCRIPT_DIR/outputs}"  # fallback if not in YAML
+fi
 
 # Create base output directory
 mkdir -p "$OUT_PATH"
@@ -150,7 +162,8 @@ elif [ "$TASK_ID" -eq 2 ]; then
     TASK_OUT="${OUT_PATH}/Py_rLOVE_pyKO"
     mkdir -p "$TASK_OUT"
 
-    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$TASK_OUT" --love-backend r --knockoff-backend python
+    # Use equi method to avoid SDP failures with difficult covariance matrices
+    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$TASK_OUT" --love-backend r --knockoff-backend python --knockoff-method equi
 
     touch "${OUT_PATH}/.task2_complete"
 
@@ -182,7 +195,8 @@ elif [ "$TASK_ID" -eq 4 ]; then
     TASK_OUT="${OUT_PATH}/Py_pyLOVE_pyKO"
     mkdir -p "$TASK_OUT"
 
-    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$TASK_OUT" --love-backend python --knockoff-backend python
+    # Use equi method to avoid SDP failures with difficult covariance matrices
+    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$TASK_OUT" --love-backend python --knockoff-backend python --knockoff-method equi
 
     touch "${OUT_PATH}/.task4_complete"
 
