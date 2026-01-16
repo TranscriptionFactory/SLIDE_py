@@ -33,6 +33,11 @@ Examples:
     python compare_full.py /path/to/outputs \\
         --impl-path R_native=/old/R_native \\
         --impl-path Py_rLOVE_rKO=/other/Py_rLOVE_rKO
+
+
+    /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python compare_full.py \
+      /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-16_15-59-27/SSc_binary_comparison \
+      --impl-path R_native=/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-16_10-41-07/SSc_binary_comparison/R_native
 """
 
 import argparse
