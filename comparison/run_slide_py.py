@@ -9,23 +9,24 @@ Arguments:
     yaml_path             Path to YAML config file
     out_path              Optional output path override
     --love-backend        Which LOVE implementation: 'python' (default) or 'r'
-    --knockoff-backend    Which knockoff implementation: 'r' (default) or 'python'
-    --knockoff-method     Knockoff construction method (Python backend only):
-                          'asdp' (default), 'sdp', or 'equi'. Use 'equi' to avoid SDP failures.
-    --knockoff-shrink     Use Ledoit-Wolf covariance shrinkage (Python backend only)
+    --knockoff-backend    Which knockoff implementation: 'r' (default), 'python', or 'knockpy'
+    --knockoff-method     Knockoff construction method:
+                          - python backend: 'asdp' (default), 'sdp', 'equi'
+                          - knockpy backend: 'mvr' (default), 'sdp', 'equicorrelated', 'maxent', 'mmi'
+    --knockoff-shrink     Use Ledoit-Wolf covariance shrinkage (Python/knockpy backends)
 
 Examples:
     # Default: Python LOVE, R knockoffs
     python run_slide_py.py config.yaml
 
-    # Python knockoffs with default asdp method
-    python run_slide_py.py config.yaml --knockoff-backend python
+    # knockpy knockoffs with mvr method (recommended - uses DSDP solver like R)
+    python run_slide_py.py config.yaml --knockoff-backend knockpy --knockoff-method mvr
 
     # Python knockoffs with equicorrelated method (avoids SDP failures)
     python run_slide_py.py config.yaml --knockoff-backend python --knockoff-method equi
 
-    # Python knockoffs with covariance shrinkage
-    python run_slide_py.py config.yaml --knockoff-backend python --knockoff-shrink
+    # knockpy knockoffs with covariance shrinkage
+    python run_slide_py.py config.yaml --knockoff-backend knockpy --knockoff-shrink
 """
 
 import argparse
@@ -54,12 +55,14 @@ def parse_args():
     parser.add_argument('out_path', nargs='?', default=None, help='Output path override')
     parser.add_argument('--love-backend', dest='love_backend', choices=['python', 'r'],
                         default='python', help='LOVE implementation: python (default) or r')
-    parser.add_argument('--knockoff-backend', dest='knockoff_backend', choices=['python', 'r'],
-                        default='r', help='Knockoff implementation: r (default) or python')
+    parser.add_argument('--knockoff-backend', dest='knockoff_backend',
+                        choices=['python', 'r', 'knockpy'],
+                        default='r', help='Knockoff implementation: r (default), python, or knockpy')
     parser.add_argument('--knockoff-method', dest='knockoff_method',
-                        choices=['asdp', 'sdp', 'equi'], default='asdp',
-                        help='Knockoff construction method (Python backend only): '
-                             'asdp (default), sdp, or equi. Use equi to avoid SDP failures.')
+                        choices=['asdp', 'sdp', 'equi', 'mvr', 'equicorrelated', 'maxent', 'mmi'],
+                        default='mvr',
+                        help='Knockoff construction method. For knockpy: mvr (default), sdp, '
+                             'equicorrelated, maxent, mmi. For python: asdp, sdp, equi.')
     parser.add_argument('--knockoff-shrink', dest='knockoff_shrink',
                         action='store_true',
                         help='Use Ledoit-Wolf covariance shrinkage (Python backend only)')
@@ -93,7 +96,7 @@ def main():
     print(f"SLIDE Python Analysis")
     print(f"  LOVE backend: {love_backend}")
     print(f"  Knockoff backend: {knockoff_backend}")
-    if knockoff_backend == 'python':
+    if knockoff_backend in ('python', 'knockpy'):
         print(f"  Knockoff method: {knockoff_method}")
         print(f"  Knockoff shrink: {knockoff_shrink}")
     print("=" * 60)

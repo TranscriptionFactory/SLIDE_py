@@ -18,9 +18,9 @@
 # Array tasks:
 #   0 = R SLIDE (native R package - R LOVE + R knockoffs)
 #   1 = Python SLIDE (R LOVE + R Knockoffs)
-#   2 = Python SLIDE (R LOVE + Py Knockoffs, equicorrelated method)
+#   2 = Python SLIDE (R LOVE + knockpy Knockoffs, MVR method)
 #   3 = Python SLIDE (Py LOVE + R Knockoffs)
-#   4 = Python SLIDE (Py LOVE + Py Knockoffs, equicorrelated method)
+#   4 = Python SLIDE (Py LOVE + knockpy Knockoffs, MVR method)
 #
 # Usage:
 #   sbatch run_comparison.sh <yaml_config> [output_path]
@@ -100,7 +100,7 @@ PYTHON_ENV="${PYTHON_ENV:-/ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/
 # -----------------------------------------------------------------------------
 # Task configuration
 # -----------------------------------------------------------------------------
-TASK_NAMES=("R_native" "Py_rLOVE_rKO" "Py_rLOVE_pyKO" "Py_pyLOVE_rKO" "Py_pyLOVE_pyKO")
+TASK_NAMES=("R_native" "Py_rLOVE_rKO" "Py_rLOVE_knockpy" "Py_pyLOVE_rKO" "Py_pyLOVE_knockpy")
 TASK_ID="${SLURM_ARRAY_TASK_ID:-0}"
 
 echo "=============================================================="
@@ -152,18 +152,18 @@ elif [ "$TASK_ID" -eq 1 ]; then
 
 elif [ "$TASK_ID" -eq 2 ]; then
     # =========================================================================
-    # Task 2: Python (R LOVE + Python Knockoffs)
+    # Task 2: Python (R LOVE + knockpy Knockoffs)
     # =========================================================================
     echo ""
     echo "=============================================================="
-    echo "Running Python SLIDE (R LOVE + Python Knockoffs)"
+    echo "Running Python SLIDE (R LOVE + knockpy Knockoffs)"
     echo "=============================================================="
 
-    TASK_OUT="${OUT_PATH}/Py_rLOVE_pyKO"
+    TASK_OUT="${OUT_PATH}/Py_rLOVE_knockpy"
     mkdir -p "$TASK_OUT"
 
-    # Use equi method to avoid SDP failures with difficult covariance matrices
-    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$TASK_OUT" --love-backend r --knockoff-backend python --knockoff-method equi
+    # Use knockpy with mvr method (matches R's DSDP solver)
+    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$TASK_OUT" --love-backend r --knockoff-backend knockpy --knockoff-method mvr
 
     touch "${OUT_PATH}/.task2_complete"
 
@@ -185,18 +185,18 @@ elif [ "$TASK_ID" -eq 3 ]; then
 
 elif [ "$TASK_ID" -eq 4 ]; then
     # =========================================================================
-    # Task 4: Python (Python LOVE + Python Knockoffs)
+    # Task 4: Python (Python LOVE + knockpy Knockoffs)
     # =========================================================================
     echo ""
     echo "=============================================================="
-    echo "Running Python SLIDE (Python LOVE + Python Knockoffs)"
+    echo "Running Python SLIDE (Python LOVE + knockpy Knockoffs)"
     echo "=============================================================="
 
-    TASK_OUT="${OUT_PATH}/Py_pyLOVE_pyKO"
+    TASK_OUT="${OUT_PATH}/Py_pyLOVE_knockpy"
     mkdir -p "$TASK_OUT"
 
-    # Use equi method to avoid SDP failures with difficult covariance matrices
-    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$TASK_OUT" --love-backend python --knockoff-backend python --knockoff-method equi
+    # Use knockpy with mvr method (matches R's DSDP solver)
+    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$TASK_OUT" --love-backend python --knockoff-backend knockpy --knockoff-method mvr
 
     touch "${OUT_PATH}/.task4_complete"
 

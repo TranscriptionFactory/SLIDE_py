@@ -171,6 +171,82 @@ class Knockoffs():
         return sig_idxs
 
     @staticmethod
+    def filter_knockoffs_iterative_knockpy(z, y, fdr=0.1, niter=1, spec=0.2,
+                                           method='mvr', shrink=False, **kwargs):
+        """Run knockoff filter using knockpy package.
+
+        Parameters
+        ----------
+        z : np.ndarray
+            Feature matrix.
+        y : np.ndarray
+            Response vector.
+        fdr : float
+            Target false discovery rate.
+        niter : int
+            Number of knockoff iterations.
+        spec : float
+            Proportion threshold for selection frequency.
+        method : str
+            Knockoff construction method:
+            - 'mvr': Minimum Variance-based Reconstructability (default, often best)
+            - 'sdp': Semidefinite programming (uses DSDP if scikit-dsdp installed)
+            - 'equicorrelated': Always works, lower power
+            - 'maxent': Maximum entropy
+            - 'mmi': Minimize mutual information
+        shrink : bool
+            Whether to use Ledoit-Wolf covariance shrinkage.
+        **kwargs
+            Additional keyword arguments (ignored).
+
+        Returns
+        -------
+        np.ndarray
+            Indices of selected variables.
+        """
+        from knockpy import KnockoffFilter
+
+        # Map method names for compatibility
+        method_map = {
+            'asdp': 'sdp',  # knockpy doesn't have asdp, sdp uses DSDP
+            'equi': 'equicorrelated',
+        }
+        kp_method = method_map.get(method, method)
+
+        # Configure shrinkage
+        shrinkage = 'ledoitwolf' if shrink else None
+
+        # Create knockoff filter
+        kfilter = KnockoffFilter(
+            ksampler='gaussian',
+            fstat='lasso',
+            knockoff_kwargs={'method': kp_method}
+        )
+
+        results = []
+        for _ in range(niter):
+            # Run knockoff filter
+            rejections = kfilter.forward(
+                X=z,
+                y=y.flatten(),
+                fdr=fdr,
+                shrinkage=shrinkage
+            )
+            # rejections is a boolean array
+            selected = np.where(rejections)[0]
+            if len(selected) > 0:
+                results.extend(selected.tolist())
+
+        if len(results) == 0:
+            return np.array([], dtype=int)
+
+        results = np.array(results)
+        idx, counts = np.unique(results, return_counts=True)
+        sig_idxs = idx[np.where(counts >= spec * niter)]
+
+        return sig_idxs
+
+    @staticmethod
     def filter_knockoffs_iterative(z, y, fdr=0.1, niter=1, spec=0.2, n_workers=1, backend='r',
                                    method='asdp', shrink=False):
         """
@@ -191,18 +267,23 @@ class Knockoffs():
         n_workers : int
             Number of parallel workers (unused currently).
         backend : str
-            Which knockoff implementation: 'r' (default) or 'python'.
+            Which knockoff implementation: 'r' (default), 'python', or 'knockpy'.
         method : str
-            Knockoff construction method (Python backend only): 'asdp' (default), 'sdp', or 'equi'.
+            Knockoff construction method:
+            - For 'python' backend: 'asdp' (default), 'sdp', or 'equi'
+            - For 'knockpy' backend: 'mvr' (default), 'sdp', 'equicorrelated', 'maxent', 'mmi'
         shrink : bool
-            Whether to use Ledoit-Wolf covariance shrinkage (Python backend only).
+            Whether to use Ledoit-Wolf covariance shrinkage (Python/knockpy backends only).
 
         Returns
         -------
         np.ndarray
             Indices of selected variables.
         """
-        if backend == 'python':
+        if backend == 'knockpy':
+            return Knockoffs.filter_knockoffs_iterative_knockpy(
+                z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink)
+        elif backend == 'python':
             return Knockoffs.filter_knockoffs_iterative_python(
                 z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink)
         else:
@@ -241,11 +322,13 @@ class Knockoffs():
         n_workers : int
             Number of parallel workers
         backend : str
-            Which knockoff implementation: 'r' (default) or 'python'.
+            Which knockoff implementation: 'r' (default), 'python', or 'knockpy'.
         method : str
-            Knockoff construction method (Python backend only): 'asdp' (default), 'sdp', or 'equi'.
+            Knockoff construction method:
+            - For 'python' backend: 'asdp' (default), 'sdp', or 'equi'
+            - For 'knockpy' backend: 'mvr' (default), 'sdp', 'equicorrelated', 'maxent', 'mmi'
         shrink : bool
-            Whether to use Ledoit-Wolf covariance shrinkage (Python backend only).
+            Whether to use Ledoit-Wolf covariance shrinkage (Python/knockpy backends only).
 
         Returns
         -------
