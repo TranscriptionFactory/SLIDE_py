@@ -190,13 +190,7 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
             **kwargs
         )
     else:
-        # Deprecation warnings only apply to Python backend
-        if thresh_fdr != 0.2:
-            warnings.warn(
-                "thresh_fdr parameter is deprecated (Python backend). It has no effect.",
-                DeprecationWarning,
-                stacklevel=2
-            )
+        # outpath is only used by R backend
         if outpath != '.':
             warnings.warn(
                 "outpath parameter is deprecated (Python backend). It has no effect.",
@@ -221,7 +215,8 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
             q=q,
             exact=exact,
             max_pure=max_pure,
-            nfolds=nfolds
+            nfolds=nfolds,
+            thresh_fdr=thresh_fdr
         )
 
     return result
