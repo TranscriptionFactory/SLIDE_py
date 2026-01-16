@@ -123,6 +123,12 @@ class SLIDE_Estimator(Estimator):
         n_interactions = min(n_interactions, len(non_interaction_terms))
         n_marginals = min(n_marginals, len(non_marginal_terms))
 
+        # Skip random comparison if not enough non-significant terms to sample
+        if n_marginals == 0:
+            scores['full_random'] = np.array([np.nan])
+            scores['partial_random'] = np.array([np.nan])
+            return scores
+
         for _ in range(n_iters):
             # Get random marginal terms
             s1_random = latent_factors.loc[:, np.random.choice(

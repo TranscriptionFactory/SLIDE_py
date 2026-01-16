@@ -16,7 +16,7 @@ y_path: /ix/djishnu/Aaron/0_for_others/Crystal/SLIDE/Scleroderma_Control/Sclerod
 # -----------------------------------------------------------------------------
 # Output Settings
 # -----------------------------------------------------------------------------
-out_path: /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/outputs/SSc_binary_comparison
+out_path: /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/SSc_binary_comparison/
 
 # -----------------------------------------------------------------------------
 # SLIDE Parameters - Grid Search

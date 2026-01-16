@@ -2,11 +2,10 @@
 #SBATCH -t 8:00:00
 #SBATCH --job-name=slide_compare
 #SBATCH --mail-user=aar126@pitt.edu
-#SBATCH --mail-type=FAIL,END
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --mem=75G
-#SBATCH --cpus-per-task=4
+#SBATCH --mem=50G
+#SBATCH --cpus-per-task=2
 #SBATCH --array=0-4
 #SBATCH --output=logs/comparison_%A_%a.out
 #SBATCH --error=logs/comparison_%A_%a.err
@@ -27,30 +26,36 @@
 #   sbatch run_comparison.sh <yaml_config>
 #   sbatch run_comparison.sh comparison_config.yaml
 
-
 # sbatch <<'EOF'
 # #!/bin/bash
-# #SBATCH -t 24:00:00
+# #SBATCH -t 00:05:00
 # #SBATCH --job-name=submit_compare
-# #SBATCH --mem=5G
+# #SBATCH --mem=1G
 # #SBATCH --cpus-per-task=1
+# #SBATCH --output=submit_comparison_%j.out
 
 # cd /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison
 
+# # Common output directory
+# OUTPUT_DIR="/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison"
+# CONTINUOUS_OUT="${OUTPUT_DIR}/SSc_continuous_comparison"
+# BINARY_OUT="${OUTPUT_DIR}/SSc_binary_comparison"
+
+# # Submit array jobs
 # JOB1=$(sbatch --parsable run_comparison.sh comparison_config_continuous.yaml)
 # JOB2=$(sbatch --parsable run_comparison.sh comparison_config_binary.yaml)
 
 # echo "Submitted continuous comparison: $JOB1"
 # echo "Submitted binary comparison: $JOB2"
 
-# sbatch --dependency=afterok:${JOB1}_0:${JOB1}_1:${JOB1}_2:${JOB1}_3:${JOB1}_4 run_report.sh /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/outputs/SSc_continuous_comparison
-# sbatch --dependency=afterok:${JOB2}_0:${JOB2}_1:${JOB2}_2:${JOB2}_3:${JOB2}_4 run_report.sh /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/outputs/SSc_binary_comparison
+# # Queue reports with dependencies
+# sbatch --dependency=afterany:$JOB1 run_report.sh "$CONTINUOUS_OUT" >> "$CONTINUOUS_OUT/report_submission.log"
+# sbatch --dependency=afterany:$JOB2 run_report.sh "$BINARY_OUT" >> "$BINARY_OUT/report_submission.log"
 
 # echo "Reports queued with dependencies"
 # EOF
-
 # =============================================================================
-
+# rm -r logs/*
 mkdir -p logs/
 set -e  # Exit on error
 
@@ -67,8 +72,7 @@ fi
 
 # Parse output paths from YAML
 OUT_PATH=$(grep "^out_path:" "$YAML_CONFIG" | sed 's/out_path: *//' | tr -d '"'"'" | xargs)
-# OUT_PATH="${OUT_PATH:-$SCRIPT_DIR/outputs}"
-OUT_PATH='/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/updated_outputs'
+OUT_PATH="${OUT_PATH:-$SCRIPT_DIR/outputs}"  # fallback if not in YAML
 
 # Create base output directory
 mkdir -p "$OUT_PATH"

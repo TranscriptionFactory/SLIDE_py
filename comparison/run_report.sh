@@ -2,7 +2,6 @@
 #SBATCH -t 1:00:00
 #SBATCH --job-name=slide_report
 #SBATCH --mail-user=aar126@pitt.edu
-#SBATCH --mail-type=FAIL,END
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --mem=8G
@@ -110,10 +109,13 @@ for i in "${!TASK_NAMES[@]}"; do
             echo "    Subdirectories:"
             ls -d "$TASK_OUT"/*_out 2>/dev/null | while read -r dir; do
                 COMBO=$(basename "$dir")
-                # Check for key output files
-                HAS_A=$([ -f "$dir/A.csv" ] && echo "A" || echo "-")
-                HAS_Z=$([ -f "$dir/z_matrix.csv" ] && echo "Z" || echo "-")
-                HAS_LF=$([ -f "$dir/sig_LFs.txt" ] && echo "LF" || echo "-")
+                # Check for key output files (Python: .csv/.txt, R: .rds)
+                # A matrix: Python=A.csv, R=AllLatentFactors.rds
+                HAS_A=$([ -f "$dir/A.csv" ] || [ -f "$dir/AllLatentFactors.rds" ] && echo "A" || echo "-")
+                # Z matrix: Python=z_matrix.csv, R=feature_list_Z*.txt files
+                HAS_Z=$([ -f "$dir/z_matrix.csv" ] || ls "$dir"/feature_list_Z*.txt &>/dev/null && echo "Z" || echo "-")
+                # Significant LFs: Python=sig_LFs.txt, R=SLIDE_LFs.rds
+                HAS_LF=$([ -f "$dir/sig_LFs.txt" ] || [ -f "$dir/SLIDE_LFs.rds" ] && echo "LF" || echo "-")
                 printf "      %-20s [%s %s %s]\n" "$COMBO" "$HAS_A" "$HAS_Z" "$HAS_LF"
             done
         fi
@@ -154,11 +156,18 @@ if [ "$COMPLETED" -ge 2 ]; then
 
             for i in "${!TASK_NAMES[@]}"; do
                 TASK_NAME="${TASK_NAMES[$i]}"
-                LF_FILE="${OUT_PATH}/${TASK_NAME}/${COMBO}/sig_LFs.txt"
+                TASK_DIR="${OUT_PATH}/${TASK_NAME}/${COMBO}"
+                LF_FILE="${TASK_DIR}/sig_LFs.txt"
 
                 if [ -f "$LF_FILE" ]; then
+                    # Python output: read from sig_LFs.txt
                     NUM_LFS=$(wc -l < "$LF_FILE" 2>/dev/null || echo 0)
                     LFS=$(cat "$LF_FILE" 2>/dev/null | tr '\n' ' ' | head -c 50)
+                    printf "    %-20s: %d LFs [%s]\n" "$TASK_NAME" "$NUM_LFS" "$LFS"
+                elif ls "$TASK_DIR"/feature_list_Z*.txt &>/dev/null 2>&1; then
+                    # R output: extract LF names from feature_list_Z*.txt filenames
+                    LFS=$(ls "$TASK_DIR"/feature_list_Z*.txt 2>/dev/null | xargs -n1 basename | sed 's/feature_list_//' | sed 's/\.txt//' | tr '\n' ' ')
+                    NUM_LFS=$(echo "$LFS" | wc -w)
                     printf "    %-20s: %d LFs [%s]\n" "$TASK_NAME" "$NUM_LFS" "$LFS"
                 else
                     printf "    %-20s: (no results)\n" "$TASK_NAME"
