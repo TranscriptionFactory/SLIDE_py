@@ -114,16 +114,50 @@ class Knockoffs():
         return sig_idxs
 
     @staticmethod
-    def filter_knockoffs_iterative_python(z, y, fdr=0.1, niter=1, spec=0.2, **kwargs):
-        """Run knockoff filter using pure Python package."""
+    def filter_knockoffs_iterative_python(z, y, fdr=0.1, niter=1, spec=0.2,
+                                          method='asdp', shrink=False, **kwargs):
+        """Run knockoff filter using pure Python package.
+
+        Parameters
+        ----------
+        z : np.ndarray
+            Feature matrix.
+        y : np.ndarray
+            Response vector.
+        fdr : float
+            Target false discovery rate.
+        niter : int
+            Number of knockoff iterations.
+        spec : float
+            Proportion threshold for selection frequency.
+        method : str
+            Knockoff construction method: 'asdp' (default), 'sdp', or 'equi'.
+            - 'asdp': Approximate SDP, faster for high-dimensional data
+            - 'sdp': Full semidefinite programming, more power but may fail
+            - 'equi': Equicorrelated, always works but lower power
+        shrink : bool
+            Whether to use Ledoit-Wolf covariance shrinkage.
+        **kwargs
+            Additional keyword arguments (ignored).
+
+        Returns
+        -------
+        np.ndarray
+            Indices of selected variables.
+        """
         if KNOCKOFF_PYTHON_PATH not in sys.path:
             sys.path.insert(0, KNOCKOFF_PYTHON_PATH)
 
         from knockoff import knockoff_filter
+        from knockoff.create import create_second_order
+
+        # Create knockoff generator with specified parameters
+        def knockoff_generator(X):
+            return create_second_order(X, method=method, shrink=shrink)
 
         results = []
         for _ in range(niter):
-            result = knockoff_filter(z, y.flatten(), fdr=fdr)
+            result = knockoff_filter(z, y.flatten(), fdr=fdr, knockoffs=knockoff_generator)
             if len(result.selected) > 0:
                 results.extend(result.selected.tolist())
 
@@ -137,7 +171,8 @@ class Knockoffs():
         return sig_idxs
 
     @staticmethod
-    def filter_knockoffs_iterative(z, y, fdr=0.1, niter=1, spec=0.2, n_workers=1, backend='r'):
+    def filter_knockoffs_iterative(z, y, fdr=0.1, niter=1, spec=0.2, n_workers=1, backend='r',
+                                   method='asdp', shrink=False):
         """
         Run knockoff filter to find significant variables.
 
@@ -157,6 +192,10 @@ class Knockoffs():
             Number of parallel workers (unused currently).
         backend : str
             Which knockoff implementation: 'r' (default) or 'python'.
+        method : str
+            Knockoff construction method (Python backend only): 'asdp' (default), 'sdp', or 'equi'.
+        shrink : bool
+            Whether to use Ledoit-Wolf covariance shrinkage (Python backend only).
 
         Returns
         -------
@@ -164,7 +203,8 @@ class Knockoffs():
             Indices of selected variables.
         """
         if backend == 'python':
-            return Knockoffs.filter_knockoffs_iterative_python(z, y, fdr=fdr, niter=niter, spec=spec)
+            return Knockoffs.filter_knockoffs_iterative_python(
+                z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink)
         else:
             return Knockoffs.filter_knockoffs_iterative_r(z, y, fdr=fdr, niter=niter, spec=spec)
     
@@ -179,7 +219,8 @@ class Knockoffs():
 
 
     @staticmethod
-    def select_short_freq(z, y, spec=0.3, fdr=0.1, niter=1000, f_size=100, n_workers=1, backend='r'):
+    def select_short_freq(z, y, spec=0.3, fdr=0.1, niter=1000, f_size=100, n_workers=1, backend='r',
+                          method='asdp', shrink=False):
         """
         Find significant variables using second order knockoffs across subsets of features.
 
@@ -201,6 +242,10 @@ class Knockoffs():
             Number of parallel workers
         backend : str
             Which knockoff implementation: 'r' (default) or 'python'.
+        method : str
+            Knockoff construction method (Python backend only): 'asdp' (default), 'sdp', or 'equi'.
+        shrink : bool
+            Whether to use Ledoit-Wolf covariance shrinkage (Python backend only).
 
         Returns
         -------
@@ -231,7 +276,8 @@ class Knockoffs():
             subset_z = z[:, start:stop]
 
             selected_indices = Knockoffs.filter_knockoffs_iterative(
-                subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers, backend=backend
+                subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers, backend=backend,
+                method=method, shrink=shrink
             )
 
             selected_indices = selected_indices + start
@@ -244,7 +290,8 @@ class Knockoffs():
         if n_splits > 1 and len(screen_var) > 1:
             subset_z = z[:, screen_var]
             final_var = Knockoffs.filter_knockoffs_iterative(
-                subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers, backend=backend
+                subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers, backend=backend,
+                method=method, shrink=shrink
             )
             final_var = screen_var[final_var]
         else:
