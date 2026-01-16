@@ -18,6 +18,21 @@ Options:
     --param COMBO       Only compare specific parameter combination
     --output FILE       Write report to file (default: <output_path>/full_comparison_report.txt)
     --no-file           Only print to stdout, don't write file
+    --impl-path NAME=PATH   Override implementation path (can be repeated)
+                            e.g., --impl-path R_native=/path/to/previous/R_native
+
+Examples:
+    # Basic usage
+    python compare_full.py /path/to/outputs
+
+    # Reuse R_native from a previous run
+    python compare_full.py /path/to/new_outputs \\
+        --impl-path R_native=/path/to/old_outputs/R_native
+
+    # Multiple overrides
+    python compare_full.py /path/to/outputs \\
+        --impl-path R_native=/old/R_native \\
+        --impl-path Py_rLOVE_rKO=/other/Py_rLOVE_rKO
 """
 
 import argparse
@@ -274,10 +289,12 @@ class FullComparisonPipeline:
     """Chain numerical validation and latent factor analysis."""
 
     def __init__(self, output_path: Path, tolerance: float = 1e-4,
-                 detailed: bool = False, **kwargs):
+                 detailed: bool = False, path_overrides: Optional[dict] = None,
+                 **kwargs):
         self.output_path = Path(output_path)
         self.tolerance = tolerance
         self.detailed = detailed
+        self.path_overrides = path_overrides or {}
 
         # Initialize components
         self.numerical = NumericalComparator(tolerance=tolerance, detailed=detailed)
@@ -287,7 +304,12 @@ class FullComparisonPipeline:
         self.summary = ReportSummary()
 
     def discover_implementations(self) -> dict:
-        """Discover available implementations."""
+        """Discover available implementations.
+
+        Path overrides take precedence over auto-discovery. This allows
+        reusing outputs from previous runs (e.g., R_native which is slow
+        but deterministic).
+        """
         available = {}
         known_patterns = [
             "R_native", "R_outputs",
@@ -295,7 +317,19 @@ class FullComparisonPipeline:
             "Py_pyLOVE_rKO", "Py_pyLOVE_knockpy", "Py_pyLOVE_pyKO",
         ]
 
+        # First, apply path overrides
+        for name, override_path in self.path_overrides.items():
+            override_path = Path(override_path)
+            if override_path.is_dir():
+                available[name] = override_path
+                logger.info(f"  Using override for {name}: {override_path}")
+            else:
+                logger.warning(f"  Override path not found for {name}: {override_path}")
+
+        # Then discover from output_path (skip if already overridden)
         for pattern in known_patterns:
+            if pattern in available:
+                continue  # Already overridden
             impl_path = self.output_path / pattern
             if impl_path.is_dir():
                 available[pattern] = impl_path
@@ -337,6 +371,11 @@ class FullComparisonPipeline:
         logger.info(f"Output path: {self.output_path}")
         logger.info(f"Tolerance: {self.tolerance}")
         logger.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        if self.path_overrides:
+            logger.info("")
+            logger.info("Path overrides:")
+            for name, path in self.path_overrides.items():
+                logger.info(f"  {name}: {path}")
         logger.info("=" * 70)
 
     def run_numerical_comparison(self, param_filter: Optional[str] = None):
@@ -536,6 +575,16 @@ def setup_file_logging(output_file: Path):
     return file_handler
 
 
+def parse_impl_path(value: str) -> tuple:
+    """Parse NAME=PATH argument into (name, path) tuple."""
+    if '=' not in value:
+        raise argparse.ArgumentTypeError(
+            f"Invalid format: '{value}'. Expected NAME=PATH (e.g., R_native=/path/to/dir)"
+        )
+    name, path = value.split('=', 1)
+    return name.strip(), Path(path.strip())
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Full SLIDE Comparison Pipeline',
@@ -554,12 +603,22 @@ def main():
                         help='Output file (default: <output_path>/full_comparison_report.txt)')
     parser.add_argument('--no-file', action='store_true',
                         help='Do not write to file')
+    parser.add_argument('--impl-path', type=parse_impl_path, action='append',
+                        dest='impl_paths', metavar='NAME=PATH',
+                        help='Override implementation path (can be repeated). '
+                             'e.g., --impl-path R_native=/path/to/previous/R_native')
 
     args = parser.parse_args()
 
     if not args.output_path.is_dir():
         logger.error(f"Output path not found: {args.output_path}")
         return 1
+
+    # Build path_overrides dict from --impl-path arguments
+    path_overrides = {}
+    if args.impl_paths:
+        for name, path in args.impl_paths:
+            path_overrides[name] = path
 
     # Set up file output
     file_handler = None
@@ -572,6 +631,7 @@ def main():
         output_path=args.output_path,
         tolerance=args.tolerance,
         detailed=args.detailed,
+        path_overrides=path_overrides,
     )
 
     pipeline.run(param_filter=args.param)
