@@ -2,11 +2,12 @@ import numpy as np
 import pandas as pd
 from collections import defaultdict
 
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, r2_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from tqdm import tqdm
 from sklearn.linear_model import LinearRegression, LogisticRegression
+from scipy.stats import pearsonr
 from .knockoffs import Knockoffs
 
 
@@ -14,31 +15,40 @@ class Estimator():
     def __init__(self, model='linear', scaler='standard'):
         if model == 'linear':
             self.model = LinearRegression()
+            self.is_classifier = False
         elif model == 'logistic':
             self.model = LogisticRegression()
+            self.is_classifier = True
         else:
             raise ValueError(f"Invalid model: {model}")
-        
+
         self.scaler = scaler
-    
+
     def fit(self, X, y):
         return self.model.fit(X, y)
-    
+
     def predict(self, X):
         return self.model.predict(X)
-    
+
     def train_test_split(self, X, y, test_size=0.2, seed=1334):
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=test_size, random_state=seed)
         return X_train, X_test, y_train, y_test
 
     def score(self, yhat, y):
-        yhat = [1 if i >= 0.5 else 0 for i in yhat]
-        if len(np.unique(y)) == 1:
-            print('All same class')
-            return None
-        auc = roc_auc_score(y, yhat)
-        return auc
+        if self.is_classifier:
+            # Classification: use AUC
+            yhat = [1 if i >= 0.5 else 0 for i in yhat]
+            if len(np.unique(y)) == 1:
+                print('All same class')
+                return None
+            return roc_auc_score(y, yhat)
+        else:
+            # Regression: use correlation
+            if len(y) < 3:
+                return None
+            corr, _ = pearsonr(np.array(yhat).flatten(), np.array(y).flatten())
+            return corr
 
     @staticmethod
     def scale_features(X, scaler, feature_range=(-1, 1)):
