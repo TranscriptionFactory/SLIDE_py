@@ -79,6 +79,38 @@ read_r_metric() {
     fi
 }
 
+# Find equivalent parameter directory handling R vs Python naming differences
+# R uses: 0.05_1_out, Python uses: 0.05_1.0_out
+# Usage: find_param_dir <base_path> <combo_name>
+# Returns: actual directory path if found, empty otherwise
+find_param_dir() {
+    local BASE="$1"
+    local COMBO="$2"
+    local DIR="${BASE}/${COMBO}"
+
+    # Try exact match first
+    if [ -d "$DIR" ]; then
+        echo "$DIR"
+        return
+    fi
+
+    # Try converting integer to decimal: 0.05_1_out -> 0.05_1.0_out
+    local ALT_COMBO=$(echo "$COMBO" | sed -E 's/_([0-9]+)_out$/_\1.0_out/')
+    DIR="${BASE}/${ALT_COMBO}"
+    if [ -d "$DIR" ]; then
+        echo "$DIR"
+        return
+    fi
+
+    # Try converting decimal to integer: 0.05_1.0_out -> 0.05_1_out
+    ALT_COMBO=$(echo "$COMBO" | sed -E 's/_([0-9]+)\.0_out$/_\1_out/')
+    DIR="${BASE}/${ALT_COMBO}"
+    if [ -d "$DIR" ]; then
+        echo "$DIR"
+        return
+    fi
+}
+
 echo "=============================================================="
 echo "SLIDE 5-Way Comparison Report"
 echo "=============================================================="
@@ -188,7 +220,14 @@ if [ "$COMPLETED" -ge 2 ]; then
 
             for i in "${!TASK_NAMES[@]}"; do
                 TASK_NAME="${TASK_NAMES[$i]}"
-                TASK_DIR="${OUT_PATH}/${TASK_NAME}/${COMBO}"
+                TASK_BASE="${OUT_PATH}/${TASK_NAME}"
+                TASK_DIR=$(find_param_dir "$TASK_BASE" "$COMBO")
+
+                # Skip if no matching directory found
+                if [ -z "$TASK_DIR" ]; then
+                    printf "    %-20s: (no results)\n" "$TASK_NAME"
+                    continue
+                fi
 
                 if [ "$TASK_NAME" = "R_native" ]; then
                     # R output: extract from RDS via performance_metrics.csv
