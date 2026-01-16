@@ -3,16 +3,17 @@
 Python script to run SLIDE on input data and compare with R outputs.
 
 Usage:
-    python run_slide_py.py <yaml_path> [out_path] [--love-backend python|r]
+    python run_slide_py.py <yaml_path> [out_path] [--love-backend python|r] [--knockoff-backend python|r]
 
 Arguments:
-    yaml_path           Path to YAML config file
-    out_path            Optional output path override
-    --love-backend      Which LOVE implementation to use: 'python' (default) or 'r'
+    yaml_path             Path to YAML config file
+    out_path              Optional output path override
+    --love-backend        Which LOVE implementation: 'python' (default) or 'r'
+    --knockoff-backend    Which knockoff implementation: 'r' (default) or 'python'
 
 Examples:
     python run_slide_py.py config.yaml
-    python run_slide_py.py config.yaml /path/to/outputs --love-backend r
+    python run_slide_py.py config.yaml /path/to/outputs --love-backend r --knockoff-backend python
 """
 
 import argparse
@@ -33,6 +34,8 @@ def parse_args():
     parser.add_argument('out_path', nargs='?', default=None, help='Output path override')
     parser.add_argument('--love-backend', dest='love_backend', choices=['python', 'r'],
                         default='python', help='LOVE implementation: python (default) or r')
+    parser.add_argument('--knockoff-backend', dest='knockoff_backend', choices=['python', 'r'],
+                        default='r', help='Knockoff implementation: r (default) or python')
     return parser.parse_args()
 
 
@@ -47,12 +50,14 @@ def main():
     out_path = args.out_path if args.out_path else params.get('out_path')
     params['out_path'] = out_path
 
-    # Set love_backend from CLI argument
+    # Set backends from CLI arguments
     love_backend = args.love_backend
-    params['love_backend'] = love_backend
+    knockoff_backend = args.knockoff_backend
 
     print("=" * 60)
-    print(f"SLIDE Python Analysis (LOVE backend: {love_backend})")
+    print(f"SLIDE Python Analysis")
+    print(f"  LOVE backend: {love_backend}")
+    print(f"  Knockoff backend: {knockoff_backend}")
     print("=" * 60)
     print(f"YAML config: {args.yaml_path}")
     print(f"Output path: {out_path}")
@@ -60,7 +65,6 @@ def main():
     print(f"Y path: {params.get('y_path')}")
     print(f"Delta: {params.get('delta')}")
     print(f"Lambda: {params.get('lambda')}")
-    print(f"LOVE backend: {love_backend}")
     print("=" * 60)
 
     # Create output directory
@@ -87,6 +91,7 @@ def main():
         'n_workers': params.get('n_workers', 2),
         'spec': params.get('spec', 0.1),
         'love_backend': love_backend,
+        'knockoff_backend': knockoff_backend,
         # Handle delta/lambda - can be single value or list
         'delta': params.get('delta') if isinstance(params.get('delta'), list) else [params.get('delta', 0.1)],
         'lambda': params.get('lambda') if isinstance(params.get('lambda'), list) else [params.get('lambda', 0.5)],
@@ -112,7 +117,7 @@ def main():
 
     print()
     print("=" * 60)
-    print(f"Python SLIDE ({love_backend} LOVE) completed in {t_end - t_start:.2f} seconds")
+    print(f"Python SLIDE (LOVE={love_backend}, Knockoff={knockoff_backend}) completed in {t_end - t_start:.2f} seconds")
     print(f"Outputs saved to: {out_path}")
     print("=" * 60)
 

@@ -7,26 +7,25 @@
 #SBATCH --ntasks=1
 #SBATCH --mem=75G
 #SBATCH --cpus-per-task=4
-#SBATCH --array=0-2
+#SBATCH --array=0-4
 #SBATCH --output=logs/comparison_%A_%a.out
 #SBATCH --error=logs/comparison_%A_%a.err
 
 # =============================================================================
-# SLIDE 3-Way Comparison Script (Array Job Version)
+# SLIDE 5-Way Comparison Script (Array Job Version)
 # =============================================================================
-# Compares LOVE implementations across R and Python backends.
+# Compares LOVE and Knockoff implementations across R and Python backends.
 #
 # Array tasks:
 #   0 = R SLIDE (native R package - R LOVE + R knockoffs)
-#   1 = Python SLIDE with R LOVE backend
-#   2 = Python SLIDE with Python LOVE backend
+#   1 = Python SLIDE (R LOVE + R Knockoffs)
+#   2 = Python SLIDE (R LOVE + Py Knockoffs)
+#   3 = Python SLIDE (Py LOVE + R Knockoffs)
+#   4 = Python SLIDE (Py LOVE + Py Knockoffs)
 #
 # Usage:
 #   sbatch run_comparison.sh <yaml_config>
 #   sbatch run_comparison.sh comparison_config.yaml
-#
-# The YAML config should contain:
-#   x_path, y_path, out_path, delta, lambda, spec, fdr, etc.
 # =============================================================================
 
 mkdir -p logs/
@@ -53,19 +52,19 @@ mkdir -p "$OUT_PATH"
 # Load modules
 module load gcc/12.2.0
 module load python/ondemand-jupyter-python3.11
-module load r/4.4.0  # Needed for all tasks (R native, and rpy2 for Python)
+module load r/4.4.0  # Needed for all tasks
 
 # Python environment
 PYTHON_ENV="${PYTHON_ENV:-/ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python}"
 
 # -----------------------------------------------------------------------------
-# Print configuration
+# Task configuration
 # -----------------------------------------------------------------------------
-TASK_NAMES=("R_native" "Py_R_LOVE" "Py_Py_LOVE")
+TASK_NAMES=("R_native" "Py_rLOVE_rKO" "Py_rLOVE_pyKO" "Py_pyLOVE_rKO" "Py_pyLOVE_pyKO")
 TASK_ID="${SLURM_ARRAY_TASK_ID:-0}"
 
 echo "=============================================================="
-echo "SLIDE 3-Way Comparison"
+echo "SLIDE 5-Way Comparison"
 echo "=============================================================="
 echo "Task ID: ${TASK_ID} (${TASK_NAMES[$TASK_ID]})"
 echo "Job ID: ${SLURM_ARRAY_JOB_ID:-N/A}"
@@ -88,47 +87,76 @@ if [ "$TASK_ID" -eq 0 ]; then
     echo "Running R SLIDE (Native R Implementation)"
     echo "=============================================================="
 
-    R_OUT="${OUT_PATH}/R_native"
-    mkdir -p "$R_OUT"
+    TASK_OUT="${OUT_PATH}/R_native"
+    mkdir -p "$TASK_OUT"
 
-    Rscript run_slide_R.R "$YAML_CONFIG" "$R_OUT"
+    Rscript run_slide_R.R "$YAML_CONFIG" "$TASK_OUT"
 
-    touch "${OUT_PATH}/.r_native_complete"
-    echo "R native outputs saved to: $R_OUT"
+    touch "${OUT_PATH}/.task0_complete"
 
 elif [ "$TASK_ID" -eq 1 ]; then
     # =========================================================================
-    # Task 1: Python SLIDE with R LOVE backend
+    # Task 1: Python (R LOVE + R Knockoffs)
     # =========================================================================
     echo ""
     echo "=============================================================="
-    echo "Running Python SLIDE with R LOVE Backend"
+    echo "Running Python SLIDE (R LOVE + R Knockoffs)"
     echo "=============================================================="
 
-    PY_R_OUT="${OUT_PATH}/Py_R_LOVE"
-    mkdir -p "$PY_R_OUT"
+    TASK_OUT="${OUT_PATH}/Py_rLOVE_rKO"
+    mkdir -p "$TASK_OUT"
 
-    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$PY_R_OUT" --love-backend r
+    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$TASK_OUT" --love-backend r --knockoff-backend r
 
-    touch "${OUT_PATH}/.py_r_love_complete"
-    echo "Python (R LOVE) outputs saved to: $PY_R_OUT"
+    touch "${OUT_PATH}/.task1_complete"
 
 elif [ "$TASK_ID" -eq 2 ]; then
     # =========================================================================
-    # Task 2: Python SLIDE with Python LOVE backend
+    # Task 2: Python (R LOVE + Python Knockoffs)
     # =========================================================================
     echo ""
     echo "=============================================================="
-    echo "Running Python SLIDE with Python LOVE Backend"
+    echo "Running Python SLIDE (R LOVE + Python Knockoffs)"
     echo "=============================================================="
 
-    PY_PY_OUT="${OUT_PATH}/Py_Py_LOVE"
-    mkdir -p "$PY_PY_OUT"
+    TASK_OUT="${OUT_PATH}/Py_rLOVE_pyKO"
+    mkdir -p "$TASK_OUT"
 
-    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$PY_PY_OUT" --love-backend python
+    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$TASK_OUT" --love-backend r --knockoff-backend python
 
-    touch "${OUT_PATH}/.py_py_love_complete"
-    echo "Python (Python LOVE) outputs saved to: $PY_PY_OUT"
+    touch "${OUT_PATH}/.task2_complete"
+
+elif [ "$TASK_ID" -eq 3 ]; then
+    # =========================================================================
+    # Task 3: Python (Python LOVE + R Knockoffs)
+    # =========================================================================
+    echo ""
+    echo "=============================================================="
+    echo "Running Python SLIDE (Python LOVE + R Knockoffs)"
+    echo "=============================================================="
+
+    TASK_OUT="${OUT_PATH}/Py_pyLOVE_rKO"
+    mkdir -p "$TASK_OUT"
+
+    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$TASK_OUT" --love-backend python --knockoff-backend r
+
+    touch "${OUT_PATH}/.task3_complete"
+
+elif [ "$TASK_ID" -eq 4 ]; then
+    # =========================================================================
+    # Task 4: Python (Python LOVE + Python Knockoffs)
+    # =========================================================================
+    echo ""
+    echo "=============================================================="
+    echo "Running Python SLIDE (Python LOVE + Python Knockoffs)"
+    echo "=============================================================="
+
+    TASK_OUT="${OUT_PATH}/Py_pyLOVE_pyKO"
+    mkdir -p "$TASK_OUT"
+
+    "$PYTHON_ENV" run_slide_py.py "$YAML_CONFIG" "$TASK_OUT" --love-backend python --knockoff-backend python
+
+    touch "${OUT_PATH}/.task4_complete"
 
 fi
 

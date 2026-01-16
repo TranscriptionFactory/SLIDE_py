@@ -1,6 +1,6 @@
-import numpy as np 
-import pandas as pd 
-import os, pickle
+import numpy as np
+import pandas as pd
+import os, pickle, sys
 from concurrent.futures import ProcessPoolExecutor
 import math
 from pqdm.processes import pqdm
@@ -10,7 +10,9 @@ import copy
 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.linear_model import LinearRegression, Lasso
-# from knockpy import KnockoffFilter
+
+# Path to Python knockoffs package
+KNOCKOFF_PYTHON_PATH = '/ix/djishnu/Aaron/1_general_use/knockoff-filter/knockoff-filter'
 
 
 class Knockoffs():
@@ -75,23 +77,19 @@ class Knockoffs():
         assert z_matrix.shape[0] == plm_embedding.shape[0]
         return np.einsum('ij,ik->ijk', z_matrix, plm_embedding)
 
-    @staticmethod 
-    def filter_knockoffs_iterative(z, y, fdr=0.1, niter=1, spec=0.2, n_workers=1):
-        '''
-        @return: mask of 0,1 significant interaction terms where 1 is significant
-        '''
+    @staticmethod
+    def filter_knockoffs_iterative_r(z, y, fdr=0.1, niter=1, spec=0.2, **kwargs):
+        """Run knockoff filter using R package via rpy2."""
         import rpy2.robjects as robjects
         from rpy2.robjects import pandas2ri
         from rpy2.robjects.packages import importr
-        
-        # Convert numpy arrays to R objects
+
         pandas2ri.activate()
         z_r = pandas2ri.py2rpy(pd.DataFrame(z))
         y_r = pandas2ri.py2rpy(pd.Series(y.flatten()))
-        
-        # Import R packages
+
         knockoff = importr('knockoff')
-        
+
         results = []
         for _ in range(niter):
             result = knockoff.knockoff_filter(
@@ -105,13 +103,70 @@ class Knockoffs():
             selected = result.rx2('selected')
             results.append(pandas2ri.rpy2py(selected))
 
+        pandas2ri.deactivate()
+
         results = np.concatenate(results, axis=0)
-        results = results - 1 # Convert to 0-based indexing
+        results = results - 1  # Convert to 0-based indexing
 
         idx, counts = np.unique(results, return_counts=True)
         sig_idxs = idx[np.where(counts >= spec * niter)]
 
         return sig_idxs
+
+    @staticmethod
+    def filter_knockoffs_iterative_python(z, y, fdr=0.1, niter=1, spec=0.2, **kwargs):
+        """Run knockoff filter using pure Python package."""
+        if KNOCKOFF_PYTHON_PATH not in sys.path:
+            sys.path.insert(0, KNOCKOFF_PYTHON_PATH)
+
+        from knockoff import knockoff_filter
+
+        results = []
+        for _ in range(niter):
+            result = knockoff_filter(z, y.flatten(), fdr=fdr)
+            if len(result.selected) > 0:
+                results.extend(result.selected.tolist())
+
+        if len(results) == 0:
+            return np.array([], dtype=int)
+
+        results = np.array(results)
+        idx, counts = np.unique(results, return_counts=True)
+        sig_idxs = idx[np.where(counts >= spec * niter)]
+
+        return sig_idxs
+
+    @staticmethod
+    def filter_knockoffs_iterative(z, y, fdr=0.1, niter=1, spec=0.2, n_workers=1, backend='r'):
+        """
+        Run knockoff filter to find significant variables.
+
+        Parameters
+        ----------
+        z : np.ndarray
+            Feature matrix.
+        y : np.ndarray
+            Response vector.
+        fdr : float
+            Target false discovery rate.
+        niter : int
+            Number of knockoff iterations.
+        spec : float
+            Proportion threshold for selection frequency.
+        n_workers : int
+            Number of parallel workers (unused currently).
+        backend : str
+            Which knockoff implementation: 'r' (default) or 'python'.
+
+        Returns
+        -------
+        np.ndarray
+            Indices of selected variables.
+        """
+        if backend == 'python':
+            return Knockoffs.filter_knockoffs_iterative_python(z, y, fdr=fdr, niter=niter, spec=spec)
+        else:
+            return Knockoffs.filter_knockoffs_iterative_r(z, y, fdr=fdr, niter=niter, spec=spec)
     
     def fit_linear(self, z_matrix, y):
         '''fit z-matrix in linear part to get LP'''
@@ -124,12 +179,12 @@ class Knockoffs():
 
 
     @staticmethod
-    def select_short_freq(z, y, spec=0.3, fdr=0.1, niter=1000, f_size=100, n_workers=1):
+    def select_short_freq(z, y, spec=0.3, fdr=0.1, niter=1000, f_size=100, n_workers=1, backend='r'):
         """
         Find significant variables using second order knockoffs across subsets of features.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         z : np.ndarray or pandas.DataFrame
             Feature matrix of shape (n_samples, n_features)
         y : np.ndarray or pandas.DataFrame
@@ -138,28 +193,26 @@ class Knockoffs():
             Proportion threshold to consider a variable frequently selected
         fdr : float
             Target false discovery rate
-        elbow : bool
-            Whether to use elbow method to select frequent variables
         niter : int
             Number of knockoff iterations
         f_size : int
             Target size for each feature subset
-        parallel : bool
-            Whether to run iterations in parallel
+        n_workers : int
+            Number of parallel workers
+        backend : str
+            Which knockoff implementation: 'r' (default) or 'python'.
 
-        Returns:
-
-        --------
-        list
-            List of selected variable indices
+        Returns
+        -------
+        np.ndarray
+            Array of selected variable indices
         """
-        # Scale the input features
         z = Knockoffs.scale_features(z)
         y = y.copy()
 
         if isinstance(y, pd.Series) or isinstance(y, pd.DataFrame):
             y = y.values
-        
+
         if isinstance(z, pd.DataFrame):
             z = z.values
 
@@ -171,29 +224,29 @@ class Knockoffs():
 
         screen_var = []
 
-        for start, stop in tqdm(zip(feature_starts, feature_stops), 
-                              total=len(feature_starts),
-                              desc="Processing subsets"):
+        for start, stop in tqdm(zip(feature_starts, feature_stops),
+                                total=len(feature_starts),
+                                desc="Processing subsets"):
 
             subset_z = z[:, start:stop]
 
-            # Run knockoffs on this subset
-            selected_indices = Knockoffs.filter_knockoffs_iterative(subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers)
-        
-            # Adjust indices to account for subset
+            selected_indices = Knockoffs.filter_knockoffs_iterative(
+                subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers, backend=backend
+            )
+
             selected_indices = selected_indices + start
-            
+
             if len(selected_indices) > 0:
                 screen_var.extend(selected_indices)
-
-        # Aggregation step if multiple splits
 
         screen_var = np.array(screen_var)
 
         if n_splits > 1 and len(screen_var) > 1:
             subset_z = z[:, screen_var]
-            final_var = Knockoffs.filter_knockoffs_iterative(subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers)
-            final_var = screen_var[final_var] # index the candidate indices to get the final significant indices
+            final_var = Knockoffs.filter_knockoffs_iterative(
+                subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers, backend=backend
+            )
+            final_var = screen_var[final_var]
         else:
             final_var = screen_var
 
