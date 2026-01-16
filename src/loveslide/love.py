@@ -48,16 +48,11 @@ def call_love_r(X, lbd=0.5, delta=None, thresh_fdr=0.2, rep_CV=50,
     # Get path to R scripts
     r_script_dir = os.path.join(os.path.dirname(__file__), 'LOVE-SLIDE')
 
-    # Source all R scripts
+    # Source all R scripts in the LOVE-SLIDE directory
     r_source = robjects.r['source']
-    for script in ['estAI.R', 'estC.R', 'findPureNode.R', 'findRowMax.R',
-                   'findRowMaxInd.R', 'findSignPureNode.R', 'threshSigma.R',
-                   'corrToP.R', 'cvDelta.R', 'estSigmaTJ.R', 'estAJDant.R',
-                   'dantzig.R', 'recoverAI.R', 'makeHeatmap.R',
-                   'getLatentFactors.R']:
-        script_path = os.path.join(r_script_dir, script)
-        if os.path.exists(script_path):
-            r_source(script_path)
+    import glob
+    for script_path in glob.glob(os.path.join(r_script_dir, '*.R')):
+        r_source(script_path)
 
     # Get the R function
     getLatentFactors = robjects.globalenv['getLatentFactors']
