@@ -171,8 +171,42 @@ class Knockoffs():
         return sig_idxs
 
     @staticmethod
+    def _knockoff_threshold(W, fdr, offset=1):
+        """Compute knockoff threshold with configurable offset.
+
+        Parameters
+        ----------
+        W : np.ndarray
+            Knockoff W statistics.
+        fdr : float
+            Target false discovery rate.
+        offset : int
+            0 for original knockoff (more power, controls modified FDR),
+            1 for knockoff+ (conservative, controls FDR).
+
+        Returns
+        -------
+        float
+            Threshold value, or np.inf if no threshold satisfies FDR.
+        """
+        # Get unique positive W values as candidate thresholds (ascending order)
+        W_abs = np.abs(W)
+        candidates = np.sort(W_abs[W_abs > 0])
+
+        # Find minimum threshold that satisfies FDR constraint
+        threshold = np.inf
+        for t in candidates:
+            numerator = offset + np.sum(W <= -t)
+            denominator = max(1, np.sum(W >= t))
+            if numerator / denominator <= fdr:
+                threshold = t
+                break
+        return threshold
+
+    @staticmethod
     def filter_knockoffs_iterative_knockpy(z, y, fdr=0.1, niter=1, spec=0.2,
-                                           method='mvr', shrink=False, **kwargs):
+                                           method='mvr', shrink=False,
+                                           offset=0, **kwargs):
         """Run knockoff filter using knockpy package.
 
         Parameters
@@ -196,6 +230,11 @@ class Knockoffs():
             - 'mmi': Minimize mutual information
         shrink : bool
             Whether to use Ledoit-Wolf covariance shrinkage.
+        offset : int
+            Knockoff procedure offset:
+            - 0: Original knockoff (more power, controls modified FDR)
+            - 1: Knockoff+ (conservative, controls exact FDR)
+            Default is 0 for more power.
         **kwargs
             Additional keyword arguments (ignored).
 
@@ -225,15 +264,25 @@ class Knockoffs():
 
         results = []
         for _ in range(niter):
-            # Run knockoff filter
-            rejections = kfilter.forward(
+            # Run knockoff filter to compute W statistics
+            # We use a dummy fdr since we'll compute threshold ourselves
+            _ = kfilter.forward(
                 X=z,
                 y=y.flatten(),
                 fdr=fdr,
                 shrinkage=shrinkage
             )
-            # rejections is a boolean array
-            selected = np.where(rejections)[0]
+
+            # Compute threshold with custom offset
+            W = kfilter.W
+            threshold = Knockoffs._knockoff_threshold(W, fdr, offset=offset)
+
+            # Select features above threshold
+            if threshold < np.inf:
+                selected = np.where(W >= threshold)[0]
+            else:
+                selected = np.array([], dtype=int)
+
             if len(selected) > 0:
                 results.extend(selected.tolist())
 
@@ -248,7 +297,7 @@ class Knockoffs():
 
     @staticmethod
     def filter_knockoffs_iterative(z, y, fdr=0.1, niter=1, spec=0.2, n_workers=1, backend='r',
-                                   method='asdp', shrink=False):
+                                   method='asdp', shrink=False, offset=0):
         """
         Run knockoff filter to find significant variables.
 
@@ -274,6 +323,10 @@ class Knockoffs():
             - For 'knockpy' backend: 'mvr' (default), 'sdp', 'equicorrelated', 'maxent', 'mmi'
         shrink : bool
             Whether to use Ledoit-Wolf covariance shrinkage (Python/knockpy backends only).
+        offset : int
+            Knockoff procedure offset (knockpy backend only):
+            - 0: Original knockoff (more power, controls modified FDR)
+            - 1: Knockoff+ (conservative, controls exact FDR)
 
         Returns
         -------
@@ -282,7 +335,7 @@ class Knockoffs():
         """
         if backend == 'knockpy':
             return Knockoffs.filter_knockoffs_iterative_knockpy(
-                z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink)
+                z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink, offset=offset)
         elif backend == 'python':
             return Knockoffs.filter_knockoffs_iterative_python(
                 z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink)
