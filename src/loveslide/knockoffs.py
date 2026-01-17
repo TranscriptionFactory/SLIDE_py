@@ -209,6 +209,10 @@ class Knockoffs():
                                            offset=0, **kwargs):
         """Run knockoff filter using knockpy package.
 
+        Uses the 'lsm' (signed maximum of lasso path) feature statistic to match
+        R's knockoff::stat.glmnet_lambdasmax, which computes the lambda value at
+        which each feature first enters the lasso path (Barber & Candes 2015).
+
         Parameters
         ----------
         z : np.ndarray
@@ -256,9 +260,10 @@ class Knockoffs():
         shrinkage = 'ledoitwolf' if shrink else None
 
         # Create knockoff filter
+        # Use 'lsm' (signed max of lasso path) to match R's stat.glmnet_lambdasmax
         kfilter = KnockoffFilter(
             ksampler='gaussian',
-            fstat='lasso',
+            fstat='lsm',
             knockoff_kwargs={'method': kp_method}
         )
 
