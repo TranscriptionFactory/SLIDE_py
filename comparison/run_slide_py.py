@@ -66,6 +66,10 @@ def parse_args():
     parser.add_argument('--knockoff-shrink', dest='knockoff_shrink',
                         action='store_true',
                         help='Use Ledoit-Wolf covariance shrinkage (Python backend only)')
+    parser.add_argument('--fstat', dest='fstat',
+                        choices=['lsm', 'glmnet', 'lasso', 'lcd', 'ols'],
+                        default='lsm',
+                        help='Feature statistic for knockpy: lsm (default), glmnet (matches R), lasso, lcd, ols')
     return parser.parse_args()
 
 
@@ -77,6 +81,7 @@ def main():
     knockoff_backend = args.knockoff_backend
     knockoff_method = args.knockoff_method
     knockoff_shrink = args.knockoff_shrink
+    fstat = args.fstat
 
     # Setup import path based on backends
     setup_loveslide_import(love_backend, knockoff_backend)
@@ -99,6 +104,8 @@ def main():
     if knockoff_backend in ('python', 'knockpy'):
         print(f"  Knockoff method: {knockoff_method}")
         print(f"  Knockoff shrink: {knockoff_shrink}")
+    if knockoff_backend == 'knockpy':
+        print(f"  Feature statistic: {fstat}")
     print("=" * 60)
     print(f"YAML config: {args.yaml_path}")
     print(f"Output path: {out_path}")
@@ -135,6 +142,7 @@ def main():
         'knockoff_backend': knockoff_backend,
         'knockoff_method': knockoff_method,
         'knockoff_shrink': knockoff_shrink,
+        'fstat': fstat,
         # Handle delta/lambda - can be single value or list
         'delta': params.get('delta') if isinstance(params.get('delta'), list) else [params.get('delta', 0.1)],
         'lambda': params.get('lambda') if isinstance(params.get('lambda'), list) else [params.get('lambda', 0.5)],

@@ -452,7 +452,7 @@ class Knockoffs():
 
     @staticmethod
     def select_short_freq(z, y, spec=0.3, fdr=0.1, niter=1000, f_size=100, n_workers=1, backend='r',
-                          method='asdp', shrink=False):
+                          method='asdp', shrink=False, fstat='lsm'):
         """
         Find significant variables using second order knockoffs across subsets of features.
 
@@ -480,6 +480,11 @@ class Knockoffs():
             - For 'knockpy' backend: 'mvr' (default), 'sdp', 'equicorrelated', 'maxent', 'mmi'
         shrink : bool
             Whether to use Ledoit-Wolf covariance shrinkage (Python/knockpy backends only).
+        fstat : str
+            Feature statistic (knockpy backend only):
+            - 'lsm': Signed max of lasso path (default)
+            - 'glmnet': Grid-based lasso (matches R)
+            - 'lasso': Cross-validated lasso
 
         Returns
         -------
@@ -511,7 +516,7 @@ class Knockoffs():
 
             selected_indices = Knockoffs.filter_knockoffs_iterative(
                 subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers, backend=backend,
-                method=method, shrink=shrink
+                method=method, shrink=shrink, fstat=fstat
             )
 
             selected_indices = selected_indices + start
@@ -525,7 +530,7 @@ class Knockoffs():
             subset_z = z[:, screen_var]
             final_var = Knockoffs.filter_knockoffs_iterative(
                 subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers, backend=backend,
-                method=method, shrink=shrink
+                method=method, shrink=shrink, fstat=fstat
             )
             final_var = screen_var[final_var]
         else:
