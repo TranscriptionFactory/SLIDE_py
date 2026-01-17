@@ -200,11 +200,20 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
 
         if verbose:
             print("Using Python LOVE backend")
+
+        # For pure_homo=True, use Dantzig by default to match R LOVE-SLIDE behavior
+        # unless the user explicitly requested a different method
+        actual_est_method = est_non_pure_row
+        if pure_homo and est_non_pure_row == "HT":
+            actual_est_method = "Dantzig"
+            if verbose:
+                print("Note: Using Dantzig for non-pure rows (default for pure_homo=True)")
+
         result = LOVE(
             X=X_array,
             lbd=lbd,
             mu=mu,
-            est_non_pure_row=est_non_pure_row,
+            est_non_pure_row=actual_est_method,
             verbose=verbose,
             pure_homo=pure_homo,
             diagonal=diagonal,
