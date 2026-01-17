@@ -316,6 +316,8 @@ class LatentFactorLoader:
 
             try:
                 df = pd.read_csv(f, sep='\t')
+                # Filter out rows with NaN feature names
+                df = df[df['names'].notna()]
                 features_per_lf[lf_name] = {
                     'features': df['names'].tolist(),
                     'loadings': dict(zip(df['names'], df['A_loading'])),
