@@ -9,7 +9,7 @@ from tqdm import tqdm
 import copy
 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from sklearn.linear_model import LinearRegression, Lasso
+from sklearn.linear_model import LinearRegression, Lasso, lasso_path
 
 # Path to Python knockoffs package
 KNOCKOFF_PYTHON_PATH = '/ix/djishnu/Aaron/1_general_use/knockoff-filter/knockoff-filter'
@@ -171,6 +171,70 @@ class Knockoffs():
         return sig_idxs
 
     @staticmethod
+    def _compute_glmnet_lambdasmax(X, Xk, y, nlambda=100, eps=0.001):
+        """Compute W statistics matching R's stat.glmnet_lambdasmax.
+
+        This implements the signed maximum of lasso path statistic using a
+        grid of lambda values similar to glmnet's default behavior, rather
+        than the exact LARS path used by knockpy's 'lsm' statistic.
+
+        Parameters
+        ----------
+        X : np.ndarray
+            Original feature matrix (n x p).
+        Xk : np.ndarray
+            Knockoff feature matrix (n x p).
+        y : np.ndarray
+            Response vector (n,).
+        nlambda : int
+            Number of lambda values in the grid (default 100, matching glmnet).
+        eps : float
+            Ratio of lambda_min/lambda_max (default 0.001, matching glmnet).
+
+        Returns
+        -------
+        np.ndarray
+            W statistics for each feature (p,).
+        """
+        n, p = X.shape
+        y = y.flatten()
+
+        # Combine X and knockoffs: [X, Xk]
+        X_full = np.hstack([X, Xk])
+
+        # Compute lambda grid (matching glmnet's log-scale grid)
+        # lambda_max is where all coefficients become zero
+        lambda_max = np.max(np.abs(X_full.T @ y)) / n
+        lambda_min = lambda_max * eps
+        lambdas = np.logspace(np.log10(lambda_max), np.log10(lambda_min), nlambda)
+
+        # Compute lasso path using sklearn (matches glmnet coordinate descent)
+        try:
+            _, coef_path, _ = lasso_path(X_full, y, alphas=lambdas, max_iter=10000)
+        except Exception:
+            # Fallback to simpler grid if path computation fails
+            _, coef_path, _ = lasso_path(X_full, y, n_alphas=nlambda, max_iter=10000)
+            lambdas = np.logspace(np.log10(lambda_max), np.log10(lambda_min), coef_path.shape[1])
+
+        # Find entry times (lambda at which each feature first becomes nonzero)
+        Z = np.zeros(p)  # Entry times for original features
+        Z_k = np.zeros(p)  # Entry times for knockoff features
+
+        for j in range(p):
+            # Original feature entry time
+            nonzero = np.where(np.abs(coef_path[j, :]) > 1e-10)[0]
+            Z[j] = lambdas[nonzero[0]] if len(nonzero) > 0 else 0
+
+            # Knockoff feature entry time
+            nonzero_k = np.where(np.abs(coef_path[p + j, :]) > 1e-10)[0]
+            Z_k[j] = lambdas[nonzero_k[0]] if len(nonzero_k) > 0 else 0
+
+        # Compute signed max statistic: W_j = max(Z_j, Z_k_j) * sign(Z_j - Z_k_j)
+        W = np.maximum(Z, Z_k) * np.sign(Z - Z_k)
+
+        return W
+
+    @staticmethod
     def _knockoff_threshold(W, fdr, offset=1):
         """Compute knockoff threshold with configurable offset.
 
@@ -206,12 +270,8 @@ class Knockoffs():
     @staticmethod
     def filter_knockoffs_iterative_knockpy(z, y, fdr=0.1, niter=1, spec=0.2,
                                            method='mvr', shrink=False,
-                                           offset=0, **kwargs):
+                                           offset=0, fstat='lsm', **kwargs):
         """Run knockoff filter using knockpy package.
-
-        Uses the 'lsm' (signed maximum of lasso path) feature statistic to match
-        R's knockoff::stat.glmnet_lambdasmax, which computes the lambda value at
-        which each feature first enters the lasso path (Barber & Candes 2015).
 
         Parameters
         ----------
@@ -239,6 +299,14 @@ class Knockoffs():
             - 0: Original knockoff (more power, controls modified FDR)
             - 1: Knockoff+ (conservative, controls exact FDR)
             Default is 0 for more power.
+        fstat : str
+            Feature statistic method:
+            - 'lsm': Signed maximum of lasso path (uses knockpy's lars_path)
+            - 'glmnet': Grid-based lasso path (matches R's stat.glmnet_lambdasmax)
+            - 'lasso': Cross-validated lasso coefficient differences
+            - 'lcd': Lasso coefficient differences (no CV)
+            - 'ols': OLS coefficient differences
+            Default is 'lsm' to match R SLIDE.
         **kwargs
             Additional keyword arguments (ignored).
 
@@ -248,6 +316,7 @@ class Knockoffs():
             Indices of selected variables.
         """
         from knockpy import KnockoffFilter
+        from knockpy.knockoffs import GaussianSampler
 
         # Map method names for compatibility
         method_map = {
@@ -259,34 +328,51 @@ class Knockoffs():
         # Configure shrinkage
         shrinkage = 'ledoitwolf' if shrink else None
 
+        # Handle custom 'glmnet' fstat
+        use_glmnet_stat = (fstat == 'glmnet')
+        kp_fstat = 'lsm' if use_glmnet_stat else fstat
+
         # Create knockoff filter
-        # Use 'lsm' (signed max of lasso path) to match R's stat.glmnet_lambdasmax
         kfilter = KnockoffFilter(
             ksampler='gaussian',
-            fstat='lsm',
+            fstat=kp_fstat,
             knockoff_kwargs={'method': kp_method}
         )
 
         results = []
         for _ in range(niter):
-            # Run knockoff filter to compute W statistics
-            # We use a dummy fdr since we'll compute threshold ourselves
-            _ = kfilter.forward(
-                X=z,
-                y=y.flatten(),
-                fdr=fdr,
-                shrinkage=shrinkage
-            )
+            if use_glmnet_stat:
+                # Use custom glmnet-equivalent statistic
+                # First, generate knockoffs using knockpy's sampler
+                ksampler = GaussianSampler(
+                    X=z,
+                    method=kp_method,
+                    shrinkage=shrinkage
+                )
+                Xk = ksampler.sample_knockoffs()
 
-            # Compute threshold with custom offset
-            W = kfilter.W
-            threshold = Knockoffs._knockoff_threshold(W, fdr, offset=offset)
+                # Compute W using our glmnet-equivalent method
+                W = Knockoffs._compute_glmnet_lambdasmax(z, Xk, y)
 
-            # Select features above threshold
-            if threshold < np.inf:
-                selected = np.where(W >= threshold)[0]
+                # Compute threshold and select
+                threshold = Knockoffs._knockoff_threshold(W, fdr, offset=offset)
+                if threshold < np.inf:
+                    selected = np.where(W >= threshold)[0]
+                else:
+                    selected = np.array([], dtype=int)
             else:
-                selected = np.array([], dtype=int)
+                # Use knockpy's built-in fstat
+                rejections = kfilter.forward(
+                    X=z,
+                    y=y.flatten(),
+                    fdr=fdr,
+                    shrinkage=shrinkage
+                )
+
+                # Use knockpy's built-in selection with specified offset
+                # This uses the data-dependent threshold from Barber & Candes (2015)
+                selected_mask = kfilter.make_selections(fdr=fdr, offset=offset)
+                selected = np.where(selected_mask)[0]
 
             if len(selected) > 0:
                 results.extend(selected.tolist())
@@ -302,7 +388,7 @@ class Knockoffs():
 
     @staticmethod
     def filter_knockoffs_iterative(z, y, fdr=0.1, niter=1, spec=0.2, n_workers=1, backend='r',
-                                   method='asdp', shrink=False, offset=0):
+                                   method='asdp', shrink=False, offset=0, fstat='lsm'):
         """
         Run knockoff filter to find significant variables.
 
@@ -332,6 +418,13 @@ class Knockoffs():
             Knockoff procedure offset (knockpy backend only):
             - 0: Original knockoff (more power, controls modified FDR)
             - 1: Knockoff+ (conservative, controls exact FDR)
+        fstat : str
+            Feature statistic method (knockpy backend only):
+            - 'lsm': Signed maximum of lasso path (default)
+            - 'glmnet': Grid-based lasso path (matches R's stat.glmnet_lambdasmax)
+            - 'lasso': Cross-validated lasso
+            - 'lcd': Lasso coefficient differences
+            - 'ols': OLS coefficient differences
 
         Returns
         -------
@@ -340,7 +433,7 @@ class Knockoffs():
         """
         if backend == 'knockpy':
             return Knockoffs.filter_knockoffs_iterative_knockpy(
-                z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink, offset=offset)
+                z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink, offset=offset, fstat=fstat)
         elif backend == 'python':
             return Knockoffs.filter_knockoffs_iterative_python(
                 z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink)
