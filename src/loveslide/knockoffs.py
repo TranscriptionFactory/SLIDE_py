@@ -344,11 +344,14 @@ class Knockoffs():
             if use_glmnet_stat:
                 # Use custom glmnet-equivalent statistic
                 # First, generate knockoffs using knockpy's sampler
-                ksampler = GaussianSampler(
-                    X=z,
-                    method=kp_method,
-                    shrinkage=shrinkage
-                )
+                # Note: GaussianSampler doesn't accept shrinkage directly,
+                # so we compute covariance with shrinkage first if needed
+                sampler_kwargs = {'X': z, 'method': kp_method}
+                if shrinkage:
+                    from sklearn.covariance import LedoitWolf
+                    lw = LedoitWolf().fit(z)
+                    sampler_kwargs['Sigma'] = lw.covariance_
+                ksampler = GaussianSampler(**sampler_kwargs)
                 Xk = ksampler.sample_knockoffs()
 
                 # Compute W using our glmnet-equivalent method
