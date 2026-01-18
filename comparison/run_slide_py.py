@@ -14,12 +14,17 @@ Arguments:
                           - python backend: 'asdp' (default), 'sdp', 'equi'
                           - knockpy backend: 'mvr' (default), 'sdp', 'equicorrelated', 'maxent', 'mmi'
     --knockoff-shrink     Use Ledoit-Wolf covariance shrinkage (Python/knockpy backends)
+    --knockoff-offset     Knockoff offset: 0 (default, like R) or 1 (knockoff+)
+    --fstat               Feature statistic method for knockoff filter
 
 Examples:
     # Default: Python LOVE, R knockoffs
     python run_slide_py.py config.yaml
 
-    # knockpy knockoffs with mvr method (recommended - uses DSDP solver like R)
+    # Pure Python knockoffs (recommended for matching R)
+    python run_slide_py.py config.yaml --knockoff-backend python
+
+    # knockpy knockoffs with mvr method
     python run_slide_py.py config.yaml --knockoff-backend knockpy --knockoff-method mvr
 
     # Python knockoffs with equicorrelated method (avoids SDP failures)
@@ -66,10 +71,15 @@ def parse_args():
     parser.add_argument('--knockoff-shrink', dest='knockoff_shrink',
                         action='store_true',
                         help='Use Ledoit-Wolf covariance shrinkage (Python backend only)')
+    parser.add_argument('--knockoff-offset', dest='knockoff_offset',
+                        type=int, choices=[0, 1], default=0,
+                        help='Knockoff offset: 0 (default, like R, more power) or 1 (knockoff+, conservative)')
     parser.add_argument('--fstat', dest='fstat',
-                        choices=['lsm', 'glmnet', 'lasso', 'lcd', 'ols'],
-                        default='lsm',
-                        help='Feature statistic for knockpy: lsm (default), glmnet (matches R), lasso, lcd, ols')
+                        choices=['glmnet_lambdasmax', 'glmnet_lambdadiff', 'glmnet_coefdiff',
+                                 'lsm', 'glmnet', 'lasso', 'lcd', 'ols'],
+                        default='glmnet_lambdasmax',
+                        help='Feature statistic. For python backend: glmnet_lambdasmax (default, matches R), '
+                             'glmnet_lambdadiff, glmnet_coefdiff. For knockpy: lsm, glmnet, lasso, lcd, ols')
     return parser.parse_args()
 
 
@@ -81,6 +91,7 @@ def main():
     knockoff_backend = args.knockoff_backend
     knockoff_method = args.knockoff_method
     knockoff_shrink = args.knockoff_shrink
+    knockoff_offset = args.knockoff_offset
     fstat = args.fstat
 
     # Setup import path based on backends
@@ -104,7 +115,7 @@ def main():
     if knockoff_backend in ('python', 'knockpy'):
         print(f"  Knockoff method: {knockoff_method}")
         print(f"  Knockoff shrink: {knockoff_shrink}")
-    if knockoff_backend == 'knockpy':
+        print(f"  Knockoff offset: {knockoff_offset}")
         print(f"  Feature statistic: {fstat}")
     print("=" * 60)
     print(f"YAML config: {args.yaml_path}")
@@ -142,6 +153,7 @@ def main():
         'knockoff_backend': knockoff_backend,
         'knockoff_method': knockoff_method,
         'knockoff_shrink': knockoff_shrink,
+        'knockoff_offset': knockoff_offset,
         'fstat': fstat,
         # Handle delta/lambda - can be single value or list
         'delta': params.get('delta') if isinstance(params.get('delta'), list) else [params.get('delta', 0.1)],
