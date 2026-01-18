@@ -171,12 +171,15 @@ class Knockoffs():
         return sig_idxs
 
     @staticmethod
-    def _compute_glmnet_lambdasmax(X, Xk, y, nlambda=100, eps=0.001):
+    def _compute_glmnet_lambdasmax(X, Xk, y, nlambda=500, eps=0.0005):
         """Compute W statistics matching R's stat.glmnet_lambdasmax.
 
         This implements the signed maximum of lasso path statistic using a
         grid of lambda values similar to glmnet's default behavior, rather
         than the exact LARS path used by knockpy's 'lsm' statistic.
+
+        Includes the random swap symmetrization from R's implementation to
+        ensure unbiased W statistics.
 
         Parameters
         ----------
@@ -187,9 +190,9 @@ class Knockoffs():
         y : np.ndarray
             Response vector (n,).
         nlambda : int
-            Number of lambda values in the grid (default 100, matching glmnet).
+            Number of lambda values in the grid (default 500, matching glmnet).
         eps : float
-            Ratio of lambda_min/lambda_max (default 0.001, matching glmnet).
+            Ratio of lambda_min/lambda_max (default 0.0005, matching glmnet's 1/2000).
 
         Returns
         -------
@@ -199,8 +202,14 @@ class Knockoffs():
         n, p = X.shape
         y = y.flatten()
 
-        # Combine X and knockoffs: [X, Xk]
-        X_full = np.hstack([X, Xk])
+        # Random swap for symmetry (matching R's stat.glmnet_lambdasmax)
+        # This ensures W statistics are unbiased w.r.t. the ordering of X vs Xk
+        swap = np.random.binomial(1, 0.5, size=p)
+        X_swap = X * (1 - swap) + Xk * swap
+        Xk_swap = X * swap + Xk * (1 - swap)
+
+        # Combine swapped X and knockoffs: [X_swap, Xk_swap]
+        X_full = np.hstack([X_swap, Xk_swap])
 
         # Compute lambda grid (matching glmnet's log-scale grid)
         # lambda_max is where all coefficients become zero
@@ -221,16 +230,19 @@ class Knockoffs():
         Z_k = np.zeros(p)  # Entry times for knockoff features
 
         for j in range(p):
-            # Original feature entry time
+            # Original feature entry time (multiply by n to match R's glmnet behavior)
             nonzero = np.where(np.abs(coef_path[j, :]) > 1e-10)[0]
-            Z[j] = lambdas[nonzero[0]] if len(nonzero) > 0 else 0
+            Z[j] = lambdas[nonzero[0]] * n if len(nonzero) > 0 else 0
 
-            # Knockoff feature entry time
+            # Knockoff feature entry time (multiply by n to match R's glmnet behavior)
             nonzero_k = np.where(np.abs(coef_path[p + j, :]) > 1e-10)[0]
-            Z_k[j] = lambdas[nonzero_k[0]] if len(nonzero_k) > 0 else 0
+            Z_k[j] = lambdas[nonzero_k[0]] * n if len(nonzero_k) > 0 else 0
 
         # Compute signed max statistic: W_j = max(Z_j, Z_k_j) * sign(Z_j - Z_k_j)
         W = np.maximum(Z, Z_k) * np.sign(Z - Z_k)
+
+        # Adjust signs based on swap (matching R's behavior)
+        W = W * (1 - 2 * swap)
 
         return W
 
