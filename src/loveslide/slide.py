@@ -292,7 +292,7 @@ class OptimizeSLIDE(SLIDE):
     
     def find_standalone_LFs(self, latent_factors, spec, fdr, niter, f_size, n_workers=1,
                             knockoff_backend='r', knockoff_method='asdp', knockoff_shrink=False,
-                            fstat='lsm'):
+                            knockoff_offset=0, fstat='glmnet_lambdasmax'):
 
         machop = Knockoffs(y=self.data.Y.values, z2=latent_factors.values)
 
@@ -307,6 +307,7 @@ class OptimizeSLIDE(SLIDE):
             backend=knockoff_backend,
             method=knockoff_method,
             shrink=knockoff_shrink,
+            offset=knockoff_offset,
             fstat=fstat
         )
 
@@ -315,7 +316,7 @@ class OptimizeSLIDE(SLIDE):
 
     def find_interaction_LFs(self, machop, spec, fdr, niter, f_size, n_workers=1,
                              knockoff_backend='r', knockoff_method='asdp', knockoff_shrink=False,
-                             fstat='lsm'):
+                             knockoff_offset=0, fstat='glmnet_lambdasmax'):
 
         machop.add_z1(marginal_idxs=self.marginal_idxs)
 
@@ -340,6 +341,7 @@ class OptimizeSLIDE(SLIDE):
             backend=knockoff_backend,
             method=knockoff_method,
             shrink=knockoff_shrink,
+            offset=knockoff_offset,
             fstat=fstat
         )
 
@@ -360,7 +362,7 @@ class OptimizeSLIDE(SLIDE):
 
     def run_SLIDE(self, latent_factors, niter, spec, fdr, verbose=False, n_workers=1, outpath='.',
                    do_interacts=True, knockoff_backend='r', knockoff_method='asdp', knockoff_shrink=False,
-                   fstat='lsm'):
+                   knockoff_offset=0, fstat='glmnet_lambdasmax'):
 
         f_size = self.calc_default_fsize(latent_factors.shape[1])
 
@@ -370,8 +372,8 @@ class OptimizeSLIDE(SLIDE):
             if knockoff_backend in ('python', 'knockpy'):
                 print(f'Knockoff method: {knockoff_method}')
                 print(f'Knockoff shrink: {knockoff_shrink}')
-            if knockoff_backend == 'knockpy':
-                print(f'Feature statistic: {fstat}')
+                print(f'Knockoff offset: {knockoff_offset}')
+            print(f'Feature statistic: {fstat}')
             print(f'Finding standalone LF...')
 
         ### Find standalone LFs
@@ -379,6 +381,7 @@ class OptimizeSLIDE(SLIDE):
                                           knockoff_backend=knockoff_backend,
                                           knockoff_method=knockoff_method,
                                           knockoff_shrink=knockoff_shrink,
+                                          knockoff_offset=knockoff_offset,
                                           fstat=fstat)
 
         if len(self.marginal_idxs) == 0:
@@ -404,6 +407,7 @@ class OptimizeSLIDE(SLIDE):
                                       knockoff_backend=knockoff_backend,
                                       knockoff_method=knockoff_method,
                                       knockoff_shrink=knockoff_shrink,
+                                      knockoff_offset=knockoff_offset,
                                       fstat=fstat)
 
             if verbose:
@@ -484,7 +488,8 @@ class OptimizeSLIDE(SLIDE):
                     knockoff_backend=self.input_params.get('knockoff_backend', 'r'),
                     knockoff_method=self.input_params.get('knockoff_method', 'asdp'),
                     knockoff_shrink=self.input_params.get('knockoff_shrink', False),
-                    fstat=self.input_params.get('fstat', 'lsm')
+                    knockoff_offset=self.input_params.get('knockoff_offset', 0),
+                    fstat=self.input_params.get('fstat', 'glmnet_lambdasmax')
                 )
 
                 if verbose:

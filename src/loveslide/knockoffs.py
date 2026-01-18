@@ -115,7 +115,8 @@ class Knockoffs():
 
     @staticmethod
     def filter_knockoffs_iterative_python(z, y, fdr=0.1, niter=1, spec=0.2,
-                                          method='asdp', shrink=False, **kwargs):
+                                          method='asdp', shrink=False, offset=0,
+                                          fstat='glmnet_lambdasmax', **kwargs):
         """Run knockoff filter using pure Python package.
 
         Parameters
@@ -137,6 +138,15 @@ class Knockoffs():
             - 'equi': Equicorrelated, always works but lower power
         shrink : bool
             Whether to use Ledoit-Wolf covariance shrinkage.
+        offset : int
+            Knockoff procedure offset:
+            - 0: Original knockoff (more power, controls modified FDR) - R default
+            - 1: Knockoff+ (conservative, controls exact FDR)
+        fstat : str
+            Feature statistic method:
+            - 'glmnet_lambdasmax': Signed max of glmnet lasso path (matches R's stat.glmnet_lambdasmax)
+            - 'glmnet_lambdadiff': Lambda difference statistic
+            - 'glmnet_coefdiff': Coefficient difference at CV-selected lambda
         **kwargs
             Additional keyword arguments (ignored).
 
@@ -150,6 +160,15 @@ class Knockoffs():
 
         from knockoff import knockoff_filter
         from knockoff.create import create_second_order
+        from knockoff.stats import stat_glmnet_lambdasmax, stat_glmnet_lambdadiff, stat_glmnet_coefdiff
+
+        # Map fstat names to functions
+        fstat_map = {
+            'glmnet_lambdasmax': stat_glmnet_lambdasmax,
+            'glmnet_lambdadiff': stat_glmnet_lambdadiff,
+            'glmnet_coefdiff': stat_glmnet_coefdiff,
+        }
+        statistic = fstat_map.get(fstat, stat_glmnet_lambdasmax)
 
         # Create knockoff generator with specified parameters
         def knockoff_generator(X):
@@ -157,7 +176,13 @@ class Knockoffs():
 
         results = []
         for _ in range(niter):
-            result = knockoff_filter(z, y.flatten(), fdr=fdr, knockoffs=knockoff_generator)
+            result = knockoff_filter(
+                z, y.flatten(),
+                fdr=fdr,
+                knockoffs=knockoff_generator,
+                statistic=statistic,
+                offset=offset
+            )
             if len(result.selected) > 0:
                 results.extend(result.selected.tolist())
 
@@ -403,7 +428,7 @@ class Knockoffs():
 
     @staticmethod
     def filter_knockoffs_iterative(z, y, fdr=0.1, niter=1, spec=0.2, n_workers=1, backend='r',
-                                   method='asdp', shrink=False, offset=0, fstat='lsm'):
+                                   method='asdp', shrink=False, offset=0, fstat='glmnet_lambdasmax'):
         """
         Run knockoff filter to find significant variables.
 
@@ -430,16 +455,13 @@ class Knockoffs():
         shrink : bool
             Whether to use Ledoit-Wolf covariance shrinkage (Python/knockpy backends only).
         offset : int
-            Knockoff procedure offset (knockpy backend only):
-            - 0: Original knockoff (more power, controls modified FDR)
+            Knockoff procedure offset:
+            - 0: Original knockoff (more power, controls modified FDR) - R default
             - 1: Knockoff+ (conservative, controls exact FDR)
         fstat : str
-            Feature statistic method (knockpy backend only):
-            - 'lsm': Signed maximum of lasso path (default)
-            - 'glmnet': Grid-based lasso path (matches R's stat.glmnet_lambdasmax)
-            - 'lasso': Cross-validated lasso
-            - 'lcd': Lasso coefficient differences
-            - 'ols': OLS coefficient differences
+            Feature statistic method:
+            - For 'python' backend: 'glmnet_lambdasmax' (default), 'glmnet_lambdadiff', 'glmnet_coefdiff'
+            - For 'knockpy' backend: 'lsm', 'glmnet', 'lasso', 'lcd', 'ols'
 
         Returns
         -------
@@ -451,7 +473,7 @@ class Knockoffs():
                 z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink, offset=offset, fstat=fstat)
         elif backend == 'python':
             return Knockoffs.filter_knockoffs_iterative_python(
-                z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink)
+                z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink, offset=offset, fstat=fstat)
         else:
             return Knockoffs.filter_knockoffs_iterative_r(z, y, fdr=fdr, niter=niter, spec=spec)
     
@@ -467,7 +489,7 @@ class Knockoffs():
 
     @staticmethod
     def select_short_freq(z, y, spec=0.3, fdr=0.1, niter=1000, f_size=100, n_workers=1, backend='r',
-                          method='asdp', shrink=False, fstat='lsm'):
+                          method='asdp', shrink=False, offset=0, fstat='glmnet_lambdasmax'):
         """
         Find significant variables using second order knockoffs across subsets of features.
 
@@ -495,11 +517,14 @@ class Knockoffs():
             - For 'knockpy' backend: 'mvr' (default), 'sdp', 'equicorrelated', 'maxent', 'mmi'
         shrink : bool
             Whether to use Ledoit-Wolf covariance shrinkage (Python/knockpy backends only).
+        offset : int
+            Knockoff procedure offset:
+            - 0: Original knockoff (more power, controls modified FDR) - R default
+            - 1: Knockoff+ (conservative, controls exact FDR)
         fstat : str
-            Feature statistic (knockpy backend only):
-            - 'lsm': Signed max of lasso path (default)
-            - 'glmnet': Grid-based lasso (matches R)
-            - 'lasso': Cross-validated lasso
+            Feature statistic method:
+            - For 'python' backend: 'glmnet_lambdasmax' (default), 'glmnet_lambdadiff', 'glmnet_coefdiff'
+            - For 'knockpy' backend: 'lsm', 'glmnet', 'lasso', 'lcd', 'ols'
 
         Returns
         -------
@@ -531,7 +556,7 @@ class Knockoffs():
 
             selected_indices = Knockoffs.filter_knockoffs_iterative(
                 subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers, backend=backend,
-                method=method, shrink=shrink, fstat=fstat
+                method=method, shrink=shrink, offset=offset, fstat=fstat
             )
 
             selected_indices = selected_indices + start
@@ -545,7 +570,7 @@ class Knockoffs():
             subset_z = z[:, screen_var]
             final_var = Knockoffs.filter_knockoffs_iterative(
                 subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers, backend=backend,
-                method=method, shrink=shrink, fstat=fstat
+                method=method, shrink=shrink, offset=offset, fstat=fstat
             )
             final_var = screen_var[final_var]
         else:
