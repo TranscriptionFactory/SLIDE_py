@@ -1,0 +1,49 @@
+# =============================================================================
+# SLIDE R vs Python Comparison - Binary Classification (Scleroderma vs Control)
+# =============================================================================
+# This config matches R's FDR=0.1 threshold for fair comparison
+#
+# Usage:
+#   sbatch run_comparison.sh comparison_config_binary_fdr01.yaml
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Data Paths
+# -----------------------------------------------------------------------------
+x_path: /ix/djishnu/Aaron/0_for_others/Crystal/SLIDE/Scleroderma_Control/Scleroderma_Control_x_filtered.csv
+y_path: /ix/djishnu/Aaron/0_for_others/Crystal/SLIDE/Scleroderma_Control/Scleroderma_Control_y.csv
+
+# -----------------------------------------------------------------------------
+# Output Settings
+# -----------------------------------------------------------------------------
+out_path: /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/SSc_binary_comparison/
+
+# -----------------------------------------------------------------------------
+# SLIDE Parameters - Grid Search
+# -----------------------------------------------------------------------------
+delta:
+  - 0.05
+  - 0.1
+  - 0.2
+
+lambda:
+  - 0.1
+  - 0.5
+  - 1.0
+
+# Knockoff parameters - MATCHING R's FDR=0.1
+spec: 0.1
+fdr: 0.1
+SLIDE_iter: 500
+thresh_fdr: 0.1
+eval_type: auc  # Binary classification uses AUC
+
+# -----------------------------------------------------------------------------
+# Model Settings
+# -----------------------------------------------------------------------------
+y_factor: true   # Y is categorical (binary)
+do_interacts: true
+pure_homo: true
+SLIDE_top_feats: 10
+sampleCV_iter: 500
+n_workers: 4

@@ -76,10 +76,13 @@ def parse_args():
                         help='Knockoff offset: 0 (default, like R, more power) or 1 (knockoff+, conservative)')
     parser.add_argument('--fstat', dest='fstat',
                         choices=['glmnet_lambdasmax', 'glmnet_lambdadiff', 'glmnet_coefdiff',
+                                 'lasso_lambdasmax', 'lasso_lambdadiff', 'lasso_coefdiff',
+                                 'sqrt_lasso', 'stability', 'random_forest',
                                  'lsm', 'glmnet', 'lasso', 'lcd', 'ols'],
                         default='glmnet_lambdasmax',
                         help='Feature statistic. For python backend: glmnet_lambdasmax (default, matches R), '
-                             'glmnet_lambdadiff, glmnet_coefdiff. For knockpy: lsm, glmnet, lasso, lcd, ols')
+                             'glmnet_lambdadiff, glmnet_coefdiff, sqrt_lasso (sklearn), stability (sklearn), '
+                             'random_forest (sklearn). For knockpy: lsm, glmnet, lasso, lcd, ols')
     parser.add_argument('--y-flip', dest='y_flip',
                         action='store_true',
                         help='Flip Y encoding (0<->1) to match R convention for correlation signs')

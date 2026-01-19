@@ -213,15 +213,30 @@ class Knockoffs():
         if KNOCKOFF_PYTHON_PATH not in sys.path:
             sys.path.insert(0, KNOCKOFF_PYTHON_PATH)
 
-        from knockoff.stats import stat_glmnet_lambdasmax, stat_glmnet_lambdadiff, stat_glmnet_coefdiff
+        from knockoff.stats import (
+            stat_glmnet_lambdasmax, stat_glmnet_lambdadiff, stat_glmnet_coefdiff,
+            stat_sqrt_lasso, stat_stability_selection, stat_random_forest,
+            stat_lasso_lambdasmax, stat_lasso_lambdadiff, stat_lasso_coefdiff,
+        )
         from knockoff.solve import create_solve_equi, create_solve_sdp, create_solve_asdp
         from knockoff.utils import is_posdef
 
         # Map fstat names to functions
+        # GLMNet-based (uses vendored Fortran glmnet, faster)
+        # sklearn-based alternatives available for comparison
         fstat_map = {
+            # GLMNet-based (default, matches R)
             'glmnet_lambdasmax': stat_glmnet_lambdasmax,
             'glmnet_lambdadiff': stat_glmnet_lambdadiff,
             'glmnet_coefdiff': stat_glmnet_coefdiff,
+            # Lasso-based (wrapper around glmnet with family='gaussian')
+            'lasso_lambdasmax': stat_lasso_lambdasmax,
+            'lasso_lambdadiff': stat_lasso_lambdadiff,
+            'lasso_coefdiff': stat_lasso_coefdiff,
+            # sklearn-based alternatives
+            'sqrt_lasso': stat_sqrt_lasso,  # Uses sklearn's lasso_path
+            'stability': stat_stability_selection,  # Uses sklearn's LassoCV
+            'random_forest': stat_random_forest,  # Uses sklearn's RandomForest
         }
         statistic = fstat_map.get(fstat, stat_glmnet_lambdasmax)
 
