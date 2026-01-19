@@ -378,6 +378,68 @@ class LatentFactorLoader:
             raise ValueError(f"Invalid LF name: {name}")
         return int(match.group(1))
 
+    def get_lf_base_index(self, impl_data: dict) -> int:
+        """Determine the base index (0 or 1) used by an implementation.
+
+        R uses 1-based indexing (Z1, Z2, ...), Python uses 0-based (Z0, Z1, ...).
+        Returns 0 if 0-based, 1 if 1-based.
+        """
+        # Check if this is an R implementation
+        if impl_data.get('type') == 'r':
+            return 1  # R uses 1-based indexing
+
+        # Check column names in Z or A matrix
+        for matrix_key in ['Z', 'A']:
+            matrix = impl_data.get(matrix_key)
+            if matrix is not None and hasattr(matrix, 'columns'):
+                cols = list(matrix.columns)
+                if cols:
+                    # Check if Z0 exists (0-based) or starts with Z1 (1-based)
+                    if 'Z0' in cols:
+                        return 0
+                    elif 'Z1' in cols and 'Z0' not in cols:
+                        return 1
+
+        # Check sig_LFs
+        sig_lfs = impl_data.get('sig_LFs', [])
+        if sig_lfs:
+            lf_nums = [int(re.match(r'Z(\d+)', lf).group(1)) for lf in sig_lfs if re.match(r'Z(\d+)', lf)]
+            if lf_nums:
+                min_lf = min(lf_nums)
+                return 0 if min_lf == 0 else 1
+
+        # Default to 0-based (Python convention)
+        return 0
+
+    def normalize_lf_to_index(self, lf_name: str, base_index: int) -> int:
+        """Convert LF name to 0-based internal index.
+
+        Args:
+            lf_name: LF name like 'Z15' or 'Z16'
+            base_index: 0 if implementation uses 0-based, 1 if 1-based
+
+        Returns:
+            0-based internal index
+        """
+        match = re.match(r'Z(\d+)', lf_name)
+        if not match:
+            raise ValueError(f"Invalid LF name: {lf_name}")
+        lf_num = int(match.group(1))
+        # Convert to 0-based: if 1-based (R), subtract 1; if 0-based (Python), keep as is
+        return lf_num - base_index
+
+    def index_to_lf_name(self, index: int, base_index: int) -> str:
+        """Convert 0-based internal index back to LF name.
+
+        Args:
+            index: 0-based internal index
+            base_index: 0 if implementation uses 0-based, 1 if 1-based
+
+        Returns:
+            LF name like 'Z15' (for Python) or 'Z16' (for R)
+        """
+        return f"Z{index + base_index}"
+
 
 # =============================================================================
 # Latent Factor Matching
@@ -387,7 +449,7 @@ class LatentFactorMatcher:
     """Match corresponding LFs across implementations based on feature overlap or correlation."""
 
     def __init__(self, **kwargs):
-        pass
+        self.loader = LatentFactorLoader()
 
     def jaccard_similarity(self, set1: set, set2: set) -> float:
         """Compute Jaccard index between two feature sets."""
@@ -530,11 +592,18 @@ class LatentFactorComparator:
     def compare_implementations(self, impl1: dict, impl2: dict,
                                  name1: str, name2: str) -> dict:
         """Compare two implementations and return metrics."""
+        # Detect indexing base for each implementation
+        base1 = self.loader.get_lf_base_index(impl1)
+        base2 = self.loader.get_lf_base_index(impl2)
+
         results = {
             'impl1': name1,
             'impl2': name2,
             'lf_count1': len(impl1.get('sig_LFs', [])),
             'lf_count2': len(impl2.get('sig_LFs', [])),
+            'base_index1': base1,
+            'base_index2': base2,
+            'index_offset': base1 - base2,  # +1 means impl1 uses higher numbers for same LF
         }
 
         # Feature-based matching
@@ -564,7 +633,96 @@ class LatentFactorComparator:
         else:
             results['mean_z_corr'] = 0.0
 
+        # Check if matches follow expected indexing offset pattern
+        if feat_match['matches'] and base1 != base2:
+            results['index_consistency'] = self._check_index_consistency(
+                feat_match['matches'], base1, base2
+            )
+        else:
+            results['index_consistency'] = None
+
+        # Compute exact LF overlap (by index, accounting for naming offset)
+        results['exact_overlap'] = self.compute_exact_lf_overlap(impl1, impl2)
+
         return results
+
+    def _check_index_consistency(self, matches: list, base1: int, base2: int) -> dict:
+        """Check if matched LFs follow the expected indexing offset pattern.
+
+        When comparing R (1-indexed) to Python (0-indexed), we expect:
+        R's Z16 <-> Python's Z15 (same underlying LF at index 15)
+        """
+        expected_offset = base1 - base2  # e.g., R(1) - Python(0) = +1
+        consistent = 0
+        inconsistent = 0
+        offset_violations = []
+
+        for lf1, lf2, sim in matches:
+            # Extract numeric parts
+            num1 = int(re.match(r'Z(\d+)', lf1).group(1))
+            num2 = int(re.match(r'Z(\d+)', lf2).group(1))
+            actual_offset = num1 - num2
+
+            if actual_offset == expected_offset:
+                consistent += 1
+            else:
+                inconsistent += 1
+                offset_violations.append((lf1, lf2, actual_offset, expected_offset))
+
+        return {
+            'expected_offset': expected_offset,
+            'consistent': consistent,
+            'inconsistent': inconsistent,
+            'violations': offset_violations[:5],  # First 5 violations
+            'all_consistent': inconsistent == 0,
+        }
+
+    def compute_exact_lf_overlap(self, impl1: dict, impl2: dict) -> dict:
+        """Compute exact LF overlap accounting for indexing offset.
+
+        This checks if the same underlying LFs (by index) were selected,
+        regardless of naming convention (Z15 vs Z16 for the same LF).
+
+        Returns:
+            dict with overlap statistics
+        """
+        sig1 = impl1.get('sig_LFs', [])
+        sig2 = impl2.get('sig_LFs', [])
+
+        if not sig1 or not sig2:
+            return {'overlap': 0, 'only_in_1': [], 'only_in_2': [], 'common': []}
+
+        # Get base indices
+        base1 = self.loader.get_lf_base_index(impl1)
+        base2 = self.loader.get_lf_base_index(impl2)
+
+        # Convert to 0-based internal indices
+        def to_index(lf_name, base):
+            match = re.match(r'Z(\d+)', lf_name)
+            if match:
+                return int(match.group(1)) - base
+            return None
+
+        indices1 = set(to_index(lf, base1) for lf in sig1 if to_index(lf, base1) is not None)
+        indices2 = set(to_index(lf, base2) for lf in sig2 if to_index(lf, base2) is not None)
+
+        common_indices = indices1 & indices2
+        only1_indices = indices1 - indices2
+        only2_indices = indices2 - indices1
+
+        # Convert back to names for reporting (using impl1's convention for common)
+        def to_name(idx, base):
+            return f"Z{idx + base}"
+
+        return {
+            'overlap': len(common_indices),
+            'total_unique': len(indices1 | indices2),
+            'jaccard': len(common_indices) / len(indices1 | indices2) if (indices1 | indices2) else 0.0,
+            'common': sorted([to_name(i, base1) for i in common_indices], key=lambda x: int(x[1:])),
+            'common_indices': sorted(common_indices),
+            'only_in_1': sorted([to_name(i, base1) for i in only1_indices], key=lambda x: int(x[1:])),
+            'only_in_2': sorted([to_name(i, base2) for i in only2_indices], key=lambda x: int(x[1:])),
+        }
 
     def _compare_z_matrices(self, impl1: dict, impl2: dict,
                              matches: list) -> dict:
@@ -599,11 +757,36 @@ class LatentFactorComparator:
         lines = []
         lines.append(f"\n{results['impl1']} <-> {results['impl2']}")
         lines.append("-" * 50)
+
+        # Show indexing information if there's an offset
+        index_offset = results.get('index_offset', 0)
+        if index_offset != 0:
+            base1 = results.get('base_index1', 0)
+            base2 = results.get('base_index2', 0)
+            base1_str = "1-indexed" if base1 == 1 else "0-indexed"
+            base2_str = "1-indexed" if base2 == 1 else "0-indexed"
+            lines.append(f"  Indexing: {results['impl1']} ({base1_str}) vs {results['impl2']} ({base2_str})")
+            lines.append(f"  Note: LF names offset by {abs(index_offset)} (same LF has different names)")
+
         lines.append(f"  LF counts: {results['lf_count1']} vs {results['lf_count2']}")
+
+        # Show exact overlap (accounting for indexing offset)
+        exact = results.get('exact_overlap', {})
+        if exact:
+            overlap = exact.get('overlap', 0)
+            total = exact.get('total_unique', 0)
+            jaccard = exact.get('jaccard', 0)
+            if total > 0:
+                lines.append(f"  Exact LF overlap (by index): {overlap}/{total} ({jaccard:.1%})")
+                if exact.get('common'):
+                    common_str = ', '.join(exact['common'][:8])
+                    if len(exact['common']) > 8:
+                        common_str += f", ... (+{len(exact['common']) - 8} more)"
+                    lines.append(f"    Common LFs: {common_str}")
 
         feat_match = results['feature_matches']
         n_matched = len(feat_match['matches'])
-        lines.append(f"  Matched LFs: {n_matched}")
+        lines.append(f"  Content-matched LFs: {n_matched}")
 
         if results['mean_jaccard'] > 0:
             lines.append(f"  Mean Jaccard (feature overlap): {results['mean_jaccard']:.3f}")
@@ -612,12 +795,31 @@ class LatentFactorComparator:
         if results['mean_z_corr'] > 0:
             lines.append(f"  Mean Z correlation: {results['mean_z_corr']:.3f}")
 
+        # Show index consistency check results
+        idx_check = results.get('index_consistency')
+        if idx_check is not None:
+            if idx_check['all_consistent']:
+                lines.append(f"  Index offset verification: PASS ({idx_check['consistent']}/{idx_check['consistent']} matches follow expected offset)")
+            else:
+                lines.append(f"  Index offset verification: {idx_check['consistent']} consistent, {idx_check['inconsistent']} inconsistent")
+                if idx_check['violations']:
+                    lines.append("  Offset violations (may indicate content-based matches across different LFs):")
+                    for lf1, lf2, actual, expected in idx_check['violations'][:3]:
+                        lines.append(f"    {lf1} <-> {lf2}: offset={actual}, expected={expected}")
+
         if self.detailed and feat_match['matches']:
             lines.append("\n  Matched pairs:")
             for lf1, lf2, sim in feat_match['matches'][:10]:  # Top 10
                 z_key = f"{lf1}<->{lf2}"
                 z_corr = results['z_correlations'].get(z_key, float('nan'))
-                lines.append(f"    {lf1:>6} <-> {lf2:<6}  Jaccard={sim:.3f}  Z_corr={z_corr:.3f}")
+                # Show normalized index for clarity when there's an offset
+                if index_offset != 0:
+                    idx1 = int(re.match(r'Z(\d+)', lf1).group(1)) - results.get('base_index1', 0)
+                    idx2 = int(re.match(r'Z(\d+)', lf2).group(1)) - results.get('base_index2', 0)
+                    same_lf = " (same LF)" if idx1 == idx2 else ""
+                    lines.append(f"    {lf1:>6} <-> {lf2:<6}  Jaccard={sim:.3f}  Z_corr={z_corr:.3f}{same_lf}")
+                else:
+                    lines.append(f"    {lf1:>6} <-> {lf2:<6}  Jaccard={sim:.3f}  Z_corr={z_corr:.3f}")
 
         if feat_match['unmatched1']:
             lines.append(f"\n  Unique to {results['impl1']}: {', '.join(feat_match['unmatched1'][:5])}")
