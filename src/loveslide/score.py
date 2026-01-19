@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 from collections import defaultdict
+from typing import Optional
 
 from sklearn.metrics import roc_auc_score, r2_score
 from sklearn.model_selection import train_test_split
@@ -12,35 +15,67 @@ from .knockoffs import Knockoffs
 
 
 class Estimator():
-    def __init__(self, model='linear', scaler='standard'):
-        if model == 'linear':
-            self.model = LinearRegression()
-            self.is_classifier = False
-        elif model == 'logistic':
-            self.model = LogisticRegression()
-            self.is_classifier = True
-        else:
-            raise ValueError(f"Invalid model: {model}")
+    def __init__(self, model: str = 'auto', scaler: str = 'standard', **kwargs):
+        """Initialize estimator with automatic model selection for binary Y.
 
+        Args:
+            model: Model type - 'auto' (detect from Y), 'linear', or 'logistic'
+            scaler: Scaler type - 'standard' or 'minmax'
+            **kwargs: Additional arguments for forward compatibility
+        """
+        self.model_type = model
+        self.model = None
+        self.is_classifier = None
         self.scaler = scaler
 
-    def fit(self, X, y):
+    def _init_model(self, y: np.ndarray) -> None:
+        """Initialize model based on Y values (auto-detect binary vs continuous)."""
+        if self.model is not None:
+            return  # Already initialized
+
+        y_flat = np.array(y).flatten()
+        n_unique = len(np.unique(y_flat))
+
+        if self.model_type == 'auto':
+            # Auto-detect: use logistic for binary, linear for continuous
+            if n_unique == 2:
+                self.model = LogisticRegression(max_iter=1000, solver='lbfgs')
+                self.is_classifier = True
+            else:
+                self.model = LinearRegression()
+                self.is_classifier = False
+        elif self.model_type == 'logistic':
+            self.model = LogisticRegression(max_iter=1000, solver='lbfgs')
+            self.is_classifier = True
+        elif self.model_type == 'linear':
+            self.model = LinearRegression()
+            self.is_classifier = False
+        else:
+            raise ValueError(f"Invalid model: {self.model_type}")
+
+    def fit(self, X: np.ndarray, y: np.ndarray) -> 'Estimator':
+        self._init_model(y)
         return self.model.fit(X, y)
 
-    def predict(self, X):
+    def predict(self, X: np.ndarray) -> np.ndarray:
         return self.model.predict(X)
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        """Get probability predictions for classifiers."""
+        if self.is_classifier:
+            return self.model.predict_proba(X)[:, 1]  # Probability of class 1
+        return self.predict(X)
 
     def train_test_split(self, X, y, test_size=0.2, seed=1334):
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=test_size, random_state=seed)
         return X_train, X_test, y_train, y_test
 
-    def score(self, yhat, y):
+    def score(self, yhat: np.ndarray, y: np.ndarray) -> Optional[float]:
+        """Compute score: ROC-AUC for classifiers, correlation for regression."""
         if self.is_classifier:
-            # Classification: use AUC
-            yhat = [1 if i >= 0.5 else 0 for i in yhat]
+            # Classification: use ROC-AUC with probability scores
             if len(np.unique(y)) == 1:
-                print('All same class')
                 return None
             return roc_auc_score(y, yhat)
         else:
@@ -68,8 +103,20 @@ class Estimator():
         scaler.fit(X)
         return scaler.transform(X)
 
-    def evaluate(self, X, y, n_iters=10, test_size=0.15):
-        scores = [] 
+    def evaluate(self, X, y, n_iters: int = 10, test_size: float = 0.15, **kwargs) -> np.ndarray:
+        """Evaluate model performance over multiple train/test splits.
+
+        Args:
+            X: Feature matrix
+            y: Target variable
+            n_iters: Number of iterations
+            test_size: Proportion of data for testing
+            **kwargs: Additional arguments for forward compatibility
+
+        Returns:
+            Array of scores from each iteration
+        """
+        scores = []
         X = X.copy()
 
         X = self.scale_features(X, scaler=self.scaler)
@@ -77,14 +124,38 @@ class Estimator():
         for iter in range(n_iters):
             X_train, X_test, y_train, y_test = self.train_test_split(X, y, test_size, seed=iter)
             self.fit(X_train, y_train)
-            y_pred = self.predict(X_test)
+            # Use predict_proba for classifiers to get ROC-AUC compatible scores
+            if self.is_classifier:
+                y_pred = self.predict_proba(X_test)
+            else:
+                y_pred = self.predict(X_test)
             scores.append(self.score(y_pred, y_test))
-            
+
         return np.array(scores)
     
     @staticmethod
-    def get_aucs(X, y, n_iters=10, test_size=0.2, scaler='standard'):
-        estimator = Estimator(model='linear', scaler=scaler)
+    def get_aucs(
+        X: np.ndarray,
+        y: np.ndarray,
+        n_iters: int = 10,
+        test_size: float = 0.2,
+        scaler: str = 'standard',
+        **kwargs
+    ) -> np.ndarray:
+        """Compute AUC/correlation scores over multiple iterations.
+
+        Args:
+            X: Feature matrix
+            y: Target variable (binary for ROC-AUC, continuous for correlation)
+            n_iters: Number of iterations
+            test_size: Proportion of data for testing
+            scaler: Scaler type
+            **kwargs: Additional arguments for forward compatibility
+
+        Returns:
+            Array of scores
+        """
+        estimator = Estimator(model='auto', scaler=scaler)
         return estimator.evaluate(X, y, n_iters, test_size)
     
 class SLIDE_Estimator(Estimator):

@@ -80,6 +80,9 @@ def parse_args():
                         default='glmnet_lambdasmax',
                         help='Feature statistic. For python backend: glmnet_lambdasmax (default, matches R), '
                              'glmnet_lambdadiff, glmnet_coefdiff. For knockpy: lsm, glmnet, lasso, lcd, ols')
+    parser.add_argument('--y-flip', dest='y_flip',
+                        action='store_true',
+                        help='Flip Y encoding (0<->1) to match R convention for correlation signs')
     return parser.parse_args()
 
 
@@ -93,6 +96,7 @@ def main():
     knockoff_shrink = args.knockoff_shrink
     knockoff_offset = args.knockoff_offset
     fstat = args.fstat
+    y_flip = args.y_flip
 
     # Setup import path based on backends
     setup_loveslide_import(love_backend, knockoff_backend)
@@ -117,6 +121,7 @@ def main():
         print(f"  Knockoff shrink: {knockoff_shrink}")
         print(f"  Knockoff offset: {knockoff_offset}")
         print(f"  Feature statistic: {fstat}")
+    print(f"  Y flip (match R): {y_flip}")
     print("=" * 60)
     print(f"YAML config: {args.yaml_path}")
     print(f"Output path: {out_path}")
@@ -155,6 +160,7 @@ def main():
         'knockoff_shrink': knockoff_shrink,
         'knockoff_offset': knockoff_offset,
         'fstat': fstat,
+        'y_flip': y_flip,
         # Handle delta/lambda - can be single value or list
         'delta': params.get('delta') if isinstance(params.get('delta'), list) else [params.get('delta', 0.1)],
         'lambda': params.get('lambda') if isinstance(params.get('lambda'), list) else [params.get('lambda', 0.5)],
