@@ -96,7 +96,7 @@ class SLIDE:
             raise ValueError(f"Latent factor {lf} not found in A matrix")
 
         all_genes = A.loc[A[lf].abs() > 1e-2, lf]
-        scorer = Estimator(model='linear', scaler='standard')
+        scorer = Estimator(model='auto', scaler='standard')
 
         lf_info = pd.DataFrame(
             index=all_genes.index, columns=['loading', 'AUC', 'corr', 'color'])

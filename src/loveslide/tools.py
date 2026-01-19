@@ -27,6 +27,9 @@ def init_data(input_params, x=None, y=None):
     
     if input_params['y_factor'] is None:
         input_params['y_factor'] = True
+
+    if input_params['y_flip'] is None:
+        input_params['y_flip'] = False
     
     if input_params['delta'] is None:
         input_params['delta'] = [0.05, 0.1]
@@ -77,6 +80,10 @@ def init_data(input_params, x=None, y=None):
         })
         data.Y = data.Y.astype(int)
 
+    # Flip Y encoding to match R's convention (Control=1, Case=0)
+    if input_params['y_flip'] is True:
+        data.Y = 1 - data.Y
+
     return data, input_params
 
 def show_params(input_params, data):
@@ -94,8 +101,12 @@ def show_params(input_params, data):
     print(f'\n###### DATA ######\n')
     print(f'{data.Y.shape[0]} samples')
     print(f'{data.X.shape[1]} features')
-    print(f'{(data.Y == 1).values.sum() / len(data.Y) * 100:.1f}% cases')
-    print(f'{(data.Y == 0).values.sum() / len(data.Y) * 100:.1f}% controls')
+    # Note: if y_flip=True, labels are inverted (cases=0, controls=1)
+    y_flip = input_params.get('y_flip', False)
+    case_label = 0 if y_flip else 1
+    ctrl_label = 1 if y_flip else 0
+    print(f'{(data.Y == case_label).values.sum() / len(data.Y) * 100:.1f}% cases')
+    print(f'{(data.Y == ctrl_label).values.sum() / len(data.Y) * 100:.1f}% controls')
     
     check_params(input_params, data)
     print(f'\n##################\n')
