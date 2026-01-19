@@ -265,8 +265,8 @@ class Knockoffs():
         logger.info(f"Running {niter} knockoff iterations with {n_jobs} parallel jobs")
 
         # Run iterations in parallel (OPTIMIZATION: embarrassingly parallel)
-        # Only use multiprocessing for large niter to avoid overhead
-        if n_jobs == 1 or niter < 50:
+        # Only use multiprocessing for large niter to justify process spawning overhead
+        if n_jobs == 1 or niter < 200:
             # Sequential execution for small niter or explicit single-threaded
             results = []
             for _ in range(niter):
@@ -505,8 +505,8 @@ class Knockoffs():
                     results.extend(selected.tolist())
         else:
             # Run iterations in parallel (OPTIMIZATION: embarrassingly parallel)
-            # Only use multiprocessing for large niter to avoid overhead
-            if n_jobs == 1 or niter < 50:
+            # Only use multiprocessing for large niter to justify process spawning overhead
+            if n_jobs == 1 or niter < 200:
                 # Sequential execution for small niter
                 results = []
                 for _ in range(niter):
