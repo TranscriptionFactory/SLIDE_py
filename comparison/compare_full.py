@@ -36,8 +36,116 @@ Examples:
 
 
     /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python compare_full.py \
-      /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-16_15-59-27/SSc_binary_comparison \
-      --impl-path R_native=/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-16_10-41-07/SSc_binary_comparison/R_native
+      /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-17_04-55-31/SSc_binary_comparison \
+      --impl-path R_native=/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-16_10-41-07/SSc_binary_comparison/R_native --detailed \
+      -o /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-17_04-55-31/SSc_binary_comparison/R_native_vs_Py_pyLOVE_knockpy_full_comparison.txt
+
+
+    /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python compare_full.py \
+      /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-17_04-55-31/SSc_continuous_comparison \
+      --impl-path R_native=/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-16_10-41-07/SSc_continuous_comparison/R_native --detailed \
+      -o /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-17_04-55-31/SSc_continuous_comparison/R_native_vs_Py_pyLOVE_knockpy_full_comparison.txt
+
+
+
+      /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python run_slide_py.py --config /comparison_config_binary.yaml \
+      --knockoff-backend knockpy --fstat glmnet --output-dir ./test_output
+
+  # Compare results
+  /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python comparison/compare_full.py ./test_output --impl-path R_native=<R_output_path>
+
+
+
+  cd /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison
+  mkdir -p glmnet_fixed_comparison
+  ln -sf $(pwd)/test_output_glmnet_fixed glmnet_fixed_comparison/Py_pyLOVE_knockpy
+
+  /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python compare_full.py \
+    ./glmnet_fixed_comparison \
+    --impl-path "R_native=/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-17_04-55-31/SSc_binary_comparison/R_native" \
+    --detailed \
+    -o ./glmnet_fixed_comparison/comparison_report.txt
+
+
+
+# sbatch << 'EOF'
+# #!/bin/bash
+# #SBATCH --job-name=slide_knockoff_cmp
+# #SBATCH --time=4-00:00:00
+# #SBATCH --cpus-per-task=4
+# #SBATCH --mem=32G
+# #SBATCH --output=logs/slide_knockoff_cmp_%j.out
+# #SBATCH --error=logs/slide_knockoff_cmp_%j.err
+
+# mkdir -p logs
+
+# # Setup environment
+# module load python/ondemand-jupyter-python3.11
+# source activate loveslide_env
+
+# cd /ix/djishnu/Aaron/1_general_use/SLIDE_py
+
+# # Create output directory with timestamp
+# OUTDIR="comparison/output_comparison/$(date +%Y%m%d_%H%M%S)_knockoff_filter"
+# mkdir -p "$OUTDIR"
+
+# # Run Python SLIDE with knockoff-filter backend
+# python -u comparison/run_slide_py.py \
+#     comparison/comparison_config_binary.yaml \
+#     "$OUTDIR" \
+#     --love-backend python \
+#     --knockoff-backend python \
+#     --knockoff-offset 0 \
+#     --knockoff-method asdp \
+#     --fstat glmnet_lambdasmax
+
+# echo "Output saved to: $OUTDIR"
+# EOF
+
+
+
+sbatch << 'EOF'
+#!/bin/bash
+#SBATCH --job-name=slide_knockoff_cmp
+#SBATCH --time=4-00:00:00
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --output=logs/slide_knockoff_cmp_%j.out
+#SBATCH --error=logs/slide_knockoff_cmp_%j.err
+
+mkdir -p logs
+
+# Setup environment
+module load gcc/12.2.0
+module load python/ondemand-jupyter-python3.11
+source activate loveslide_env
+
+cd /ix/djishnu/Aaron/1_general_use/SLIDE_py
+
+# Add modified knockoff-filter to Python path (before system packages)
+export PYTHONPATH="/ix/djishnu/Aaron/1_general_use/knockoff-filter/knockoff-filter:$PYTHONPATH"
+
+# Create output directory with timestamp
+OUTDIR="comparison/output_comparison/$(date +%Y%m%d_%H%M%S)_rstyle"
+mkdir -p "$OUTDIR"
+
+# Run Python SLIDE with knockoff-filter backend
+python -u comparison/run_slide_py.py \
+    comparison/comparison_config_binary.yaml \
+    "$OUTDIR" \
+    --love-backend python \
+    --knockoff-backend python \
+    --knockoff-offset 0 \
+    --knockoff-method sdp \
+    --fstat glmnet_lambdasmax
+
+echo "Output saved to: $OUTDIR"
+EOF
+Adjust if needed:
+- More memory issues → increase --mem=64G
+- Faster test (single param set) → modify config to single delta/lambda
+- Use SDP method → change --knockoff-method asdp (requires cvxpy)
+
 """
 
 import argparse
@@ -57,6 +165,7 @@ from compare_latent_factors import (
     MetricsExtractor,
     ReportGenerator,
     ReportSummary,
+    TaskConfig
 )
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -321,6 +430,7 @@ class FullComparisonPipeline:
             "Py_rLOVE_rKO", "Py_rLOVE_knockpy", "Py_rLOVE_pyKO",
             "Py_pyLOVE_rKO", "Py_pyLOVE_knockpy", "Py_pyLOVE_pyKO",
         ]
+        # known_patterns = ["R_native", "Py_pyLOVE_knockpy", "Py_rLOVE_rKO"]
 
         # First, apply path overrides
         for name, override_path in self.path_overrides.items():
@@ -339,11 +449,11 @@ class FullComparisonPipeline:
             if impl_path.is_dir():
                 available[pattern] = impl_path
 
-        # Also discover any other directories with _out subdirs
-        for child in self.output_path.iterdir():
-            if child.is_dir() and child.name not in available:
-                if any(d.name.endswith('_out') for d in child.iterdir() if d.is_dir()):
-                    available[child.name] = child
+        # # Also discover any other directories with _out subdirs
+        # for child in self.output_path.iterdir():
+        #     if child.is_dir() and child.name not in available:
+        #         if any(d.name.endswith('_out') for d in child.iterdir() if d.is_dir()):
+        #             available[child.name] = child
 
         return available
 

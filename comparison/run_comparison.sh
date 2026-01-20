@@ -61,6 +61,26 @@
 
 # echo "Reports queued with dependencies"
 # EOF
+
+
+
+
+sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=slide_glmnet
+#SBATCH --output=slide_glmnet_%j.out
+#SBATCH --error=slide_glmnet_%j.err
+#SBATCH --time=24:00:00
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=60G
+
+cd /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison
+
+/ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python run_slide_py.py \
+    comparison_config_binary.yaml ./test_output_glmnet \
+    --knockoff-backend knockpy --fstat glmnet
+EOF
+
 # =============================================================================
 # rm -r logs/*
 mkdir -p logs/

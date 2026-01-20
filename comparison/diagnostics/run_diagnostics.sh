@@ -1,139 +1,90 @@
 #!/bin/bash
 #
-# Run step-by-step diagnostics comparing R and Python LOVE implementations
+# Run LOVE diagnostics for both Python and R implementations
+# and compare the results.
 #
-# Usage: ./run_diagnostics.sh <data_file> [--mode hetero|homo] [--fixed-delta VALUE]
+# Usage:
+#   ./run_diagnostics.sh /path/to/data.csv [delta] [output_dir]
+#
+# Example:
+#   ./run_diagnostics.sh /path/to/SSc_binary_X.csv 0.05 ./diagnostics_output
 #
 
 set -e
 
+# Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-OUTPUT_BASE="$SCRIPT_DIR/outputs"
 
-# Default values
-MODE="hetero"
-FIXED_DELTA=""
-DATA_FILE=""
-TAG=""
+# Arguments
+DATA_PATH="${1:?Error: Please provide path to data CSV}"
+DELTA="${2:-0.05}"
+OUTPUT_BASE="${3:-$SCRIPT_DIR/output}"
+THRESH_FDR="${4:-0.2}"
 
-# Parse arguments
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --mode)
-            MODE="$2"
-            shift 2
-            ;;
-        --fixed-delta)
-            FIXED_DELTA="$2"
-            shift 2
-            ;;
-        --tag)
-            TAG="$2"
-            shift 2
-            ;;
-        -h|--help)
-            echo "Usage: $0 <data_file> [--mode hetero|homo] [--fixed-delta VALUE] [--tag NAME]"
-            echo ""
-            echo "Arguments:"
-            echo "  data_file      Path to input data CSV (samples as rows)"
-            echo "  --mode         hetero or homo (default: hetero)"
-            echo "  --fixed-delta  Use a fixed delta value for deterministic comparison"
-            echo "  --tag          Name for output directory (default: basename of data file)"
-            exit 0
-            ;;
-        *)
-            if [[ -z "$DATA_FILE" ]]; then
-                DATA_FILE="$1"
-            fi
-            shift
-            ;;
-    esac
-done
+# Output directories
+PY_OUTPUT="$OUTPUT_BASE/python_delta${DELTA}"
+R_OUTPUT="$OUTPUT_BASE/r_delta${DELTA}"
 
-if [[ -z "$DATA_FILE" ]]; then
-    echo "Error: No data file specified"
-    echo "Usage: $0 <data_file> [--mode hetero|homo] [--fixed-delta VALUE]"
-    exit 1
-fi
-
-if [[ ! -f "$DATA_FILE" ]]; then
-    echo "Error: Data file not found: $DATA_FILE"
-    exit 1
-fi
-
-# Set tag from filename if not provided
-if [[ -z "$TAG" ]]; then
-    TAG=$(basename "$DATA_FILE" .csv)
-fi
-
-# Create output directory
-OUTPUT_DIR="$OUTPUT_BASE/${TAG}_${MODE}"
-mkdir -p "$OUTPUT_DIR"
-
-echo "=============================================================================="
-echo "LOVE DIAGNOSTIC COMPARISON"
-echo "=============================================================================="
-echo "Data file:   $DATA_FILE"
-echo "Mode:        $MODE"
-echo "Output dir:  $OUTPUT_DIR"
-if [[ -n "$FIXED_DELTA" ]]; then
-    echo "Fixed delta: $FIXED_DELTA"
-fi
-echo "=============================================================================="
-
-# Build R arguments
-R_ARGS="$DATA_FILE $OUTPUT_DIR --mode $MODE"
-if [[ -n "$FIXED_DELTA" ]]; then
-    R_ARGS="$R_ARGS --fixed-delta $FIXED_DELTA"
-fi
-
-# Build Python arguments
-PY_ARGS="$DATA_FILE $OUTPUT_DIR --mode $MODE"
-if [[ -n "$FIXED_DELTA" ]]; then
-    PY_ARGS="$PY_ARGS --fixed-delta $FIXED_DELTA"
-fi
-
-# Step 1: Run R to save intermediate results
-echo ""
-echo ">>> Running R LOVE step-by-step..."
+echo "=========================================="
+echo "LOVE Diagnostics Runner"
+echo "=========================================="
+echo "Data path: $DATA_PATH"
+echo "Delta: $DELTA"
+echo "FDR threshold: $THRESH_FDR"
+echo "Python output: $PY_OUTPUT"
+echo "R output: $R_OUTPUT"
 echo ""
 
-# Check if R is available
-if ! command -v Rscript &> /dev/null; then
-    echo "Error: Rscript not found. Please load R module."
-    exit 1
+# Create output directories
+mkdir -p "$OUTPUT_BASE"
+
+# Activate conda environment if available
+if command -v conda &> /dev/null; then
+    echo "Activating conda environment..."
+    # Try to activate the SLIDE_py environment
+    source "$(conda info --base)/etc/profile.d/conda.sh"
+    conda activate slide_py 2>/dev/null || conda activate base
 fi
 
-Rscript "$SCRIPT_DIR/save_r_intermediate.R" $R_ARGS
-
-# Step 2: Run Python comparison
+# Run Python diagnostics
 echo ""
-echo ">>> Running Python comparison..."
-echo ""
+echo "=========================================="
+echo "Running Python LOVE diagnostics..."
+echo "=========================================="
+cd "$SCRIPT_DIR/../.."
+python -m comparison.diagnostics.love_diagnostics_py \
+    --data_path "$DATA_PATH" \
+    --delta "$DELTA" \
+    --thresh_fdr "$THRESH_FDR" \
+    --output_dir "$PY_OUTPUT"
 
-# Activate conda environment if needed
-if [[ -n "$CONDA_DEFAULT_ENV" ]]; then
-    echo "Using conda environment: $CONDA_DEFAULT_ENV"
-else
-    # Try to activate slide_py environment
-    if command -v conda &> /dev/null; then
-        source "$(conda info --base)/etc/profile.d/conda.sh"
-        if conda env list | grep -q "slide_py"; then
-            conda activate slide_py
-            echo "Activated conda environment: slide_py"
-        fi
-    fi
-fi
+# Run R diagnostics
+echo ""
+echo "=========================================="
+echo "Running R LOVE diagnostics..."
+echo "=========================================="
+Rscript "$SCRIPT_DIR/love_diagnostics_r.R" \
+    --data_path "$DATA_PATH" \
+    --delta "$DELTA" \
+    --thresh_fdr "$THRESH_FDR" \
+    --output_dir "$R_OUTPUT"
 
-python "$SCRIPT_DIR/compare_step_by_step.py" $PY_ARGS
+# Run comparison
+echo ""
+echo "=========================================="
+echo "Comparing Python and R outputs..."
+echo "=========================================="
+python "$SCRIPT_DIR/compare_love_diagnostics.py" \
+    --py_dir "$PY_OUTPUT" \
+    --r_dir "$R_OUTPUT" \
+    --output "$OUTPUT_BASE/comparison_report_delta${DELTA}.txt"
 
 echo ""
-echo "=============================================================================="
-echo "DIAGNOSTIC COMPLETE"
-echo "=============================================================================="
-echo "R intermediate results: $OUTPUT_DIR"
+echo "=========================================="
+echo "Done! Results saved to: $OUTPUT_BASE"
+echo "=========================================="
 echo ""
-echo "To re-run Python comparison only:"
-echo "  python $SCRIPT_DIR/compare_step_by_step.py $PY_ARGS"
-echo "=============================================================================="
+echo "Key files:"
+echo "  - Python outputs: $PY_OUTPUT/"
+echo "  - R outputs: $R_OUTPUT/"
+echo "  - Comparison report: $OUTPUT_BASE/comparison_report_delta${DELTA}.txt"
