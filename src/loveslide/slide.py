@@ -316,8 +316,122 @@ class OptimizeSLIDE(SLIDE):
 
     def find_interaction_LFs(self, machop, spec, fdr, niter, f_size, n_workers=1,
                              knockoff_backend='r', knockoff_method='asdp', knockoff_shrink=False,
-                             knockoff_offset=0, fstat='glmnet_lambdasmax'):
+                             knockoff_offset=0, fstat='glmnet_lambdasmax', use_r_style=True):
+        """
+        Find interacting latent factors using knockoff filter.
 
+        When use_r_style=True (default), uses sequential per-marginal processing that
+        matches R's interactionSLIDE.R behavior:
+        1. For each marginal, generate interaction terms with ALL other LFs
+           (excluding already-used marginals)
+        2. Correct y for this marginal's effect (residuals from lm(y ~ z_marginal))
+        3. Run knockoff filter on interaction terms vs corrected y
+        4. Collect significant interactions
+
+        Parameters
+        ----------
+        machop : Knockoffs
+            Knockoffs object with latent factors.
+        spec : float
+            Proportion threshold for selection frequency.
+        fdr : float
+            Target false discovery rate.
+        niter : int
+            Number of knockoff iterations.
+        f_size : int
+            Feature size for knockoff subsets.
+        n_workers : int
+            Number of parallel workers.
+        knockoff_backend : str
+            Backend for knockoff filter ('r', 'python', 'knockpy').
+        knockoff_method : str
+            Knockoff construction method.
+        knockoff_shrink : bool
+            Whether to use covariance shrinkage.
+        knockoff_offset : int
+            Knockoff procedure offset (0 or 1).
+        fstat : str
+            Feature statistic method.
+        use_r_style : bool
+            If True (default), use R-style sequential per-marginal processing.
+            If False, use legacy batch processing.
+        """
+        if not use_r_style:
+            # Legacy batch processing
+            self._find_interaction_LFs_batch(
+                machop, spec, fdr, niter, f_size, n_workers,
+                knockoff_backend, knockoff_method, knockoff_shrink,
+                knockoff_offset, fstat
+            )
+            return
+
+        # R-style sequential per-marginal processing
+        all_sig_interactions = []  # List of (marginal_idx, interacting_idx) tuples
+        used_marginals = set()
+
+        z_all = self.latent_factors.values  # Full LF matrix
+        y = self.data.Y.values
+        n_lfs = z_all.shape[1]
+
+        for marg_idx in self.marginal_idxs:
+            used_marginals.add(marg_idx)
+            z_marginal = z_all[:, marg_idx]
+
+            # Get candidate columns: all LFs except already-used marginals
+            candidate_idxs = [i for i in range(n_lfs) if i not in used_marginals]
+            if len(candidate_idxs) == 0:
+                continue
+
+            z_candidates = z_all[:, candidate_idxs]
+
+            # Create interaction terms: marginal × each candidate
+            interaction_terms = z_marginal[:, np.newaxis] * z_candidates  # (n, n_candidates)
+
+            # Correct y for marginal effect (residuals from lm(y ~ z_marginal))
+            corrected_y = Knockoffs.correct_y(z_marginal, y)
+
+            # Run knockoff filter
+            sig_interaction_local_idxs = Knockoffs.select_short_freq(
+                z=interaction_terms,
+                y=corrected_y,
+                spec=spec,
+                fdr=fdr,
+                niter=niter,
+                f_size=f_size,
+                n_workers=n_workers,
+                backend=knockoff_backend,
+                method=knockoff_method,
+                shrink=knockoff_shrink,
+                offset=knockoff_offset,
+                fstat=fstat
+            )
+
+            # Map back to original LF indices
+            for local_idx in sig_interaction_local_idxs:
+                interacting_idx = candidate_idxs[local_idx]
+                all_sig_interactions.append((marg_idx, interacting_idx))
+
+        # Store results
+        if len(all_sig_interactions) == 0:
+            self.interaction_pairs = np.array([])
+            self.interaction_terms = np.array([])
+        else:
+            pairs = np.array(all_sig_interactions).T  # Shape: (2, n_pairs)
+            self.interaction_pairs = pairs
+            # Reconstruct interaction term values
+            self.interaction_terms = np.column_stack([
+                z_all[:, m] * z_all[:, j] for m, j in all_sig_interactions
+            ])
+
+    def _find_interaction_LFs_batch(self, machop, spec, fdr, niter, f_size, n_workers=1,
+                                     knockoff_backend='r', knockoff_method='asdp', knockoff_shrink=False,
+                                     knockoff_offset=0, fstat='glmnet_lambdasmax'):
+        """
+        Legacy batch interaction detection (original Python implementation).
+
+        This tests all marginal×non-marginal interactions simultaneously without
+        y-correction, which may produce fewer interactions than R's approach.
+        """
         machop.add_z1(marginal_idxs=self.marginal_idxs)
 
         if machop.z2.shape[1] == 0:
@@ -355,7 +469,7 @@ class OptimizeSLIDE(SLIDE):
 
             assert len(z2_cols) == n_candidates, "Number of candidates does not match (implementation error)"
 
-            interacting_lf = z2_cols[sig_interactions % n_candidates] 
+            interacting_lf = z2_cols[sig_interactions % n_candidates]
             self.interaction_pairs = np.array([marginal_lf, interacting_lf])
             self.interaction_terms = interaction_terms[:, sig_interactions]
     

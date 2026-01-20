@@ -103,14 +103,38 @@ class Knockoffs():
     def scale_features(X, minmax=False, feature_range=(-1, 1)):
         if isinstance(X, pd.DataFrame):
             X = X.values
-        
+
         if minmax:
             scaler = MinMaxScaler(feature_range=feature_range)
         else:
             scaler = StandardScaler()
-        
+
         scaler.fit(X)
         return scaler.transform(X)
+
+    @staticmethod
+    def correct_y(z_marginal, y):
+        """Correct y for marginal effect (residuals from lm(y ~ z_marginal)).
+
+        This matches R's correctIt function in interactionSLIDE.R which removes
+        the marginal's contribution from y before testing interactions.
+
+        Parameters
+        ----------
+        z_marginal : np.ndarray
+            Marginal latent factor values, shape (n_samples,).
+        y : np.ndarray
+            Response vector, shape (n_samples,) or (n_samples, 1).
+
+        Returns
+        -------
+        np.ndarray
+            Residuals from linear regression of y on z_marginal.
+        """
+        y_flat = y.flatten() if hasattr(y, 'flatten') else np.array(y).flatten()
+        z_2d = z_marginal.reshape(-1, 1)
+        reg = LinearRegression().fit(z_2d, y_flat)
+        return y_flat - reg.predict(z_2d)
 
     @staticmethod
     def get_interaction_terms(z_matrix, plm_embedding):
