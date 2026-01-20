@@ -43,12 +43,13 @@ echo "Z matrix: $Z_PATH"
 echo "Y vector: $Y_PATH"
 
 # Run comparison
+# Use sdp method to match R's knockoff package
 python -u comparison/diagnostics/compare_w_statistics_all.py \
     --z-path "$Z_PATH" \
     --y-path "$Y_PATH" \
     --output-dir "$OUTDIR" \
     --fdr 0.1 \
-    --method mvr \
+    --method sdp \
     --seed 42 \
     --standardize
 

@@ -142,17 +142,27 @@ def compute_w_stats_knockoff_filter(X, y, fdr=0.1, method='sdp', offset=0, seed=
     """
     Compute W-statistics using knockoff-filter Python package.
 
-    This matches R's stat.glmnet_lambdasmax implementation.
+    Uses the ACTUAL knockoff-filter implementation:
+    - create_gaussian() for knockoff generation (uses DSDP solver)
+    - stat_glmnet_lambdasmax() for W-statistics (uses vendored Fortran glmnet)
+    - knockoff_threshold() for FDR threshold
+
+    This should match R's knockoff package behavior.
     """
     np.random.seed(seed)
 
     try:
         from knockoff.stats import stat_glmnet_lambdasmax
+        from knockoff.stats.glmnet import HAS_GLMNET
         from knockoff.solve import create_solve_sdp, create_solve_asdp, create_solve_equi
+        from knockoff.create import create_gaussian
+        from knockoff.filter import knockoff_threshold
         from knockoff.utils import is_posdef
-    except ImportError:
-        logger.warning("knockoff-filter not available, skipping")
+    except ImportError as e:
+        logger.warning(f"knockoff-filter not available: {e}")
         return None
+
+    logger.info(f"knockoff-filter: vendored glmnet available = {HAS_GLMNET}")
 
     n, p = X.shape
 
@@ -162,57 +172,35 @@ def compute_w_stats_knockoff_filter(X, y, fdr=0.1, method='sdp', offset=0, seed=
         Sigma = np.array([[Sigma]])
 
     # Ensure positive definite
-    min_eig = np.min(np.linalg.eigvalsh(Sigma))
-    if min_eig < 1e-10:
-        Sigma = Sigma + (1e-10 - min_eig) * np.eye(p)
+    if not is_posdef(Sigma):
+        min_eig = np.min(np.linalg.eigvalsh(Sigma))
+        if min_eig < 1e-10:
+            Sigma = Sigma + (1e-10 - min_eig) * np.eye(p)
 
     # Compute S matrix based on method (returns 1D array - diagonal elements)
-    if method == 'sdp':
-        s_diag = create_solve_sdp(Sigma)
-    elif method == 'asdp':
-        s_diag = create_solve_asdp(Sigma)
-    else:  # equi
-        s_diag = create_solve_equi(Sigma)
+    logger.info(f"Computing S matrix using method={method}")
+    try:
+        if method == 'sdp':
+            diag_s = create_solve_sdp(Sigma)
+        elif method == 'asdp':
+            diag_s = create_solve_asdp(Sigma)
+        else:  # equi
+            diag_s = create_solve_equi(Sigma)
+    except Exception as e:
+        logger.warning(f"SDP method {method} failed: {e}, falling back to equi")
+        diag_s = create_solve_equi(Sigma)
 
-    # Convert to diagonal matrix
-    S = np.diag(s_diag)
-
-    # Generate knockoffs
+    # Generate knockoffs using knockoff-filter's create_gaussian
+    # This uses the same algorithm as R's knockoff package
     mu = np.mean(X, axis=0)
-
-    # Knockoff construction: X_k = X - (X - mu) @ Sigma^{-1} @ S + N(0, 2S - S @ Sigma^{-1} @ S)
-    Sigma_inv = np.linalg.inv(Sigma)
-    Sigma_inv_S = Sigma_inv @ S
-
-    # Mean of knockoffs
-    mu_k = X - (X - mu) @ Sigma_inv_S
-
-    # Covariance of knockoffs | X
-    V = 2 * S - S @ Sigma_inv @ S
-
-    # Ensure V is positive semi-definite
-    V_eig = np.linalg.eigvalsh(V)
-    if np.min(V_eig) < 0:
-        V = V + (1e-10 - np.min(V_eig)) * np.eye(p)
-
-    # Sample knockoffs
-    L = np.linalg.cholesky(V)
-    Xk = mu_k + np.random.randn(n, p) @ L.T
+    Xk = create_gaussian(X, mu, Sigma, method=method, diag_s=diag_s)
 
     # Compute W statistics using glmnet_lambdasmax
+    # Uses vendored Fortran glmnet if available, else sklearn fallback
     W = stat_glmnet_lambdasmax(X, Xk, y.flatten())
 
-    # Compute threshold
-    W_abs = np.abs(W)
-    candidates = np.sort(W_abs[W_abs > 0])
-
-    threshold = np.inf
-    for t in candidates:
-        numerator = offset + np.sum(W <= -t)
-        denominator = max(1, np.sum(W >= t))
-        if numerator / denominator <= fdr:
-            threshold = t
-            break
+    # Compute threshold using knockoff-filter's implementation
+    threshold = knockoff_threshold(W, fdr=fdr, offset=offset)
 
     # Select variables
     if threshold < np.inf:
@@ -225,8 +213,9 @@ def compute_w_stats_knockoff_filter(X, y, fdr=0.1, method='sdp', offset=0, seed=
         'threshold': threshold,
         'selected': selected,
         'knockoffs': Xk,
-        'S': S,
-        'backend': 'knockoff_filter'
+        'diag_s': diag_s,
+        'backend': 'knockoff_filter',
+        'has_vendored_glmnet': HAS_GLMNET
     }
 
 
@@ -641,24 +630,24 @@ def main():
         X, y, fdr=args.fdr, method=args.method, offset=0, seed=args.seed
     )
 
-    # 3. knockpy with lsm (LARS path)
+    # 3. knockpy with lsm (LARS path) - uses sdp if available
     logger.info("\n=== Backend 3: knockpy (lsm) ===")
     results['knockpy_lsm'] = compute_w_stats_knockpy(
-        X, y, fdr=args.fdr, method=args.method if args.method != 'sdp' else 'mvr',
+        X, y, fdr=args.fdr, method=args.method,  # knockpy supports sdp
         fstat='lsm', offset=0, seed=args.seed
     )
 
     # 4. knockpy with lasso
     logger.info("\n=== Backend 4: knockpy (lasso) ===")
     results['knockpy_lasso'] = compute_w_stats_knockpy(
-        X, y, fdr=args.fdr, method=args.method if args.method != 'sdp' else 'mvr',
+        X, y, fdr=args.fdr, method=args.method,  # knockpy supports sdp
         fstat='lasso', offset=0, seed=args.seed
     )
 
-    # 5. Custom glmnet (what SLIDE uses)
+    # 5. Custom glmnet (what SLIDE's _compute_glmnet_lambdasmax uses)
     logger.info("\n=== Backend 5: custom glmnet (SLIDE implementation) ===")
     results['custom_glmnet'] = compute_w_stats_custom_glmnet(
-        X, y, fdr=args.fdr, method=args.method if args.method != 'sdp' else 'mvr',
+        X, y, fdr=args.fdr, method=args.method,  # knockpy sampler supports sdp
         offset=0, seed=args.seed
     )
 
