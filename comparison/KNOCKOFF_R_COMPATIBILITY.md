@@ -9,37 +9,22 @@
 
 ### **CRITICAL ISSUES (Must Fix)**
 
-#### 1. **Entry Time Detection Bug** (Most Severe)
-**Location**: `/ix/djishnu/Aaron/1_general_use/knockoff-filter/knockoff-filter/knockoff/stats/glmnet.py` line 104
+#### 1. **Entry Time Detection** - ✅ VERIFIED CORRECT
+**Location**: `/ix/djishnu/Aaron/1_general_use/knockoff-filter/knockoff-filter/knockoff/stats/glmnet.py` line 102-107
 
-**The Problem**: R's `match(T, logical_vector)` finds the first TRUE index correctly. Python's `argmax()` returns 0 for all-FALSE arrays, creating incorrect W-statistics.
+**Status**: The code is actually **correct**. The `np.where(has_nonzero, ...)` properly handles the case when `argmax()` returns 0 for all-false arrays by replacing those values with 0.0.
 
-**Example**:
-- Coefficient vector `[0, 0, 0, 0]` (all zeros):
-  - R: Returns NA → converted to 0 lambda entry ✓
-  - Python: `argmax()` returns 0 → uses `alphas[0]` instead of 0 ✗
-
-This causes Python to misidentify when features enter the lasso path.
-
-**Fix**:
 ```python
-# Current (WRONG) at line 102-107:
+# Current implementation is correct:
 nonzero_mask = np.abs(coefs) > 0
-first_nonzero_idx = nonzero_mask.argmax(axis=1)
+first_nonzero_idx = nonzero_mask.argmax(axis=1)  # Returns 0 for all-false
 has_nonzero = nonzero_mask.any(axis=1)
-lambda_entry = np.where(has_nonzero, alphas[first_nonzero_idx] * n, 0.0)
-
-# Should be:
-nonzero_mask = np.abs(coefs) > 0
-first_nonzero_idx = np.argmax(nonzero_mask, axis=1)
-has_nonzero = nonzero_mask.any(axis=1)
-first_nonzero_idx[~has_nonzero] = -1  # Mark unfound entries
-lambda_entry = np.where(has_nonzero, alphas[np.clip(first_nonzero_idx, 0, None)] * n, 0.0)
+lambda_entry = np.where(has_nonzero, alphas[first_nonzero_idx] * n, 0.0)  # Replaces with 0.0
 ```
 
 ---
 
-#### 2. **Threshold Computation Bug**
+#### 2. **Threshold Computation Bug** - ✅ FIXED
 **Location**: `/ix/djishnu/Aaron/1_general_use/SLIDE_py/src/loveslide/knockoffs.py` lines 432-433
 
 **The Problem**: Python excludes 0 from candidate thresholds, but R includes it. This can lead to different FDR threshold selection.
@@ -135,10 +120,10 @@ y_centered = y - y.mean()  # Center y only
 
 ## SPECIFIC CODE LOCATIONS FOR ADJUSTMENT
 
-| Issue | File | Lines | Priority |
-|-------|------|-------|----------|
-| Entry time detection | knockoff/stats/glmnet.py | 102-107 | **CRITICAL** |
-| Threshold candidates | loveslide/knockoffs.py | 432-433 | **CRITICAL** |
+| Issue | File | Lines | Status |
+|-------|------|-------|--------|
+| Entry time detection | knockoff/stats/glmnet.py | 102-107 | ✅ Verified correct |
+| Threshold candidates | loveslide/knockoffs.py | 432-433 | ✅ **FIXED** |
 | SDP solver differences | knockoff/solve.py | 96-263 | Document |
 | RNG differences | base.py, create.py | 41, 363 | Document |
 | Cholesky handling | knockoff/create.py | 344-360 | Match R behavior |
@@ -163,13 +148,13 @@ The document recommends:
 
 ## SUMMARY TABLE
 
-| Component | R | Python | Diff Type | Impact | Fix |
+| Component | R | Python | Diff Type | Status | Fix |
 |-----------|---|--------|-----------|--------|-----|
-| Entry time | `match()` | `argmax()` bug | Logic | **HIGH** | Use proper indexing |
-| Threshold | Includes 0 | Excludes 0 | Logic | **HIGH** | Add 0 to candidates |
-| SDP solver | Rdsdp | DSDP | Numerical | MEDIUM | Document ±1% |
-| RNG | R-MT | NumPy-MT | Different | HIGH | Use niter>1 |
-| Cholesky | Crash | Regularize | Behavior | MEDIUM | Match R or log |
+| Entry time | `match()` | `argmax()` + `np.where` | Logic | ✅ Correct | N/A |
+| Threshold | Includes 0 | ~~Excludes 0~~ | Logic | ✅ **FIXED** | Added 0 to candidates |
+| SDP solver | Rdsdp | DSDP | Numerical | Document | ±1% expected |
+| RNG | R-MT | NumPy-MT | Different | Document | Use niter>1 |
+| Cholesky | Crash | Regularize | Behavior | Open | Match R or log |
 
 ---
 
