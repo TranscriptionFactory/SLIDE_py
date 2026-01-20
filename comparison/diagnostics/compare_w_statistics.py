@@ -89,10 +89,10 @@ def compute_custom_threshold(W, fdr, offset=0):
     """
     Compute knockoff threshold using the custom implementation from knockoffs.py.
 
-    This matches the Knockoffs._knockoff_threshold() method.
+    This matches R's knockoff.threshold() - includes 0 in candidates.
     """
     W_abs = np.abs(W)
-    candidates = np.sort(W_abs[W_abs > 0])
+    candidates = np.sort(np.concatenate([[0], W_abs]))
 
     threshold = np.inf
     for t in candidates:

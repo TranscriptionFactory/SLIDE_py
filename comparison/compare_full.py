@@ -34,76 +34,6 @@ Examples:
         --impl-path R_native=/old/R_native \\
         --impl-path Py_rLOVE_rKO=/other/Py_rLOVE_rKO
 
-
-    /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python compare_full.py \
-      /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-17_04-55-31/SSc_binary_comparison \
-      --impl-path R_native=/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-16_10-41-07/SSc_binary_comparison/R_native --detailed \
-      -o /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-17_04-55-31/SSc_binary_comparison/R_native_vs_Py_pyLOVE_knockpy_full_comparison.txt
-
-
-    /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python compare_full.py \
-      /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-17_04-55-31/SSc_continuous_comparison \
-      --impl-path R_native=/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-16_10-41-07/SSc_continuous_comparison/R_native --detailed \
-      -o /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-17_04-55-31/SSc_continuous_comparison/R_native_vs_Py_pyLOVE_knockpy_full_comparison.txt
-
-
-
-      /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python run_slide_py.py --config /comparison_config_binary.yaml \
-      --knockoff-backend knockpy --fstat glmnet --output-dir ./test_output
-
-  # Compare results
-  /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python comparison/compare_full.py ./test_output --impl-path R_native=<R_output_path>
-
-
-
-  cd /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison
-  mkdir -p glmnet_fixed_comparison
-  ln -sf $(pwd)/test_output_glmnet_fixed glmnet_fixed_comparison/Py_pyLOVE_knockpy
-
-  /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python compare_full.py \
-    ./glmnet_fixed_comparison \
-    --impl-path "R_native=/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-17_04-55-31/SSc_binary_comparison/R_native" \
-    --detailed \
-    -o ./glmnet_fixed_comparison/comparison_report.txt
-
-
-
-# sbatch << 'EOF'
-# #!/bin/bash
-# #SBATCH --job-name=slide_knockoff_cmp
-# #SBATCH --time=4-00:00:00
-# #SBATCH --cpus-per-task=4
-# #SBATCH --mem=32G
-# #SBATCH --output=logs/slide_knockoff_cmp_%j.out
-# #SBATCH --error=logs/slide_knockoff_cmp_%j.err
-
-# mkdir -p logs
-
-# # Setup environment
-# module load python/ondemand-jupyter-python3.11
-# source activate loveslide_env
-
-# cd /ix/djishnu/Aaron/1_general_use/SLIDE_py
-
-# # Create output directory with timestamp
-# OUTDIR="comparison/output_comparison/$(date +%Y%m%d_%H%M%S)_knockoff_filter"
-# mkdir -p "$OUTDIR"
-
-# # Run Python SLIDE with knockoff-filter backend
-# python -u comparison/run_slide_py.py \
-#     comparison/comparison_config_binary.yaml \
-#     "$OUTDIR" \
-#     --love-backend python \
-#     --knockoff-backend python \
-#     --knockoff-offset 0 \
-#     --knockoff-method asdp \
-#     --fstat glmnet_lambdasmax
-
-# echo "Output saved to: $OUTDIR"
-# EOF
-
-
-
 sbatch << 'EOF'
 #!/bin/bash
 #SBATCH --job-name=slide_knockoff_cmp
@@ -141,6 +71,16 @@ python -u comparison/run_slide_py.py \
 
 echo "Output saved to: $OUTDIR"
 EOF
+
+# Create a comparison directory and symlink both outputs
+  mkdir -p output_comparison/compare_20260120
+  ln -sf /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/20260119_225506_rstyle \
+         output_comparison/compare_20260120/Py_pyLOVE_pyKO
+  ln -sf /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/output_comparison/2026-01-17_04-55-31/SSc_binary_comparison/R_native output_comparison/compare_20260120/R_native
+  # Run comparison
+  /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python compare_full.py output_comparison/compare_20260120 --detailed \
+      -o output_comparison/compare_20260120/comparison_report.txt
+
 Adjust if needed:
 - More memory issues → increase --mem=64G
 - Faster test (single param set) → modify config to single delta/lambda

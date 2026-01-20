@@ -341,9 +341,9 @@ def compute_w_stats_custom_glmnet(X, y, fdr=0.1, method='sdp', offset=0, seed=42
     W = np.maximum(Z, Z_k) * np.sign(Z - Z_k)
     W = W * (1 - 2 * swap)
 
-    # Threshold
+    # Threshold - include 0 in candidates to match R's knockoff.threshold
     W_abs = np.abs(W)
-    candidates = np.sort(W_abs[W_abs > 0])
+    candidates = np.sort(np.concatenate([[0], W_abs]))
 
     threshold = np.inf
     for t in candidates:
