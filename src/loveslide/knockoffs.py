@@ -428,9 +428,10 @@ class Knockoffs():
         float
             Threshold value, or np.inf if no threshold satisfies FDR.
         """
-        # Get unique positive W values as candidate thresholds (ascending order)
+        # Get candidate thresholds: 0 and absolute values of W (ascending order)
+        # NOTE: Must include 0 to match R's knockoff.threshold behavior
         W_abs = np.abs(W)
-        candidates = np.sort(W_abs[W_abs > 0])
+        candidates = np.sort(np.concatenate([[0], W_abs]))
 
         # Find minimum threshold that satisfies FDR constraint
         threshold = np.inf
