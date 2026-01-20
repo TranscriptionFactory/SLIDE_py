@@ -153,16 +153,23 @@ def compute_w_stats_knockoff_filter(X, y, fdr=0.1, method='sdp', offset=0, seed=
 
     try:
         from knockoff.stats import stat_glmnet_lambdasmax
-        from knockoff.stats.glmnet import HAS_GLMNET
+        from knockoff.stats.glmnet import HAS_GLMNET, _lasso_max_lambda_glmnet
         from knockoff.solve import create_solve_sdp, create_solve_asdp, create_solve_equi
         from knockoff.create import create_gaussian
         from knockoff.filter import knockoff_threshold
         from knockoff.utils import is_posdef
+        import knockoff.stats.glmnet as glmnet_module
     except ImportError as e:
         logger.warning(f"knockoff-filter not available: {e}")
         return None
 
+    # Check which version of knockoff-filter is being used
+    import inspect
+    sig = inspect.signature(_lasso_max_lambda_glmnet)
+    std_default = sig.parameters['standardize'].default
     logger.info(f"knockoff-filter: vendored glmnet available = {HAS_GLMNET}")
+    logger.info(f"knockoff-filter: glmnet module path = {glmnet_module.__file__}")
+    logger.info(f"knockoff-filter: standardize default = {std_default}")
 
     n, p = X.shape
 
@@ -366,6 +373,78 @@ def compute_w_stats_custom_glmnet(X, y, fdr=0.1, method='sdp', offset=0, seed=42
         'knockoffs': Xk,
         'S': S,
         'backend': 'custom_glmnet'
+    }
+
+
+# =============================================================================
+# Backend 5: knockpy knockoffs + knockoff-filter's Fortran glmnet
+# =============================================================================
+
+def compute_w_stats_knockpy_fortran_glmnet(X, y, fdr=0.1, method='sdp', offset=0, seed=42):
+    """
+    Compute W-statistics using:
+    - knockpy's GaussianSampler for knockoff generation
+    - knockoff-filter's stat_glmnet_lambdasmax (uses vendored Fortran glmnet)
+
+    This hybrid should give good R compatibility since:
+    - knockpy uses proper SDP/MVR methods
+    - knockoff-filter's glmnet is the actual Fortran glmnet (like R)
+    """
+    np.random.seed(seed)
+
+    try:
+        from knockpy.knockoffs import GaussianSampler
+    except ImportError:
+        logger.warning("knockpy not available for knockoff generation")
+        return None
+
+    try:
+        from knockoff.stats import stat_glmnet_lambdasmax
+        from knockoff.stats.glmnet import HAS_GLMNET
+        from knockoff.filter import knockoff_threshold
+    except ImportError as e:
+        logger.warning(f"knockoff-filter not available: {e}")
+        return None
+
+    logger.info(f"knockpy_fortran_glmnet: vendored Fortran glmnet available = {HAS_GLMNET}")
+
+    n, p = X.shape
+
+    # Map method names for knockpy
+    method_map = {'equi': 'equicorrelated', 'asdp': 'sdp'}
+    kp_method = method_map.get(method, method)
+
+    # Create knockoffs using knockpy's sampler
+    mu = np.mean(X, axis=0)
+    Sigma = np.cov(X, rowvar=False)
+    if Sigma.ndim == 0:
+        Sigma = np.array([[Sigma]])
+
+    sampler = GaussianSampler(X=X, mu=mu, Sigma=Sigma, method=kp_method)
+    Xk = sampler.sample_knockoffs()
+    S = sampler.S
+
+    # Compute W statistics using knockoff-filter's stat_glmnet_lambdasmax
+    # This uses the vendored Fortran glmnet when available
+    W = stat_glmnet_lambdasmax(X, Xk, y.flatten())
+
+    # Compute threshold using knockoff-filter's implementation
+    threshold = knockoff_threshold(W, fdr=fdr, offset=offset)
+
+    # Select variables
+    if threshold < np.inf:
+        selected = np.where(W >= threshold)[0]
+    else:
+        selected = np.array([], dtype=int)
+
+    return {
+        'W': W,
+        'threshold': threshold,
+        'selected': selected,
+        'knockoffs': Xk,
+        'S': S,
+        'backend': 'knockpy_fortran_glmnet',
+        'has_vendored_glmnet': HAS_GLMNET
     }
 
 
@@ -612,10 +691,13 @@ def main():
     logger.info(f"Data: X shape={X.shape}, y shape={y.shape}")
 
     # Standardize if requested
+    # Use R-compatible standardization (ddof=1) to match R's scale() function
     if args.standardize:
-        logger.info("Standardizing features...")
-        scaler = StandardScaler()
-        X = scaler.fit_transform(X)
+        logger.info("Standardizing features using R-compatible scale (ddof=1)...")
+        means = np.mean(X, axis=0)
+        stds = np.std(X, axis=0, ddof=1)  # R uses ddof=1 (sample std)
+        stds = np.where(stds == 0, 1.0, stds)  # Handle constant columns
+        X = (X - means) / stds
 
     # Run all backends
     results = {}
@@ -648,6 +730,13 @@ def main():
     logger.info("\n=== Backend 5: custom glmnet (SLIDE implementation) ===")
     results['custom_glmnet'] = compute_w_stats_custom_glmnet(
         X, y, fdr=args.fdr, method=args.method,  # knockpy sampler supports sdp
+        offset=0, seed=args.seed
+    )
+
+    # 6. knockpy knockoffs + knockoff-filter's Fortran glmnet
+    logger.info("\n=== Backend 6: knockpy + Fortran glmnet ===")
+    results['knockpy_fortran_glmnet'] = compute_w_stats_knockpy_fortran_glmnet(
+        X, y, fdr=args.fdr, method=args.method,
         offset=0, seed=args.seed
     )
 

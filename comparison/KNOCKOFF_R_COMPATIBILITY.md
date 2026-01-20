@@ -197,9 +197,56 @@ Add to documentation:
 
 ---
 
+## NEW FINDING: Fortran glmnet vs sklearn lasso_path (2026-01-20)
+
+### Investigation Summary
+
+Extensive testing revealed that the vendored Fortran glmnet in knockoff-filter produces W-statistics with **negative correlation** to R:
+
+| Backend | R Correlation | Selects LF55? | W Range |
+|---------|--------------|---------------|---------|
+| **R_native** | 1.00 | ✅ Yes | [-13.35, 28.12] |
+| **custom_glmnet** (sklearn) | **0.57** | ✅ **Yes** | [-19.51, 28.12] |
+| knockpy_fortran_glmnet | 0.31 | ❌ No | [-13.35, 3.01] |
+| knockoff_filter | **-0.61** | ❌ No | [-28.55, 3.01] |
+
+### Root Cause
+
+1. **Standardization difference**: R uses `scale()` (ddof=1), sklearn's StandardScaler uses (ddof=0)
+2. **Fortran glmnet numerical differences**: The vendored Fortran glmnet produces different lasso path entry times than sklearn's `lasso_path`
+3. **Knockoff "race" outcome**: These numerical differences change which variable (original vs knockoff) enters first, flipping the sign of W-statistics
+
+### Key Evidence
+
+With the **same knockoffs** (knockpy GaussianSampler):
+- sklearn lasso_path (no standardization): W[55] = +29.10 ✓
+- Fortran glmnet (no standardization): W[55] = 0 (TIE!)
+
+The Fortran glmnet produces **ties** where sklearn doesn't, compressing the W-statistic range.
+
+### Recommendation
+
+**Use sklearn's `lasso_path` without internal standardization** (the `custom_glmnet` approach):
+
+```python
+# RECOMMENDED: SLIDE's current implementation in loveslide/knockoffs.py
+from sklearn.linear_model import lasso_path
+
+# No standardization, direct lasso path
+_, coef_path, _ = lasso_path(X_full, y, alphas=lambdas, max_iter=10000)
+```
+
+This achieves:
+- 0.57 correlation with R (best among Python implementations)
+- Correctly identifies LF55 (same as R)
+- Consistent W-statistic scale
+
+---
+
 ## NEXT STEPS
 
-1. **Implement CRITICAL fixes** in knockoff-filter and SLIDE_py
-2. **Re-run W-statistic comparison** to verify improvement
-3. **Update documentation** with expected differences
+1. ✅ **Threshold candidates fix** - IMPLEMENTED
+2. ✅ **Standardization investigation** - COMPLETED (recommend sklearn lasso_path)
+3. **Consider removing Fortran glmnet dependency** from knockoff-filter stats module
+4. **Update documentation** with expected differences
 4. **Consider adding R compatibility tests** that verify selections match within tolerance
