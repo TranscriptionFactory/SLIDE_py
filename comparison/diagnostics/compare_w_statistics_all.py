@@ -227,6 +227,86 @@ def compute_w_stats_knockoff_filter(X, y, fdr=0.1, method='sdp', offset=0, seed=
 
 
 # =============================================================================
+# Backend 2b: knockoff-filter with use_sklearn=True (R-compatible)
+# =============================================================================
+
+def compute_w_stats_knockoff_filter_sklearn(X, y, fdr=0.1, method='sdp', offset=0, seed=42):
+    """
+    Compute W-statistics using knockoff-filter with use_sklearn=True.
+
+    This forces sklearn's lasso_path instead of vendored Fortran glmnet,
+    which produces W-statistics with positive correlation to R's knockoff package.
+    """
+    np.random.seed(seed)
+
+    try:
+        from knockoff.stats import stat_glmnet_lambdasmax
+        from knockoff.stats.glmnet import HAS_GLMNET
+        from knockoff.solve import create_solve_sdp, create_solve_asdp, create_solve_equi
+        from knockoff.create import create_gaussian
+        from knockoff.filter import knockoff_threshold
+        from knockoff.utils import is_posdef
+    except ImportError as e:
+        logger.warning(f"knockoff-filter not available: {e}")
+        return None
+
+    logger.info(f"knockoff-filter (sklearn): forcing use_sklearn=True")
+
+    n, p = X.shape
+
+    # Compute covariance
+    Sigma = np.cov(X, rowvar=False)
+    if Sigma.ndim == 0:
+        Sigma = np.array([[Sigma]])
+
+    # Ensure positive definite
+    if not is_posdef(Sigma):
+        min_eig = np.min(np.linalg.eigvalsh(Sigma))
+        if min_eig < 1e-10:
+            Sigma = Sigma + (1e-10 - min_eig) * np.eye(p)
+
+    # Compute S matrix based on method
+    logger.info(f"Computing S matrix using method={method}")
+    try:
+        if method == 'sdp':
+            diag_s = create_solve_sdp(Sigma)
+        elif method == 'asdp':
+            diag_s = create_solve_asdp(Sigma)
+        else:  # equi
+            diag_s = create_solve_equi(Sigma)
+    except Exception as e:
+        logger.warning(f"SDP method {method} failed: {e}, falling back to equi")
+        diag_s = create_solve_equi(Sigma)
+
+    # Generate knockoffs using knockoff-filter's create_gaussian
+    mu = np.mean(X, axis=0)
+    Xk = create_gaussian(X, mu, Sigma, method=method, diag_s=diag_s)
+
+    # Compute W statistics with use_sklearn=True for R-compatibility
+    W = stat_glmnet_lambdasmax(X, Xk, y.flatten(), use_sklearn=True)
+
+    # Compute threshold
+    threshold = knockoff_threshold(W, fdr=fdr, offset=offset)
+
+    # Select variables
+    if threshold < np.inf:
+        selected = np.where(W >= threshold)[0]
+    else:
+        selected = np.array([], dtype=int)
+
+    return {
+        'W': W,
+        'threshold': threshold,
+        'selected': selected,
+        'knockoffs': Xk,
+        'diag_s': diag_s,
+        'backend': 'knockoff_filter_sklearn',
+        'has_vendored_glmnet': HAS_GLMNET,
+        'use_sklearn': True
+    }
+
+
+# =============================================================================
 # Backend 3: knockpy
 # =============================================================================
 
@@ -706,9 +786,15 @@ def main():
     logger.info("\n=== Backend 1: R native ===")
     results['R_native'] = compute_w_stats_r(X, y, fdr=args.fdr, method=args.method, seed=args.seed)
 
-    # 2. knockoff-filter
-    logger.info("\n=== Backend 2: knockoff-filter (Python) ===")
+    # 2. knockoff-filter (Fortran glmnet)
+    logger.info("\n=== Backend 2: knockoff-filter (Fortran glmnet) ===")
     results['knockoff_filter'] = compute_w_stats_knockoff_filter(
+        X, y, fdr=args.fdr, method=args.method, offset=0, seed=args.seed
+    )
+
+    # 2b. knockoff-filter with use_sklearn=True (R-compatible)
+    logger.info("\n=== Backend 2b: knockoff-filter (sklearn, R-compatible) ===")
+    results['knockoff_filter_sklearn'] = compute_w_stats_knockoff_filter_sklearn(
         X, y, fdr=args.fdr, method=args.method, offset=0, seed=args.seed
     )
 

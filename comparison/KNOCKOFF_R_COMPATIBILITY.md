@@ -243,10 +243,69 @@ This achieves:
 
 ---
 
+---
+
+## UPDATE: use_sklearn Parameter Added (2026-01-21)
+
+### Implementation
+
+Added `use_sklearn` parameter to knockoff-filter's glmnet stats module to force sklearn fallback:
+
+```python
+# In knockoff-filter/knockoff/stats/glmnet.py
+from knockoff.stats import stat_glmnet_lambdasmax
+
+# Force sklearn for R-compatibility
+W = stat_glmnet_lambdasmax(X, Xk, y.flatten(), use_sklearn=True)
+```
+
+### Testing Results (2026-01-21)
+
+| Backend | Knockoff Source | Lasso Implementation | R Correlation | Selects LF55? |
+|---------|----------------|----------------------|---------------|---------------|
+| **R_native** | R knockoff | R glmnet | 1.00 | ✅ Yes |
+| **custom_glmnet** | knockpy | sklearn | **+0.57** | ✅ Yes |
+| knockoff_filter | knockoff-filter | Fortran glmnet | -0.61 | ❌ No |
+| knockoff_filter_sklearn | knockoff-filter | sklearn | -0.43 | ❌ No |
+| knockpy_fortran_glmnet | knockpy | Fortran glmnet | +0.31 | ❌ No |
+
+### Key Insight: Two Factors Affect R Compatibility
+
+1. **Lasso Implementation** (Primary):
+   - sklearn lasso_path → better R correlation
+   - Fortran glmnet → produces ties, flipped signs
+
+2. **Knockoff Generation** (Secondary):
+   - knockpy knockoffs → positive correlation with R
+   - knockoff-filter knockoffs → negative correlation with R
+
+**Best combination**: knockpy knockoffs + sklearn lasso_path = **+0.57 correlation** (custom_glmnet)
+
+### Recommendation
+
+For R-compatibility, use SLIDE's custom implementation which combines:
+- knockpy's `GaussianSampler` for knockoff generation
+- sklearn's `lasso_path` for W-statistic computation
+
+```python
+# SLIDE's approach (in loveslide/knockoffs.py)
+from knockpy.knockoffs import GaussianSampler
+from sklearn.linear_model import lasso_path
+
+# Generate knockoffs
+sampler = GaussianSampler(X=X, mu=mu, Sigma=Sigma, method='sdp')
+Xk = sampler.sample_knockoffs()
+
+# Compute W-statistics with sklearn
+_, coef_path, _ = lasso_path(X_full, y, alphas=lambdas, max_iter=10000)
+```
+
+---
+
 ## NEXT STEPS
 
 1. ✅ **Threshold candidates fix** - IMPLEMENTED
 2. ✅ **Standardization investigation** - COMPLETED (recommend sklearn lasso_path)
-3. **Consider removing Fortran glmnet dependency** from knockoff-filter stats module
-4. **Update documentation** with expected differences
-4. **Consider adding R compatibility tests** that verify selections match within tolerance
+3. ✅ **Added use_sklearn parameter** to knockoff-filter stats module
+4. **Document expected differences** between knockoff-filter and knockpy
+5. **Consider adding R compatibility tests** that verify selections match within tolerance
