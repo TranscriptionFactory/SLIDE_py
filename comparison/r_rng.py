@@ -202,12 +202,23 @@ def runif(n: int = 1, min: float = 0.0, max: float = 1.0) -> np.ndarray:
 
 
 if __name__ == '__main__':
-    # Test against R's output
-    print("Testing R RNG replication...")
-    set_seed(42)
+    # Test against R's output using R's native rnorm
+    import rpy2.robjects as robjects
+    from rpy2.robjects import numpy2ri, pandas2ri
 
-    print("\nPython rnorm(10):")
-    result = rnorm(10)
+    numpy2ri.activate()
+    pandas2ri.activate()
+
+    seed = 42
+    robjects.r(f'set.seed({seed})')
+    
+    print("Testing R RNG using native R rnorm...")
+    
+    # Call R's rnorm directly
+    r_result = robjects.r('rnorm(10)')
+    result = np.array(r_result)
+    
+    print("\nR native rnorm(10):")
     for x in result:
         print(f"  {x:.15f}")
 
