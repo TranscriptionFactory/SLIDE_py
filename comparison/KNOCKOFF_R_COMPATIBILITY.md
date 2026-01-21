@@ -99,8 +99,8 @@ candidates = np.sort(np.concatenate([[0], np.abs(W)]))
 
 ### **MEDIUM PRIORITY ISSUES**
 
-#### 6. **Intercept Handling Inconsistency**
-**Location**: `/ix/djishnu/Aaron/1_general_use/knockoff-filter/knockoff-filter/knockoff/stats/glmnet.py` lines 74, 83
+#### 6. **Intercept Handling Inconsistency** - ✅ FIXED
+**Location**: `/ix/djishnu/Aaron/1_general_use/knockoff-filter/knockoff-filter/knockoff/stats/glmnet.py` lines 97-128
 
 **R**:
 ```r
@@ -108,13 +108,18 @@ X = scale(X)  # Centers and standardizes
 fit <- glmnet(X, y, intercept=T, standardize=F)  # Intercept=T but X already centered
 ```
 
-**Python**:
+**Python (FIXED)**:
 ```python
-y_centered = y - y.mean()  # Center y only
-# fit_intercept=False when y_centered but X not centered?
+# Now matches R's behavior:
+# 1. Default standardize=True (always use _r_scale with ddof=1)
+# 2. Don't center y when intercept=True (let model handle it)
+# 3. Use fit_intercept=intercept (not hardcoded False)
+y_work = y if intercept else (y - y.mean())
+model = ElasticNet(..., fit_intercept=intercept, ...)
+model.fit(X_std, y_work)
 ```
 
-**Impact**: Minor numerical differences in glmnet coefficients.
+**Impact**: Now matches R's coefficient computation behavior.
 
 ---
 
@@ -126,8 +131,8 @@ y_centered = y - y.mean()  # Center y only
 | Threshold candidates | loveslide/knockoffs.py | 432-433 | ✅ **FIXED** |
 | SDP solver differences | knockoff/solve.py | 96-263 | Document |
 | RNG differences | base.py, create.py | 41, 363 | Document |
-| Cholesky handling | knockoff/create.py | 344-360 | Match R behavior |
-| Intercept consistency | knockoff/stats/glmnet.py | 74-90 | Verify |
+| Cholesky handling | knockoff/create.py | 344-360 | Keep as-is (Python's regularization preferred) |
+| Intercept consistency | knockoff/stats/glmnet.py | 97-128 | ✅ **FIXED** |
 
 ---
 
@@ -154,7 +159,8 @@ The document recommends:
 | Threshold | Includes 0 | ~~Excludes 0~~ | Logic | ✅ **FIXED** | Added 0 to candidates |
 | SDP solver | Rdsdp | DSDP | Numerical | Document | ±1% expected |
 | RNG | R-MT | NumPy-MT | Different | Document | Use niter>1 |
-| Cholesky | Crash | Regularize | Behavior | Open | Match R or log |
+| Cholesky | Crash | Regularize | Behavior | ✅ Keep as-is | Python's silent regularization preferred |
+| Intercept | scale(X), intercept=T | ~~center y, fit_intercept=F~~ | Logic | ✅ **FIXED** | standardize=True, fit_intercept=intercept |
 
 ---
 
@@ -307,5 +313,10 @@ _, coef_path, _ = lasso_path(X_full, y, alphas=lambdas, max_iter=10000)
 1. ✅ **Threshold candidates fix** - IMPLEMENTED
 2. ✅ **Standardization investigation** - COMPLETED (recommend sklearn lasso_path)
 3. ✅ **Added use_sklearn parameter** to knockoff-filter stats module
-4. **Document expected differences** between knockoff-filter and knockpy
-5. **Consider adding R compatibility tests** that verify selections match within tolerance
+4. ✅ **Intercept handling fix** - IMPLEMENTED (2026-01-21)
+   - Changed default `standardize=True` to always use R's `scale()` behavior (ddof=1)
+   - Don't center y when intercept=True (let model handle it via intercept term)
+   - Use `fit_intercept=intercept` instead of hardcoded False
+5. ✅ **Cholesky handling decision** - Keep Python's silent regularization (preferred over R's crash)
+6. **Document expected differences** between knockoff-filter and knockpy
+7. **Consider adding R compatibility tests** that verify selections match within tolerance
