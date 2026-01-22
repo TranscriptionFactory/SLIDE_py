@@ -16,11 +16,10 @@ Usage:
         --output-dir results/
 
 Available backends:
-    - R_native: R knockoff package
-    - knockoff_filter: knockoff-filter Python (glmnet)
-    - knockoff_filter_sklearn: knockoff-filter with sklearn
-    - knockpy_lsm: knockpy with LSM statistic
-    - knockpy_lasso: knockpy with lasso statistic
+    - R_native: R knockoff package (requires rpy2)
+    - R_knockoffs_py_sklearn: R knockoffs + Python sklearn stats (requires rpy2)
+    - knockoff_filter_sklearn: Python knockoff-filter with sklearn (pure Python)
+    - knockoff_filter: Python knockoff-filter with Fortran glmnet
     - custom_glmnet: SLIDE's custom glmnet implementation
 
 
@@ -51,10 +50,16 @@ import numpy as np
 import pandas as pd
 import yaml
 
-# Add knockoff-filter to path
-KNOCKOFF_FILTER_PATH = "/ix/djishnu/Aaron/1_general_use/knockoff-filter/knockoff-filter"
-if KNOCKOFF_FILTER_PATH not in sys.path:
-    sys.path.insert(0, KNOCKOFF_FILTER_PATH)
+# Import from bundled loveslide.knockoff package
+try:
+    from loveslide.knockoff.stats import stat_glmnet_lambdasmax
+    from loveslide.knockoff.filter import knockoff_threshold
+    from loveslide.knockoff.create import create_gaussian
+    from loveslide.knockoff.solve import create_solve_sdp, create_solve_asdp, create_solve_equi
+    from loveslide.knockoff.utils import is_posdef
+    KNOCKOFF_AVAILABLE = True
+except ImportError:
+    KNOCKOFF_AVAILABLE = False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -119,8 +124,8 @@ def compute_knockoffs_r_knockoffs_py_stats(Z: np.ndarray, y: np.ndarray, fdr: fl
         import rpy2.robjects as robjects
         from rpy2.robjects import numpy2ri, pandas2ri
         from rpy2.robjects.packages import importr
-        from knockoff.stats import stat_glmnet_lambdasmax
-        from knockoff.filter import knockoff_threshold
+        from loveslide.knockoff.stats import stat_glmnet_lambdasmax
+        from loveslide.knockoff.filter import knockoff_threshold
 
         numpy2ri.activate()
         pandas2ri.activate()
@@ -167,13 +172,13 @@ def compute_knockoffs_knockoff_filter(Z: np.ndarray, y: np.ndarray, fdr: float =
     np.random.seed(seed)
 
     try:
-        from knockoff.stats import stat_glmnet_lambdasmax
-        from knockoff.solve import create_solve_asdp, create_solve_sdp, create_solve_equi
-        from knockoff.create import create_gaussian
-        from knockoff.filter import knockoff_threshold
-        from knockoff.utils import is_posdef
+        from loveslide.knockoff.stats import stat_glmnet_lambdasmax
+        from loveslide.knockoff.solve import create_solve_asdp, create_solve_sdp, create_solve_equi
+        from loveslide.knockoff.create import create_gaussian
+        from loveslide.knockoff.filter import knockoff_threshold
+        from loveslide.knockoff.utils import is_posdef
     except ImportError as e:
-        logger.error(f"knockoff-filter not available: {e}")
+        logger.error(f"loveslide.knockoff not available: {e}")
         return None
 
     n, p = Z.shape
@@ -202,58 +207,50 @@ def compute_knockoffs_knockoff_filter(Z: np.ndarray, y: np.ndarray, fdr: float =
     return {'W': W, 'threshold': threshold, 'selected': selected, 'backend': backend_name}
 
 
-def compute_knockoffs_knockpy(Z: np.ndarray, y: np.ndarray, fdr: float = 0.1,
-                              method: str = 'sdp', fstat: str = 'lsm',
-                              seed: int = 42, **kwargs) -> Optional[Dict]:
-    """knockpy implementation."""
-    np.random.seed(seed)
-
-    try:
-        from knockpy import KnockoffFilter
-    except ImportError:
-        logger.error("knockpy not available")
-        return None
-
-    method_map = {'equi': 'equicorrelated', 'asdp': 'sdp'}
-    kp_method = method_map.get(method, method)
-
-    kfilter = KnockoffFilter(
-        ksampler='gaussian',
-        fstat=fstat,
-        knockoff_kwargs={'method': kp_method}
-    )
-
-    rejections = kfilter.forward(X=Z, y=y.flatten(), fdr=fdr, shrinkage=None)
-    selected = np.where(rejections)[0]
-
-    return {'W': kfilter.W, 'threshold': kfilter.threshold, 'selected': selected,
-            'backend': f'knockpy_{fstat}'}
-
-
 def compute_knockoffs_custom_glmnet(Z: np.ndarray, y: np.ndarray, fdr: float = 0.1,
                                     method: str = 'sdp', seed: int = 42,
                                     **kwargs) -> Optional[Dict]:
-    """SLIDE's custom glmnet implementation using sklearn lasso_path."""
+    """SLIDE's custom glmnet implementation using sklearn lasso_path.
+
+    Uses bundled knockoff-filter for knockoff generation.
+    """
     from sklearn.linear_model import lasso_path
     np.random.seed(seed)
 
     try:
-        from knockpy.knockoffs import GaussianSampler
-    except ImportError:
-        logger.error("knockpy not available for GaussianSampler")
+        from loveslide.knockoff.create import create_gaussian
+        from loveslide.knockoff.solve import create_solve_sdp, create_solve_asdp, create_solve_equi
+        from loveslide.knockoff.utils import is_posdef
+    except ImportError as e:
+        logger.error(f"loveslide.knockoff not available: {e}")
         return None
 
     n, p = Z.shape
-    method_map = {'equi': 'equicorrelated', 'asdp': 'sdp'}
-    kp_method = method_map.get(method, method)
 
     mu = np.mean(Z, axis=0)
     Sigma = np.cov(Z, rowvar=False)
     if Sigma.ndim == 0:
         Sigma = np.array([[Sigma]])
 
-    sampler = GaussianSampler(X=Z, mu=mu, Sigma=Sigma, method=kp_method)
-    Zk = sampler.sample_knockoffs()
+    # Ensure positive-definiteness
+    if not is_posdef(Sigma):
+        from sklearn.covariance import LedoitWolf
+        lw = LedoitWolf().fit(Z)
+        Sigma = lw.covariance_
+
+    # Generate knockoffs using bundled knockoff-filter
+    if method == 'equi':
+        diag_s = create_solve_equi(Sigma)
+    elif method in ('asdp', 'sdp'):
+        # Use SDP (ASDP falls back to SDP for small p)
+        if p <= 500:
+            diag_s = create_solve_sdp(Sigma)
+        else:
+            diag_s = create_solve_asdp(Sigma)
+    else:
+        diag_s = create_solve_sdp(Sigma)
+
+    Zk = create_gaussian(Z, mu, Sigma, method=method, diag_s=diag_s)
 
     y_flat = y.flatten()
     nlambda, eps = 500, 0.0005
@@ -327,10 +324,8 @@ BACKENDS = {
     # --- Secondary backends (for detailed analysis) ---
     'R_knockoffs_py_stats': lambda Z, y, **kw: compute_knockoffs_r_knockoffs_py_stats(Z, y, use_sklearn=False, **kw),
     'knockoff_filter': lambda Z, y, **kw: compute_knockoffs_knockoff_filter(Z, y, use_sklearn=False, **kw),
-    'knockpy_lasso': lambda Z, y, **kw: compute_knockoffs_knockpy(Z, y, fstat='lasso', **kw),
 
-    # --- Other backends (different statistics) ---
-    'knockpy_lsm': lambda Z, y, **kw: compute_knockoffs_knockpy(Z, y, fstat='lsm', **kw),
+    # --- Custom SLIDE implementation ---
     'custom_glmnet': compute_knockoffs_custom_glmnet,
 }
 
