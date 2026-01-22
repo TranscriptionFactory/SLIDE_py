@@ -7,7 +7,7 @@ import os
 import warnings
 import numpy as np
 
-from .love_pkg.love import LOVE
+from .Py_LOVE.love import LOVE
 
 
 def call_love_r(X, lbd=0.5, delta=None, thresh_fdr=0.2, rep_CV=50,
