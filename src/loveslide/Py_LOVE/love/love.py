@@ -158,9 +158,10 @@ def LOVE(X: np.ndarray, lbd: float = 0.5, mu: float = 0.5,
     """
     n, p = X.shape
 
-    # Standardize data: center and scale (match R's scale(x, T, T))
+    # Center data only (match R's scale(X, TRUE, FALSE) in LOVE.R line 100)
+    # NOTE: X should already be standardized (centered AND scaled) before calling LOVE
+    # This centering is a no-op on properly standardized data, but matches R behavior
     X = X - np.mean(X, axis=0)
-    X = X / np.std(X, axis=0, ddof=1)
 
     if pure_homo:
         # Estimate the pure rows using homogeneous approach
