@@ -13,7 +13,7 @@ SLIDE_py/                           # Main repository
 │   ├── love.py                     # Python LOVE wrapper
 │   ├── knockoffs.py                # Python knockoffs wrapper
 │   ├── slide.py                    # Main SLIDE logic
-│   └── love_pkg/love/              # Pure Python LOVE implementation
+│   └── Py_LOVE/love/               # Pure Python LOVE implementation (vendored)
 └── pyproject.toml                  # Package config
 
 knockoff-filter/knockoff-filter/    # Separate repository (forked)
@@ -33,7 +33,7 @@ SLIDE_py/
 │   ├── love.py                     # Python LOVE wrapper
 │   ├── knockoffs.py                # Python knockoffs wrapper (updated imports)
 │   ├── slide.py                    # Main SLIDE logic
-│   ├── love_pkg/love/              # Pure Python LOVE implementation
+│   ├── Py_LOVE/love/               # Pure Python LOVE implementation (vendored)
 │   ├── knockoff/                   # BUNDLED knockoff-filter package
 │   │   ├── __init__.py             # With source attribution
 │   │   ├── create.py               # Knockoff generation
