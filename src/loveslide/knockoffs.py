@@ -15,8 +15,16 @@ from sklearn.linear_model import LinearRegression, Lasso, lasso_path
 
 logger = logging.getLogger(__name__)
 
-# Path to Python knockoffs package
-KNOCKOFF_PYTHON_PATH = '/ix/djishnu/Aaron/1_general_use/knockoff-filter/knockoff-filter'
+# Import from bundled knockoff package
+from .knockoff.filter import knockoff_filter, knockoff_threshold
+from .knockoff.create import create_gaussian, KnockoffVariables
+from .knockoff.stats import (
+    stat_glmnet_lambdasmax, stat_glmnet_lambdadiff, stat_glmnet_coefdiff,
+    stat_sqrt_lasso, stat_stability_selection, stat_random_forest,
+    stat_lasso_lambdasmax, stat_lasso_lambdadiff, stat_lasso_coefdiff,
+)
+from .knockoff.solve import create_solve_equi, create_solve_sdp, create_solve_asdp
+from .knockoff.utils import is_posdef
 
 
 def _single_knockoff_iteration_python(z, y, fdr, method, shrink, offset, statistic,
@@ -25,11 +33,9 @@ def _single_knockoff_iteration_python(z, y, fdr, method, shrink, offset, statist
 
     This function is designed to be called in parallel via joblib.
     """
-    if KNOCKOFF_PYTHON_PATH not in sys.path:
-        sys.path.insert(0, KNOCKOFF_PYTHON_PATH)
-
-    from knockoff.filter import knockoff_filter, knockoff_threshold
-    from knockoff.create import create_gaussian, KnockoffVariables
+    # Import inside function for parallel execution (pickle serialization)
+    from loveslide.knockoff.filter import knockoff_threshold
+    from loveslide.knockoff.create import create_gaussian
 
     # Generate knockoffs using cached SDP solution
     Xk = create_gaussian(z, mu, Sigma, method=method, diag_s=diag_s)
@@ -40,30 +46,6 @@ def _single_knockoff_iteration_python(z, y, fdr, method, shrink, offset, statist
     # Run the knockoff filter
     t = knockoff_threshold(W, fdr=fdr, offset=offset)
     selected = np.where(W >= t)[0]
-
-    return selected.tolist() if len(selected) > 0 else []
-
-
-def _single_knockoff_iteration_knockpy(z, y, fdr, kp_method, shrinkage, offset, kp_fstat,
-                                        mu, Sigma, S):
-    """Execute a single knockoff filter iteration with cached covariance for knockpy.
-
-    This function is designed to be called in parallel via joblib.
-    """
-    from knockpy.knockoffs import GaussianSampler
-    from knockpy.knockoff_filter import KnockoffFilter
-
-    # Create sampler with cached covariance
-    ksampler = GaussianSampler(X=z, mu=mu, Sigma=Sigma, S=S, method=kp_method)
-    Xk = ksampler.sample_knockoffs()
-
-    # Create filter and compute statistics
-    kfilter = KnockoffFilter(ksampler=ksampler, fstat=kp_fstat)
-    kfilter.forward(X=z, y=y.flatten(), Xk=Xk, fdr=fdr, shrinkage=shrinkage)
-
-    # Make selections with specified offset
-    selected_mask = kfilter.make_selections(fdr=fdr, offset=offset)
-    selected = np.where(selected_mask)[0]
 
     return selected.tolist() if len(selected) > 0 else []
 
@@ -234,17 +216,6 @@ class Knockoffs():
         np.ndarray
             Indices of selected variables.
         """
-        if KNOCKOFF_PYTHON_PATH not in sys.path:
-            sys.path.insert(0, KNOCKOFF_PYTHON_PATH)
-
-        from knockoff.stats import (
-            stat_glmnet_lambdasmax, stat_glmnet_lambdadiff, stat_glmnet_coefdiff,
-            stat_sqrt_lasso, stat_stability_selection, stat_random_forest,
-            stat_lasso_lambdasmax, stat_lasso_lambdadiff, stat_lasso_coefdiff,
-        )
-        from knockoff.solve import create_solve_equi, create_solve_sdp, create_solve_asdp
-        from knockoff.utils import is_posdef
-
         # Map fstat names to functions
         # GLMNet-based (uses vendored Fortran glmnet, faster)
         # sklearn-based alternatives available for comparison
@@ -338,8 +309,7 @@ class Knockoffs():
         """Compute W statistics matching R's stat.glmnet_lambdasmax.
 
         This implements the signed maximum of lasso path statistic using a
-        grid of lambda values similar to glmnet's default behavior, rather
-        than the exact LARS path used by knockpy's 'lsm' statistic.
+        grid of lambda values similar to glmnet's default behavior.
 
         Includes the random swap symmetrization from R's implementation to
         ensure unbiased W statistics.
@@ -444,138 +414,7 @@ class Knockoffs():
         return threshold
 
     @staticmethod
-    def filter_knockoffs_iterative_knockpy(z, y, fdr=0.1, niter=1, spec=0.2,
-                                           method='mvr', shrink=False,
-                                           offset=0, fstat='lsm', n_jobs=-1, **kwargs):
-        """Run knockoff filter using knockpy package with parallel processing.
-
-        Parameters
-        ----------
-        z : np.ndarray
-            Feature matrix.
-        y : np.ndarray
-            Response vector.
-        fdr : float
-            Target false discovery rate.
-        niter : int
-            Number of knockoff iterations.
-        spec : float
-            Proportion threshold for selection frequency.
-        method : str
-            Knockoff construction method:
-            - 'mvr': Minimum Variance-based Reconstructability (default, often best)
-            - 'sdp': Semidefinite programming (uses DSDP if scikit-dsdp installed)
-            - 'equicorrelated': Always works, lower power
-            - 'maxent': Maximum entropy
-            - 'mmi': Minimize mutual information
-        shrink : bool
-            Whether to use Ledoit-Wolf covariance shrinkage.
-        offset : int
-            Knockoff procedure offset:
-            - 0: Original knockoff (more power, controls modified FDR)
-            - 1: Knockoff+ (conservative, controls exact FDR)
-            Default is 0 for more power.
-        fstat : str
-            Feature statistic method:
-            - 'lsm': Signed maximum of lasso path (uses knockpy's lars_path)
-            - 'glmnet': Grid-based lasso path (matches R's stat.glmnet_lambdasmax)
-            - 'lasso': Cross-validated lasso coefficient differences
-            - 'lcd': Lasso coefficient differences (no CV)
-            - 'ols': OLS coefficient differences
-            Default is 'lsm' to match R SLIDE.
-        n_jobs : int
-            Number of parallel jobs. -1 uses all available cores.
-        **kwargs
-            Additional keyword arguments (ignored).
-
-        Returns
-        -------
-        np.ndarray
-            Indices of selected variables.
-        """
-        from knockpy.knockoffs import GaussianSampler
-
-        z = np.asarray(z, dtype=np.float64)
-        y = np.asarray(y)
-
-        # Map method names for compatibility
-        method_map = {
-            'asdp': 'sdp',  # knockpy doesn't have asdp, sdp uses DSDP
-            'equi': 'equicorrelated',
-        }
-        kp_method = method_map.get(method, method)
-
-        # Configure shrinkage
-        shrinkage = 'ledoitwolf' if shrink else None
-
-        # Handle custom 'glmnet' fstat
-        use_glmnet_stat = (fstat == 'glmnet')
-        kp_fstat = 'lsm' if use_glmnet_stat else fstat
-
-        # Pre-compute covariance and S matrix (OPTIMIZATION: avoid recomputing each iteration)
-        mu = np.mean(z, axis=0)
-
-        if shrink:
-            from sklearn.covariance import LedoitWolf
-            lw = LedoitWolf().fit(z)
-            Sigma = lw.covariance_
-        else:
-            Sigma = np.cov(z, rowvar=False)
-            if Sigma.ndim == 0:
-                Sigma = np.array([[Sigma]])
-
-        # Create a temporary sampler to compute S matrix once
-        logger.info(f"Pre-computing knockoff S matrix for {z.shape[1]} features using method={kp_method}")
-        temp_sampler = GaussianSampler(X=z, mu=mu, Sigma=Sigma, method=kp_method)
-        S = temp_sampler.S  # Cache the S matrix
-
-        logger.info(f"Running {niter} knockoff iterations with {n_jobs} parallel jobs")
-
-        if use_glmnet_stat:
-            # For glmnet stat, we need to use our custom implementation
-            # This is harder to parallelize with knockpy's API, so use a different approach
-            results = []
-            for _ in range(niter):
-                ksampler = GaussianSampler(X=z, mu=mu, Sigma=Sigma, S=S, method=kp_method)
-                Xk = ksampler.sample_knockoffs()
-                W = Knockoffs._compute_glmnet_lambdasmax(z, Xk, y)
-                threshold = Knockoffs._knockoff_threshold(W, fdr, offset=offset)
-                if threshold < np.inf:
-                    selected = np.where(W >= threshold)[0]
-                    results.extend(selected.tolist())
-        else:
-            # Run iterations in parallel (OPTIMIZATION: embarrassingly parallel)
-            # Only use multiprocessing for large niter to justify process spawning overhead
-            if n_jobs == 1 or niter < 200:
-                # Sequential execution for small niter
-                results = []
-                for _ in range(niter):
-                    selected = _single_knockoff_iteration_knockpy(
-                        z, y, fdr, kp_method, shrinkage, offset, kp_fstat, mu, Sigma, S
-                    )
-                    results.extend(selected)
-            else:
-                # Parallel execution for large niter
-                results_nested = Parallel(n_jobs=n_jobs, backend="loky", batch_size="auto")(
-                    delayed(_single_knockoff_iteration_knockpy)(
-                        z, y, fdr, kp_method, shrinkage, offset, kp_fstat, mu, Sigma, S
-                    )
-                    for _ in range(niter)
-                )
-                # Flatten results
-                results = [item for sublist in results_nested for item in sublist]
-
-        if len(results) == 0:
-            return np.array([], dtype=int)
-
-        results = np.array(results)
-        idx, counts = np.unique(results, return_counts=True)
-        sig_idxs = idx[np.where(counts >= spec * niter)]
-
-        return sig_idxs
-
-    @staticmethod
-    def filter_knockoffs_iterative(z, y, fdr=0.1, niter=1, spec=0.2, n_workers=-1, backend='r',
+    def filter_knockoffs_iterative(z, y, fdr=0.1, niter=1, spec=0.2, n_workers=-1, backend='python',
                                    method='asdp', shrink=False, offset=0, fstat='glmnet_lambdasmax'):
         """
         Run knockoff filter to find significant variables.
@@ -595,37 +434,39 @@ class Knockoffs():
         n_workers : int
             Number of parallel workers. -1 uses all available cores. Default: -1.
         backend : str
-            Which knockoff implementation: 'r' (default), 'python', or 'knockpy'.
+            Which knockoff implementation: 'python' (default) or 'r'.
+            - 'python': Pure Python implementation (bundled knockoff-filter)
+            - 'r': R knockoff package via rpy2 (requires rpy2)
         method : str
-            Knockoff construction method:
-            - For 'python' backend: 'asdp' (default), 'sdp', or 'equi'
-            - For 'knockpy' backend: 'mvr' (default), 'sdp', 'equicorrelated', 'maxent', 'mmi'
+            Knockoff construction method: 'asdp' (default), 'sdp', or 'equi'.
+            - 'asdp': Approximate SDP, faster for high-dimensional data
+            - 'sdp': Full semidefinite programming, more power but slower
+            - 'equi': Equicorrelated, always works but lower power
         shrink : bool
-            Whether to use Ledoit-Wolf covariance shrinkage (Python/knockpy backends only).
+            Whether to use Ledoit-Wolf covariance shrinkage (Python backend only).
         offset : int
             Knockoff procedure offset:
             - 0: Original knockoff (more power, controls modified FDR) - R default
             - 1: Knockoff+ (conservative, controls exact FDR)
         fstat : str
             Feature statistic method:
-            - For 'python' backend: 'glmnet_lambdasmax' (default), 'glmnet_lambdadiff', 'glmnet_coefdiff'
-            - For 'knockpy' backend: 'lsm', 'glmnet', 'lasso', 'lcd', 'ols'
+            - 'glmnet_lambdasmax': Signed max of glmnet lasso path (default, matches R)
+            - 'glmnet_lambdadiff': Lambda difference statistic
+            - 'glmnet_coefdiff': Coefficient difference at CV-selected lambda
 
         Returns
         -------
         np.ndarray
             Indices of selected variables.
         """
-        if backend == 'knockpy':
-            return Knockoffs.filter_knockoffs_iterative_knockpy(
-                z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink,
-                offset=offset, fstat=fstat, n_jobs=n_workers)
-        elif backend == 'python':
+        if backend == 'python':
             return Knockoffs.filter_knockoffs_iterative_python(
                 z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink,
                 offset=offset, fstat=fstat, n_jobs=n_workers)
-        else:
+        elif backend == 'r':
             return Knockoffs.filter_knockoffs_iterative_r(z, y, fdr=fdr, niter=niter, spec=spec)
+        else:
+            raise ValueError(f"Unknown backend: {backend}. Use 'python' or 'r'.")
     
     def fit_linear(self, z_matrix, y):
         '''fit z-matrix in linear part to get LP'''
@@ -638,7 +479,7 @@ class Knockoffs():
 
 
     @staticmethod
-    def select_short_freq(z, y, spec=0.3, fdr=0.1, niter=1000, f_size=100, n_workers=-1, backend='r',
+    def select_short_freq(z, y, spec=0.3, fdr=0.1, niter=1000, f_size=100, n_workers=-1, backend='python',
                           method='asdp', shrink=False, offset=0, fstat='glmnet_lambdasmax'):
         """
         Find significant variables using second order knockoffs across subsets of features.
@@ -660,21 +501,25 @@ class Knockoffs():
         n_workers : int
             Number of parallel workers. -1 uses all available cores. Default: -1.
         backend : str
-            Which knockoff implementation: 'r' (default), 'python', or 'knockpy'.
+            Which knockoff implementation: 'python' (default) or 'r'.
+            - 'python': Pure Python implementation (bundled knockoff-filter)
+            - 'r': R knockoff package via rpy2 (requires rpy2)
         method : str
-            Knockoff construction method:
-            - For 'python' backend: 'asdp' (default), 'sdp', or 'equi'
-            - For 'knockpy' backend: 'mvr' (default), 'sdp', 'equicorrelated', 'maxent', 'mmi'
+            Knockoff construction method: 'asdp' (default), 'sdp', or 'equi'.
+            - 'asdp': Approximate SDP, faster for high-dimensional data
+            - 'sdp': Full semidefinite programming, more power but slower
+            - 'equi': Equicorrelated, always works but lower power
         shrink : bool
-            Whether to use Ledoit-Wolf covariance shrinkage (Python/knockpy backends only).
+            Whether to use Ledoit-Wolf covariance shrinkage (Python backend only).
         offset : int
             Knockoff procedure offset:
             - 0: Original knockoff (more power, controls modified FDR) - R default
             - 1: Knockoff+ (conservative, controls exact FDR)
         fstat : str
             Feature statistic method:
-            - For 'python' backend: 'glmnet_lambdasmax' (default), 'glmnet_lambdadiff', 'glmnet_coefdiff'
-            - For 'knockpy' backend: 'lsm', 'glmnet', 'lasso', 'lcd', 'ols'
+            - 'glmnet_lambdasmax': Signed max of glmnet lasso path (default, matches R)
+            - 'glmnet_lambdadiff': Lambda difference statistic
+            - 'glmnet_coefdiff': Coefficient difference at CV-selected lambda
 
         Returns
         -------
