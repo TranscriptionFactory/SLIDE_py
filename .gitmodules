@@ -1,3 +1,0 @@
-[submodule "src/loveslide/love_pkg"]
-	path = src/loveslide/love_pkg
-	url = https://github.com/TranscriptionFactory/LOVE.git
