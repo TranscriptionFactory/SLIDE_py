@@ -1,107 +1,24 @@
 #!/usr/bin/env python3
 """
-Comprehensive Knockoff Implementation Comparison
+Comprehensive Knockoff Implementation Comparison (v2 - Optimized)
 
-End-to-end comparison of knockoff filtering across R and Python implementations.
-Tests knockoff generation, W-statistic computation, threshold selection, and
-variable selection across multiple parameter sets.
+Two-phase approach:
+  Phase 1: Pre-compute LOVE (Z matrices) for all parameter sets
+  Phase 2: Run knockoffs on pre-computed Z matrices
 
-Backends tested:
-    1. R_native: R's knockoff package (gold standard)
-    2. knockoff_filter: Python knockoff-filter with Fortran glmnet
-    3. knockoff_filter_sklearn: knockoff-filter with sklearn fallback
-    4. knockpy: knockpy package with various fstat options
-    5. custom_glmnet: SLIDE's custom sklearn lasso_path implementation
+This avoids redundant LOVE computation across backends.
 
 Usage:
-    # Interactive (single process)
-    python run_knockoff_comparison.py --config comparison_config_binary.yaml
+    # Phase 1: Pre-compute LOVE
+    python run_knockoff_comparison_v2.py --config config.yaml --output-dir out/ --phase love --love-backend python
+    python run_knockoff_comparison_v2.py --config config.yaml --output-dir out/ --phase love --love-backend r
 
-    # SLURM submission
-    sbatch run_knockoff_comparison.sh comparison_config_binary.yaml
+    # Phase 2: Run knockoffs (after Phase 1 completes)
+    python run_knockoff_comparison_v2.py --config config.yaml --output-dir out/ --phase knockoff --backend R_native
+    python run_knockoff_comparison_v2.py --config config.yaml --output-dir out/ --phase knockoff --backend knockoff_filter
 
-    # Quick test (single parameter set)
-    python run_knockoff_comparison.py --config comparison_config_binary.yaml --quick
-
-Example SLURM submission:
-sbatch << 'EOF'
-#!/bin/bash
-#SBATCH --job-name=knockoff_cmp
-#SBATCH --time=8:00:00
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
-#SBATCH --output=logs/knockoff_cmp_%j.out
-
-module load gcc/12.2.0
-module load python/ondemand-jupyter-python3.11
-module load r/4.4.0
-
-export PYTHONPATH="/ix/djishnu/Aaron/1_general_use/knockoff-filter/knockoff-filter:$PYTHONPATH"
-
-/ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python \
-    run_knockoff_comparison.py \
-    --config comparison_config_binary.yaml \
-    --output-dir output_comparison/knockoff_test_$(date +%Y%m%d_%H%M%S)
-EOF
-
-
-
-sbatch << 'EOF'
-#!/bin/bash
-#SBATCH --job-name=knockoff_cmp
-#SBATCH --time=8:00:00
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=48G
-#SBATCH --array=0-5
-#SBATCH --output=logs/knockoff_cmp_%A_%a.out
-#SBATCH --error=logs/knockoff_cmp_%A_%a.err
-
-cd /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison
-mkdir -p logs
-
-module load gcc/12.2.0
-module load python/ondemand-jupyter-python3.11
-module load r/4.4.0
-
-export PYTHONPATH="/ix/djishnu/Aaron/1_general_use/knockoff-filter/k
-nockoff-filter:$PYTHONPATH"
-
-BACKENDS=("R_native" "knockoff_filter" "knockoff_filter_sklearn"
-"knockpy_lsm" "knockpy_lasso" "custom_glmnet")
-BACKEND="${BACKENDS[$SLURM_ARRAY_TASK_ID]}"
-
-# Shared parent dir + backend subfolder
-OUTPUT_BASE="output_comparison/knockoff_cmp_${SLURM_ARRAY_JOB_ID}"
-OUTPUT_DIR="${OUTPUT_BASE}/${BACKEND}"
-
-mkdir -p "$OUTPUT_DIR"
-
-/ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python \
-    run_knockoff_comparison.py \
-    --config comparison_config_binary.yaml \
-    --output-dir "$OUTPUT_DIR" \
-    --backend "$BACKEND"
-
-touch "${OUTPUT_BASE}/.task${SLURM_ARRAY_TASK_ID}_complete"
-EOF
-
-  After all tasks complete, aggregate results:
-  # Check job status first
-  squeue -u $USER
-
-  # Once all complete, run aggregation (replace JOB_ID with your array
-   job ID)
-  JOB_ID=<your_job_id>
-  module load gcc/12.2.0 python/ondemand-jupyter-python3.11 r/4.4.0
-  export PYTHONPATH="/ix/djishnu/Aaron/1_general_use/knockoff-filter/knockoff-filter:$PYTHONPATH"
-  cd /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison
-  /ix3/djishnu/AaronR/8_build/.conda/envs/loveslide_env/bin/python \
-      run_knockoff_comparison.py \
-      --config comparison_config_binary.yaml \
-      --output-dir output_comparison/knockoff_cmp_${JOB_ID} \
-      --aggregate
-
-
+    # Phase 3: Aggregate results
+    python run_knockoff_comparison_v2.py --config config.yaml --output-dir out/ --phase aggregate
 """
 
 import argparse
@@ -109,10 +26,10 @@ import json
 import logging
 import sys
 import warnings
+import itertools
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-import itertools
 
 import numpy as np
 import pandas as pd
@@ -134,6 +51,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Backend to LOVE mapping
+BACKEND_LOVE_MAP = {
+    'R_native': 'r',
+    'knockoff_filter': 'python',
+    'knockoff_filter_sklearn': 'python',
+    'knockpy_lsm': 'python',
+    'knockpy_lasso': 'python',
+    'custom_glmnet': 'python',
+}
+
+ALL_BACKENDS = list(BACKEND_LOVE_MAP.keys())
+
 
 # =============================================================================
 # Data Loading
@@ -148,11 +77,9 @@ def load_data(x_path: str, y_path: str) -> Tuple[np.ndarray, np.ndarray, pd.Data
     logger.info(f"Loading Y from {y_path}")
     Y_df = pd.read_csv(y_path, index_col=0)
 
-    # Handle Y - get the response column
     if Y_df.shape[1] == 1:
         y = Y_df.iloc[:, 0].values
     else:
-        # Try common column names
         for col in ['MRSS', 'y', 'Y', 'response', 'outcome']:
             if col in Y_df.columns:
                 y = Y_df[col].values
@@ -161,71 +88,125 @@ def load_data(x_path: str, y_path: str) -> Tuple[np.ndarray, np.ndarray, pd.Data
             y = Y_df.iloc[:, 0].values
 
     y = y.astype(np.float64)
-
     logger.info(f"Data loaded: X shape={X.shape}, y shape={y.shape}")
     return X, y, X_df
 
 
-def run_love_to_get_z(X: np.ndarray, y: np.ndarray, config: dict,
-                      love_backend: str = 'python') -> Tuple[np.ndarray, np.ndarray]:
+# =============================================================================
+# Phase 1: LOVE Pre-computation
+# =============================================================================
+
+def run_love_r(X: np.ndarray, delta: float, lam: float) -> np.ndarray:
+    """Run R LOVE implementation.
+
+    Parameters match Python call_love convention:
+    - delta maps to R LOVE's 'mu' (thresholding loading matrix)
+    - lam maps to R LOVE's 'lbd' (precision estimation)
     """
-    Run LOVE to get latent factor matrix Z.
+    import rpy2.robjects as robjects
+    from rpy2.robjects import numpy2ri, pandas2ri
+    from rpy2.robjects.packages import importr
 
-    Returns:
-        Z: Latent factor matrix (samples x latent factors)
-        y: Response vector (potentially transformed)
-    """
-    delta = config.get('delta', 0.1)
-    lam = config.get('lambda', 0.5)
+    numpy2ri.activate()
+    pandas2ri.activate()
 
-    logger.info(f"Running LOVE (backend={love_backend}, delta={delta}, lambda={lam})")
+    love_r = importr('LOVE')
+    X_r = robjects.r['as.matrix'](X)
+    result = love_r.LOVE(X=X_r, mu=delta, lbd=lam)
+    C = np.array(result.rx2('C'))
 
-    if love_backend == 'r':
-        # Use R LOVE
+    numpy2ri.deactivate()
+    pandas2ri.deactivate()
+
+    return C
+
+
+def run_love_python(X: np.ndarray, delta: float, lam: float) -> np.ndarray:
+    """Run Python LOVE implementation."""
+    from loveslide.love import call_love
+    result = call_love(X, lbd=lam, mu=delta)
+    return result['C']
+
+
+def precompute_love(config_path: str, output_dir: str, love_backend: str, quick: bool = False):
+    """Pre-compute LOVE Z matrices for all parameter sets."""
+    logger.info(f"Phase 1: Pre-computing LOVE (backend={love_backend})")
+
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+
+    output_dir = Path(output_dir)
+    z_dir = output_dir / "z_matrices" / f"{love_backend}_love"
+    z_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load data
+    X, y, _ = load_data(config['x_path'], config['y_path'])
+
+    # Get parameter grid
+    deltas = config.get('delta', [0.1])
+    lambdas = config.get('lambda', [0.5])
+
+    if isinstance(deltas, (int, float)):
+        deltas = [deltas]
+    if isinstance(lambdas, (int, float)):
+        lambdas = [lambdas]
+
+    if quick:
+        deltas = deltas[:1]
+        lambdas = lambdas[:1]
+
+    logger.info(f"Computing Z matrices for {len(deltas)} x {len(lambdas)} = {len(deltas)*len(lambdas)} parameter sets")
+
+    # Save y vector
+    np.save(z_dir / "y.npy", y)
+
+    # Compute Z for each parameter set
+    for delta, lam in itertools.product(deltas, lambdas):
+        param_str = f"d{delta}_l{lam}"
+        z_file = z_dir / f"Z_{param_str}.npy"
+
+        if z_file.exists():
+            logger.info(f"  {param_str}: Already exists, skipping")
+            continue
+
+        logger.info(f"  {param_str}: Computing LOVE...")
+        start = datetime.now()
+
         try:
-            import rpy2.robjects as robjects
-            from rpy2.robjects import numpy2ri, pandas2ri
-            from rpy2.robjects.packages import importr
+            if love_backend == 'r':
+                Z = run_love_r(X, delta, lam)
+            else:
+                Z = run_love_python(X, delta, lam)
 
-            numpy2ri.activate()
-            pandas2ri.activate()
-
-            love_r = importr('LOVE')
-
-            X_r = robjects.r['as.matrix'](X)
-            result = love_r.CovEst(X=X_r, delta=delta, lam=lam)
-
-            # Extract Z matrix
-            Z = np.array(result.rx2('Z'))
-
-            numpy2ri.deactivate()
-            pandas2ri.deactivate()
-
-            logger.info(f"R LOVE completed: Z shape={Z.shape}")
-            return Z, y
+            np.save(z_file, Z)
+            elapsed = (datetime.now() - start).total_seconds()
+            logger.info(f"  {param_str}: Done in {elapsed:.1f}s, Z shape={Z.shape}")
 
         except Exception as e:
-            logger.warning(f"R LOVE failed: {e}, falling back to Python")
-            love_backend = 'python'
+            logger.error(f"  {param_str}: FAILED - {e}")
+            import traceback
+            traceback.print_exc()
 
-    if love_backend == 'python':
-        from loveslide.love import call_love
+    # Save metadata
+    metadata = {
+        'love_backend': love_backend,
+        'timestamp': datetime.now().isoformat(),
+        'deltas': deltas,
+        'lambdas': lambdas,
+        'x_shape': list(X.shape),
+        'config_path': str(config_path)
+    }
+    with open(z_dir / "metadata.json", 'w') as f:
+        json.dump(metadata, f, indent=2)
 
-        result = call_love(X, lbd=lam, mu=delta)
-        Z = result['Z']
-
-        logger.info(f"Python LOVE completed: Z shape={Z.shape}")
-        return Z, y
-
-    raise ValueError(f"Unknown LOVE backend: {love_backend}")
+    logger.info(f"LOVE pre-computation complete. Z matrices saved to {z_dir}")
 
 
 # =============================================================================
-# Knockoff Backends
+# Phase 2: Knockoff Computation
 # =============================================================================
 
-def compute_knockoffs_r(Z: np.ndarray, y: np.ndarray, fdr: float = 0.1,
-                        seed: int = 42) -> Optional[Dict]:
+def compute_knockoffs_r(Z: np.ndarray, y: np.ndarray, fdr: float = 0.1, seed: int = 42) -> Optional[Dict]:
     """R native knockoff implementation."""
     try:
         import rpy2.robjects as robjects
@@ -248,28 +229,17 @@ def compute_knockoffs_r(Z: np.ndarray, y: np.ndarray, fdr: float = 0.1,
             offset=0, fdr=fdr
         )
 
-        selected = np.array(result.rx2('selected')) - 1  # 0-based
+        selected = np.array(result.rx2('selected')) - 1
         W = np.array(result.rx2('statistic'))
         threshold = float(np.array(result.rx2('threshold'))[0])
-
-        try:
-            Xk = np.array(result.rx2('Xk'))
-        except Exception:
-            Xk = None
 
         numpy2ri.deactivate()
         pandas2ri.deactivate()
 
-        return {
-            'W': W,
-            'threshold': threshold,
-            'selected': selected,
-            'knockoffs': Xk,
-            'backend': 'R_native'
-        }
+        return {'W': W, 'threshold': threshold, 'selected': selected, 'backend': 'R_native'}
 
     except Exception as e:
-        logger.warning(f"R knockoff failed: {e}")
+        logger.error(f"R knockoff failed: {e}")
         return None
 
 
@@ -281,81 +251,54 @@ def compute_knockoffs_knockoff_filter(Z: np.ndarray, y: np.ndarray, fdr: float =
 
     try:
         from knockoff.stats import stat_glmnet_lambdasmax
-        from knockoff.stats.glmnet import HAS_GLMNET
-        from knockoff.solve import create_solve_sdp, create_solve_asdp, create_solve_equi
+        from knockoff.solve import create_solve_sdp, create_solve_equi
         from knockoff.create import create_gaussian
         from knockoff.filter import knockoff_threshold
         from knockoff.utils import is_posdef
     except ImportError as e:
-        logger.warning(f"knockoff-filter not available: {e}")
+        logger.error(f"knockoff-filter not available: {e}")
         return None
 
     n, p = Z.shape
-
-    # Compute covariance
     Sigma = np.cov(Z, rowvar=False)
     if Sigma.ndim == 0:
         Sigma = np.array([[Sigma]])
 
-    # Ensure positive definite
     if not is_posdef(Sigma):
         min_eig = np.min(np.linalg.eigvalsh(Sigma))
         if min_eig < 1e-10:
             Sigma = Sigma + (1e-10 - min_eig) * np.eye(p)
 
-    # Compute S matrix
     try:
-        if method == 'sdp':
-            diag_s = create_solve_sdp(Sigma)
-        elif method == 'asdp':
-            diag_s = create_solve_asdp(Sigma)
-        else:
-            diag_s = create_solve_equi(Sigma)
-    except Exception as e:
-        logger.warning(f"SDP method {method} failed: {e}, using equi")
+        diag_s = create_solve_sdp(Sigma)
+    except Exception:
         diag_s = create_solve_equi(Sigma)
 
-    # Generate knockoffs
     mu = np.mean(Z, axis=0)
     Zk = create_gaussian(Z, mu, Sigma, method=method, diag_s=diag_s)
-
-    # Compute W statistics
     W = stat_glmnet_lambdasmax(Z, Zk, y.flatten(), use_sklearn=use_sklearn)
-
-    # Compute threshold
     threshold = knockoff_threshold(W, fdr=fdr, offset=0)
 
-    # Select variables
     if threshold < np.inf:
         selected = np.where(W >= threshold)[0]
     else:
         selected = np.array([], dtype=int)
 
     backend_name = 'knockoff_filter_sklearn' if use_sklearn else 'knockoff_filter'
-
-    return {
-        'W': W,
-        'threshold': threshold,
-        'selected': selected,
-        'knockoffs': Zk,
-        'backend': backend_name,
-        'has_glmnet': HAS_GLMNET
-    }
+    return {'W': W, 'threshold': threshold, 'selected': selected, 'backend': backend_name}
 
 
 def compute_knockoffs_knockpy(Z: np.ndarray, y: np.ndarray, fdr: float = 0.1,
-                              method: str = 'sdp', fstat: str = 'lsm',
-                              seed: int = 42) -> Optional[Dict]:
+                              method: str = 'sdp', fstat: str = 'lsm', seed: int = 42) -> Optional[Dict]:
     """knockpy implementation."""
     np.random.seed(seed)
 
     try:
         from knockpy import KnockoffFilter
     except ImportError:
-        logger.warning("knockpy not available")
+        logger.error("knockpy not available")
         return None
 
-    # Map method names
     method_map = {'equi': 'equicorrelated', 'asdp': 'sdp'}
     kp_method = method_map.get(method, method)
 
@@ -365,41 +308,28 @@ def compute_knockoffs_knockpy(Z: np.ndarray, y: np.ndarray, fdr: float = 0.1,
         knockoff_kwargs={'method': kp_method}
     )
 
-    rejections = kfilter.forward(
-        X=Z, y=y.flatten(),
-        fdr=fdr, shrinkage=None
-    )
-
+    rejections = kfilter.forward(X=Z, y=y.flatten(), fdr=fdr, shrinkage=None)
     selected = np.where(rejections)[0]
 
-    return {
-        'W': kfilter.W,
-        'threshold': kfilter.threshold,
-        'selected': selected,
-        'knockoffs': getattr(kfilter, 'Xk', None),
-        'backend': f'knockpy_{fstat}'
-    }
+    return {'W': kfilter.W, 'threshold': kfilter.threshold, 'selected': selected, 'backend': f'knockpy_{fstat}'}
 
 
 def compute_knockoffs_custom_glmnet(Z: np.ndarray, y: np.ndarray, fdr: float = 0.1,
                                     method: str = 'sdp', seed: int = 42) -> Optional[Dict]:
-    """SLIDE's custom glmnet implementation (knockpy sampler + sklearn lasso_path)."""
+    """SLIDE's custom glmnet implementation."""
     from sklearn.linear_model import lasso_path
     np.random.seed(seed)
 
     try:
         from knockpy.knockoffs import GaussianSampler
     except ImportError:
-        logger.warning("knockpy not available for knockoff generation")
+        logger.error("knockpy not available")
         return None
 
     n, p = Z.shape
-
-    # Map method names
     method_map = {'equi': 'equicorrelated', 'asdp': 'sdp'}
     kp_method = method_map.get(method, method)
 
-    # Create knockoffs
     mu = np.mean(Z, axis=0)
     Sigma = np.cov(Z, rowvar=False)
     if Sigma.ndim == 0:
@@ -408,45 +338,36 @@ def compute_knockoffs_custom_glmnet(Z: np.ndarray, y: np.ndarray, fdr: float = 0
     sampler = GaussianSampler(X=Z, mu=mu, Sigma=Sigma, method=kp_method)
     Zk = sampler.sample_knockoffs()
 
-    # Custom glmnet implementation
     y_flat = y.flatten()
     nlambda, eps = 500, 0.0005
 
-    # Random swap
     swap = np.random.binomial(1, 0.5, size=p)
     Z_swap = Z * (1 - swap) + Zk * swap
     Zk_swap = Z * swap + Zk * (1 - swap)
-
     Z_full = np.hstack([Z_swap, Zk_swap])
 
-    # Lambda grid
     lambda_max = np.max(np.abs(Z_full.T @ y_flat)) / n
     lambda_min = lambda_max * eps
     lambdas = np.logspace(np.log10(lambda_max), np.log10(lambda_min), nlambda)
 
-    # Lasso path
     try:
         _, coef_path, _ = lasso_path(Z_full, y_flat, alphas=lambdas, max_iter=10000)
     except Exception:
         _, coef_path, _ = lasso_path(Z_full, y_flat, n_alphas=nlambda, max_iter=10000)
         lambdas = np.logspace(np.log10(lambda_max), np.log10(lambda_min), coef_path.shape[1])
 
-    # Entry times
     Z_entry = np.zeros(p)
     Zk_entry = np.zeros(p)
 
     for j in range(p):
         nonzero = np.where(np.abs(coef_path[j, :]) > 1e-10)[0]
         Z_entry[j] = lambdas[nonzero[0]] * n if len(nonzero) > 0 else 0
-
         nonzero_k = np.where(np.abs(coef_path[p + j, :]) > 1e-10)[0]
         Zk_entry[j] = lambdas[nonzero_k[0]] * n if len(nonzero_k) > 0 else 0
 
-    # W statistics
     W = np.maximum(Z_entry, Zk_entry) * np.sign(Z_entry - Zk_entry)
     W = W * (1 - 2 * swap)
 
-    # Threshold (include 0 to match R)
     W_abs = np.abs(W)
     candidates = np.sort(np.concatenate([[0], W_abs]))
 
@@ -458,597 +379,275 @@ def compute_knockoffs_custom_glmnet(Z: np.ndarray, y: np.ndarray, fdr: float = 0
             threshold = t
             break
 
-    # Select
     if threshold < np.inf:
         selected = np.where(W >= threshold)[0]
     else:
         selected = np.array([], dtype=int)
 
-    return {
-        'W': W,
-        'threshold': threshold,
-        'selected': selected,
-        'knockoffs': Zk,
-        'backend': 'custom_glmnet'
-    }
+    return {'W': W, 'threshold': threshold, 'selected': selected, 'backend': 'custom_glmnet'}
 
 
-# =============================================================================
-# Comparison Functions
-# =============================================================================
+def run_knockoff_backend(config_path: str, output_dir: str, backend: str,
+                         quick: bool = False, seed: int = 42):
+    """Run knockoff computation for a single backend using pre-computed Z matrices."""
+    logger.info(f"Phase 2: Running knockoffs for backend={backend}")
 
-def run_all_backends(Z: np.ndarray, y: np.ndarray, fdr: float = 0.1,
-                     method: str = 'sdp', seed: int = 42) -> Dict:
-    """Run all knockoff backends and collect results."""
-    results = {}
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
 
-    # 1. R native
-    logger.info("Running R native knockoff...")
-    results['R_native'] = compute_knockoffs_r(Z, y, fdr=fdr, seed=seed)
+    output_dir = Path(output_dir)
+    love_backend = BACKEND_LOVE_MAP[backend]
+    z_dir = output_dir / "z_matrices" / f"{love_backend}_love"
 
-    # 2. knockoff-filter (Fortran glmnet)
-    logger.info("Running knockoff-filter (Fortran glmnet)...")
-    results['knockoff_filter'] = compute_knockoffs_knockoff_filter(
-        Z, y, fdr=fdr, method=method, use_sklearn=False, seed=seed
-    )
+    if not z_dir.exists():
+        logger.error(f"Z matrices not found at {z_dir}. Run Phase 1 first!")
+        return
 
-    # 3. knockoff-filter (sklearn)
-    logger.info("Running knockoff-filter (sklearn)...")
-    results['knockoff_filter_sklearn'] = compute_knockoffs_knockoff_filter(
-        Z, y, fdr=fdr, method=method, use_sklearn=True, seed=seed
-    )
+    # Load metadata
+    with open(z_dir / "metadata.json") as f:
+        metadata = json.load(f)
 
-    # 4. knockpy (lsm)
-    logger.info("Running knockpy (lsm)...")
-    results['knockpy_lsm'] = compute_knockoffs_knockpy(
-        Z, y, fdr=fdr, method=method, fstat='lsm', seed=seed
-    )
+    deltas = metadata['deltas']
+    lambdas = metadata['lambdas']
+    fdr = config.get('fdr', 0.1)
 
-    # 5. knockpy (lasso)
-    logger.info("Running knockpy (lasso)...")
-    results['knockpy_lasso'] = compute_knockoffs_knockpy(
-        Z, y, fdr=fdr, method=method, fstat='lasso', seed=seed
-    )
+    if quick:
+        deltas = deltas[:1]
+        lambdas = lambdas[:1]
 
-    # 6. custom_glmnet (SLIDE implementation)
-    logger.info("Running custom_glmnet...")
-    results['custom_glmnet'] = compute_knockoffs_custom_glmnet(
-        Z, y, fdr=fdr, method=method, seed=seed
-    )
+    # Load y
+    y = np.load(z_dir / "y.npy")
 
-    return results
+    logger.info(f"Running {backend} on {len(deltas)*len(lambdas)} parameter sets")
 
+    results = []
 
-def compute_comparison_metrics(results: Dict) -> Dict:
-    """Compute comparison metrics between backends."""
-    valid = {k: v for k, v in results.items() if v is not None and 'W' in v}
+    for delta, lam in itertools.product(deltas, lambdas):
+        param_str = f"d{delta}_l{lam}"
+        z_file = z_dir / f"Z_{param_str}.npy"
 
-    if len(valid) < 2:
-        return {'error': 'Insufficient backends for comparison'}
-
-    backends = list(valid.keys())
-    n_backends = len(backends)
-
-    # W statistics
-    W_dict = {k: v['W'] for k, v in valid.items()}
-
-    # Correlation matrix
-    # Suppress divide-by-zero warnings when a backend has constant W (std=0)
-    corr_matrix = np.zeros((n_backends, n_backends))
-    with np.errstate(divide='ignore', invalid='ignore'):
-        for i, b1 in enumerate(backends):
-            for j, b2 in enumerate(backends):
-                corr_matrix[i, j] = np.corrcoef(W_dict[b1], W_dict[b2])[0, 1]
-
-    # Summary per backend
-    summary = {}
-    for name, res in valid.items():
-        W = res['W']
-        summary[name] = {
-            'n_positive': int(np.sum(W > 0)),
-            'n_negative': int(np.sum(W < 0)),
-            'n_zero': int(np.sum(W == 0)),
-            'min': float(np.min(W)),
-            'max': float(np.max(W)),
-            'mean': float(np.mean(W)),
-            'std': float(np.std(W)),
-            'threshold': float(res['threshold']) if res['threshold'] < np.inf else 'inf',
-            'n_selected': len(res['selected']),
-            'selected': res['selected'].tolist() if len(res['selected']) > 0 else []
-        }
-
-    # Selection agreement with R
-    r_selected = set(valid.get('R_native', {}).get('selected', []))
-    agreement = {}
-    for name, res in valid.items():
-        if name == 'R_native':
+        if not z_file.exists():
+            logger.warning(f"  {param_str}: Z matrix not found, skipping")
             continue
-        py_selected = set(res['selected'])
-        union = len(r_selected | py_selected)
-        intersection = len(r_selected & py_selected)
-        jaccard = intersection / union if union > 0 else 1.0
-        agreement[name] = {
-            'jaccard': jaccard,
-            'r_selected': len(r_selected),
-            'py_selected': len(py_selected),
-            'overlap': intersection,
-            'exact_match': r_selected == py_selected
-        }
 
-    # Correlation with R
-    r_corr = {}
-    if 'R_native' in backends:
-        r_idx = backends.index('R_native')
-        for i, name in enumerate(backends):
-            if name != 'R_native':
-                r_corr[name] = float(corr_matrix[r_idx, i]) if not np.isnan(corr_matrix[r_idx, i]) else None
-
-    return {
-        'summary': summary,
-        'correlation_matrix': {
-            'backends': backends,
-            'values': corr_matrix.tolist()
-        },
-        'r_correlation': r_corr,
-        'r_agreement': agreement
-    }
-
-
-# =============================================================================
-# Main Pipeline
-# =============================================================================
-
-def run_comparison_for_params(X: np.ndarray, y: np.ndarray, config: dict,
-                              delta: float, lam: float, fdr: float,
-                              love_backend: str = 'python',
-                              knockoff_method: str = 'sdp',
-                              seed: int = 42) -> Dict:
-    """Run full comparison for one parameter set."""
-    param_config = {**config, 'delta': delta, 'lambda': lam}
-
-    logger.info(f"\n{'='*60}")
-    logger.info(f"Parameters: delta={delta}, lambda={lam}, fdr={fdr}")
-    logger.info(f"{'='*60}")
-
-    # Run LOVE to get Z
-    Z, y_out = run_love_to_get_z(X, y, param_config, love_backend=love_backend)
-
-    # Run all knockoff backends
-    results = run_all_backends(Z, y_out, fdr=fdr, method=knockoff_method, seed=seed)
-
-    # Compute metrics
-    metrics = compute_comparison_metrics(results)
-
-    return {
-        'params': {'delta': delta, 'lambda': lam, 'fdr': fdr},
-        'z_shape': Z.shape,
-        'results': {k: {kk: vv for kk, vv in v.items() if kk != 'knockoffs'}
-                    for k, v in results.items() if v is not None},
-        'metrics': metrics
-    }
-
-
-def run_full_comparison(config_path: str, output_dir: str,
-                        quick: bool = False, seed: int = 42) -> Dict:
-    """Run full comparison across all parameter combinations."""
-
-    # Load config
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
-
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Load data
-    X, y, X_df = load_data(config['x_path'], config['y_path'])
-
-    # Get parameter grid
-    deltas = config.get('delta', [0.1])
-    lambdas = config.get('lambda', [0.5])
-    fdrs = [config.get('fdr', 0.1)]
-
-    if isinstance(deltas, (int, float)):
-        deltas = [deltas]
-    if isinstance(lambdas, (int, float)):
-        lambdas = [lambdas]
-
-    # Quick mode: single parameter set
-    if quick:
-        deltas = deltas[:1]
-        lambdas = lambdas[:1]
-
-    logger.info(f"Running comparison with {len(deltas)} deltas x {len(lambdas)} lambdas x {len(fdrs)} fdrs")
-    logger.info(f"Total parameter combinations: {len(deltas) * len(lambdas) * len(fdrs)}")
-
-    all_results = []
-
-    for delta, lam, fdr in itertools.product(deltas, lambdas, fdrs):
-        try:
-            result = run_comparison_for_params(
-                X, y, config, delta, lam, fdr,
-                love_backend='python',
-                knockoff_method='sdp',
-                seed=seed
-            )
-            all_results.append(result)
-
-            # Save intermediate result
-            param_str = f"d{delta}_l{lam}_fdr{fdr}"
-            with open(output_dir / f"result_{param_str}.json", 'w') as f:
-                json.dump(result, f, indent=2, default=str)
-
-        except Exception as e:
-            logger.error(f"Failed for delta={delta}, lambda={lam}, fdr={fdr}: {e}")
-            import traceback
-            traceback.print_exc()
-
-    # Aggregate results
-    aggregated = aggregate_results(all_results)
-
-    # Save full results
-    full_results = {
-        'config_path': str(config_path),
-        'output_dir': str(output_dir),
-        'timestamp': datetime.now().isoformat(),
-        'data_shape': {'n_samples': X.shape[0], 'n_features': X.shape[1]},
-        'parameters_tested': {
-            'deltas': deltas,
-            'lambdas': lambdas,
-            'fdrs': fdrs
-        },
-        'results': all_results,
-        'aggregated': aggregated
-    }
-
-    with open(output_dir / 'full_comparison.json', 'w') as f:
-        json.dump(full_results, f, indent=2, default=str)
-
-    # Generate report
-    generate_report(full_results, output_dir)
-
-    return full_results
-
-
-def aggregate_results(results: List[Dict]) -> Dict:
-    """Aggregate results across parameter combinations."""
-    if not results:
-        return {}
-
-    # Collect R correlations
-    r_corrs = {}
-    r_agreements = {}
-
-    for r in results:
-        metrics = r.get('metrics', {})
-        for backend, corr in metrics.get('r_correlation', {}).items():
-            if backend not in r_corrs:
-                r_corrs[backend] = []
-            if corr is not None:
-                r_corrs[backend].append(corr)
-
-        for backend, agreement in metrics.get('r_agreement', {}).items():
-            if backend not in r_agreements:
-                r_agreements[backend] = {'exact_matches': 0, 'total': 0, 'jaccards': []}
-            r_agreements[backend]['total'] += 1
-            if agreement.get('exact_match'):
-                r_agreements[backend]['exact_matches'] += 1
-            r_agreements[backend]['jaccards'].append(agreement.get('jaccard', 0))
-
-    # Compute averages
-    avg_r_corr = {k: np.mean(v) if v else None for k, v in r_corrs.items()}
-    avg_jaccard = {k: np.mean(v['jaccards']) if v['jaccards'] else None
-                   for k, v in r_agreements.items()}
-    exact_match_rate = {k: v['exact_matches'] / v['total'] if v['total'] > 0 else None
-                        for k, v in r_agreements.items()}
-
-    return {
-        'avg_r_correlation': avg_r_corr,
-        'avg_jaccard': avg_jaccard,
-        'exact_match_rate': exact_match_rate,
-        'n_parameter_sets': len(results)
-    }
-
-
-def generate_report(results: Dict, output_dir: Path):
-    """Generate human-readable report."""
-    report_lines = []
-
-    report_lines.append("=" * 70)
-    report_lines.append("KNOCKOFF IMPLEMENTATION COMPARISON REPORT")
-    report_lines.append("=" * 70)
-    report_lines.append(f"Timestamp: {results['timestamp']}")
-    report_lines.append(f"Config: {results['config_path']}")
-    report_lines.append(f"Data: {results['data_shape']['n_samples']} samples x {results['data_shape']['n_features']} features")
-    report_lines.append("")
-
-    # Parameters tested
-    params = results['parameters_tested']
-    report_lines.append("Parameters tested:")
-    report_lines.append(f"  Deltas: {params['deltas']}")
-    report_lines.append(f"  Lambdas: {params['lambdas']}")
-    report_lines.append(f"  FDRs: {params['fdrs']}")
-    report_lines.append(f"  Total combinations: {len(results['results'])}")
-    report_lines.append("")
-
-    # Aggregated results
-    agg = results.get('aggregated', {})
-
-    report_lines.append("-" * 70)
-    report_lines.append("AGGREGATED RESULTS (across all parameter sets)")
-    report_lines.append("-" * 70)
-
-    report_lines.append("\nAverage Correlation with R:")
-    for backend, corr in agg.get('avg_r_correlation', {}).items():
-        corr_str = f"{corr:.4f}" if corr is not None else "N/A"
-        report_lines.append(f"  {backend:30s}: {corr_str}")
-
-    report_lines.append("\nAverage Jaccard Agreement with R:")
-    for backend, jaccard in agg.get('avg_jaccard', {}).items():
-        j_str = f"{jaccard:.4f}" if jaccard is not None else "N/A"
-        report_lines.append(f"  {backend:30s}: {j_str}")
-
-    report_lines.append("\nExact Match Rate with R:")
-    for backend, rate in agg.get('exact_match_rate', {}).items():
-        r_str = f"{rate:.1%}" if rate is not None else "N/A"
-        report_lines.append(f"  {backend:30s}: {r_str}")
-
-    # Per-parameter results
-    report_lines.append("")
-    report_lines.append("-" * 70)
-    report_lines.append("PER-PARAMETER RESULTS")
-    report_lines.append("-" * 70)
-
-    for r in results['results']:
-        params = r['params']
-        report_lines.append(f"\n  delta={params['delta']}, lambda={params['lambda']}, fdr={params['fdr']}")
-        report_lines.append(f"  Z shape: {r['z_shape']}")
-
-        # R correlation for this param set
-        r_corr = r.get('metrics', {}).get('r_correlation', {})
-        if r_corr:
-            report_lines.append("  R correlation:")
-            for backend, corr in r_corr.items():
-                corr_str = f"{corr:.4f}" if corr is not None else "N/A"
-                report_lines.append(f"    {backend:28s}: {corr_str}")
-
-        # Selections
-        summary = r.get('metrics', {}).get('summary', {})
-        if summary:
-            report_lines.append("  Selections:")
-            for backend, s in summary.items():
-                sel_str = str(s['selected'][:10]) + "..." if len(s['selected']) > 10 else str(s['selected'])
-                report_lines.append(f"    {backend:28s}: {s['n_selected']} vars {sel_str}")
-
-    report_lines.append("")
-    report_lines.append("=" * 70)
-    report_lines.append("END OF REPORT")
-    report_lines.append("=" * 70)
-
-    report_text = "\n".join(report_lines)
-
-    # Print to console
-    print(report_text)
-
-    # Save to file
-    with open(output_dir / 'comparison_report.txt', 'w') as f:
-        f.write(report_text)
-
-    logger.info(f"Report saved to {output_dir / 'comparison_report.txt'}")
-
-
-# =============================================================================
-# Single Backend Mode (for array jobs)
-# =============================================================================
-
-BACKEND_FUNCTIONS = {
-    'R_native': compute_knockoffs_r,
-    'knockoff_filter': lambda Z, y, fdr, method, seed: compute_knockoffs_knockoff_filter(
-        Z, y, fdr=fdr, method=method, use_sklearn=False, seed=seed),
-    'knockoff_filter_sklearn': lambda Z, y, fdr, method, seed: compute_knockoffs_knockoff_filter(
-        Z, y, fdr=fdr, method=method, use_sklearn=True, seed=seed),
-    'knockpy_lsm': lambda Z, y, fdr, method, seed: compute_knockoffs_knockpy(
-        Z, y, fdr=fdr, method=method, fstat='lsm', seed=seed),
-    'knockpy_lasso': lambda Z, y, fdr, method, seed: compute_knockoffs_knockpy(
-        Z, y, fdr=fdr, method=method, fstat='lasso', seed=seed),
-    'custom_glmnet': compute_knockoffs_custom_glmnet,
-}
-
-ALL_BACKENDS = list(BACKEND_FUNCTIONS.keys())
-
-
-def run_single_backend(config_path: str, output_dir: str, backend: str,
-                       quick: bool = False, seed: int = 42):
-    """Run knockoff comparison for a single backend (for array jobs)."""
-    import itertools
-
-    logger.info(f"Running single backend: {backend}")
-
-    # Load config
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
-
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Load data
-    X, y, X_df = load_data(config['x_path'], config['y_path'])
-
-    # Get parameter grid
-    deltas = config.get('delta', [0.1])
-    lambdas = config.get('lambda', [0.5])
-    fdrs = [config.get('fdr', 0.1)]
-
-    if isinstance(deltas, (int, float)):
-        deltas = [deltas]
-    if isinstance(lambdas, (int, float)):
-        lambdas = [lambdas]
-
-    if quick:
-        deltas = deltas[:1]
-        lambdas = lambdas[:1]
-
-    logger.info(f"Parameter combinations: {len(deltas)} x {len(lambdas)} x {len(fdrs)}")
-
-    backend_results = []
-
-    for delta, lam, fdr in itertools.product(deltas, lambdas, fdrs):
-        param_str = f"d{delta}_l{lam}_fdr{fdr}"
-        logger.info(f"\n{'='*60}")
-        logger.info(f"Parameters: {param_str}")
-        logger.info(f"{'='*60}")
+        logger.info(f"  {param_str}: Loading Z and running knockoffs...")
+        Z = np.load(z_file)
 
         try:
-            # Run LOVE to get Z
-            param_config = {**config, 'delta': delta, 'lambda': lam}
-            Z, y_out = run_love_to_get_z(X, y, param_config, love_backend='python')
-
-            # Run single backend
-            logger.info(f"Running {backend}...")
-
             if backend == 'R_native':
-                result = compute_knockoffs_r(Z, y_out, fdr=fdr, seed=seed)
+                result = compute_knockoffs_r(Z, y, fdr=fdr, seed=seed)
             elif backend == 'knockoff_filter':
-                result = compute_knockoffs_knockoff_filter(
-                    Z, y_out, fdr=fdr, method='sdp', use_sklearn=False, seed=seed)
+                result = compute_knockoffs_knockoff_filter(Z, y, fdr=fdr, use_sklearn=False, seed=seed)
             elif backend == 'knockoff_filter_sklearn':
-                result = compute_knockoffs_knockoff_filter(
-                    Z, y_out, fdr=fdr, method='sdp', use_sklearn=True, seed=seed)
+                result = compute_knockoffs_knockoff_filter(Z, y, fdr=fdr, use_sklearn=True, seed=seed)
             elif backend == 'knockpy_lsm':
-                result = compute_knockoffs_knockpy(
-                    Z, y_out, fdr=fdr, method='sdp', fstat='lsm', seed=seed)
+                result = compute_knockoffs_knockpy(Z, y, fdr=fdr, fstat='lsm', seed=seed)
             elif backend == 'knockpy_lasso':
-                result = compute_knockoffs_knockpy(
-                    Z, y_out, fdr=fdr, method='sdp', fstat='lasso', seed=seed)
+                result = compute_knockoffs_knockpy(Z, y, fdr=fdr, fstat='lasso', seed=seed)
             elif backend == 'custom_glmnet':
-                result = compute_knockoffs_custom_glmnet(
-                    Z, y_out, fdr=fdr, method='sdp', seed=seed)
+                result = compute_knockoffs_custom_glmnet(Z, y, fdr=fdr, seed=seed)
             else:
                 raise ValueError(f"Unknown backend: {backend}")
 
-            if result is not None:
-                # Remove knockoffs from result (too large to serialize)
-                result_clean = {k: v for k, v in result.items() if k != 'knockoffs'}
-                # Convert numpy arrays
-                if 'W' in result_clean:
-                    result_clean['W'] = result_clean['W'].tolist()
-                if 'selected' in result_clean:
-                    result_clean['selected'] = result_clean['selected'].tolist()
-
-                backend_results.append({
+            if result:
+                result_clean = {
+                    'W': result['W'].tolist(),
+                    'threshold': float(result['threshold']) if result['threshold'] < np.inf else 'inf',
+                    'selected': result['selected'].tolist(),
+                    'n_selected': len(result['selected'])
+                }
+                results.append({
                     'params': {'delta': delta, 'lambda': lam, 'fdr': fdr},
                     'z_shape': list(Z.shape),
                     'result': result_clean
                 })
-
-                logger.info(f"  Selected: {len(result['selected'])} variables")
-                logger.info(f"  Threshold: {result['threshold']}")
+                logger.info(f"    Selected: {len(result['selected'])} variables")
 
         except Exception as e:
-            logger.error(f"Failed for {param_str}: {e}")
+            logger.error(f"  {param_str}: FAILED - {e}")
             import traceback
             traceback.print_exc()
 
-    # Save backend results
-    output_file = output_dir / f"backend_{backend}.json"
+    # Save results
+    backend_dir = output_dir / backend
+    backend_dir.mkdir(parents=True, exist_ok=True)
+
+    output_file = backend_dir / f"backend_{backend}.json"
     with open(output_file, 'w') as f:
         json.dump({
             'backend': backend,
+            'love_backend': love_backend,
             'timestamp': datetime.now().isoformat(),
-            'config_path': str(config_path),
-            'results': backend_results
-        }, f, indent=2, default=str)
+            'results': results
+        }, f, indent=2)
 
-    logger.info(f"\nResults saved to {output_file}")
+    # Mark complete
+    (output_dir / f".{backend}_complete").touch()
+
+    logger.info(f"Results saved to {output_file}")
 
 
-def aggregate_backend_results(output_dir: str):
-    """Aggregate results from individual backend runs (array job completion)."""
+# =============================================================================
+# Phase 3: Aggregation
+# =============================================================================
+
+def aggregate_results(output_dir: str):
+    """Aggregate results from all backends."""
     output_dir = Path(output_dir)
+    logger.info(f"Phase 3: Aggregating results from {output_dir}")
 
-    logger.info(f"Aggregating results from {output_dir}")
+    # Find all backend results
+    all_results = {}
 
-    # Find all backend result files
-    backend_files = list(output_dir.glob("backend_*.json"))
+    for backend in ALL_BACKENDS:
+        result_file = output_dir / backend / f"backend_{backend}.json"
+        if result_file.exists():
+            with open(result_file) as f:
+                all_results[backend] = json.load(f)
+            logger.info(f"  Loaded {backend}")
+        else:
+            logger.warning(f"  {backend}: Not found")
 
-    if not backend_files:
-        logger.error("No backend result files found!")
+    if not all_results:
+        logger.error("No results found!")
         return
 
-    logger.info(f"Found {len(backend_files)} backend files")
-
-    # Load all results
-    all_backend_data = {}
-    for bf in backend_files:
-        with open(bf) as f:
-            data = json.load(f)
-            backend_name = data['backend']
-            all_backend_data[backend_name] = data
-
     # Reorganize by parameter set
-    param_results = {}
+    param_comparison = {}
 
-    for backend_name, data in all_backend_data.items():
+    for backend, data in all_results.items():
         for r in data['results']:
-            param_key = f"d{r['params']['delta']}_l{r['params']['lambda']}_fdr{r['params']['fdr']}"
+            param_key = f"d{r['params']['delta']}_l{r['params']['lambda']}"
 
-            if param_key not in param_results:
-                param_results[param_key] = {
+            if param_key not in param_comparison:
+                param_comparison[param_key] = {
                     'params': r['params'],
-                    'z_shape': r['z_shape'],
                     'backends': {}
                 }
 
-            param_results[param_key]['backends'][backend_name] = r['result']
+            param_comparison[param_key]['backends'][backend] = r['result']
 
-    # Compute comparison metrics for each parameter set
-    final_results = []
+    # Compute comparison metrics
+    comparison_results = []
 
-    for param_key, pr in param_results.items():
-        logger.info(f"\nComputing metrics for {param_key}")
+    for param_key, pc in param_comparison.items():
+        logger.info(f"  Computing metrics for {param_key}")
 
-        # Build results dict for compute_comparison_metrics
-        results_for_metrics = {}
-        for backend_name, result in pr['backends'].items():
-            if result:
-                results_for_metrics[backend_name] = {
-                    'W': np.array(result['W']),
-                    'threshold': result['threshold'] if result['threshold'] != 'inf' else np.inf,
-                    'selected': np.array(result['selected']),
-                    'backend': backend_name
+        backends = list(pc['backends'].keys())
+        W_dict = {}
+
+        for b in backends:
+            W_dict[b] = np.array(pc['backends'][b]['W'])
+
+        # Correlation matrix
+        n_backends = len(backends)
+        corr_matrix = np.zeros((n_backends, n_backends))
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            for i, b1 in enumerate(backends):
+                for j, b2 in enumerate(backends):
+                    corr_matrix[i, j] = np.corrcoef(W_dict[b1], W_dict[b2])[0, 1]
+
+        # R correlation
+        r_corr = {}
+        if 'R_native' in backends:
+            r_idx = backends.index('R_native')
+            for i, b in enumerate(backends):
+                if b != 'R_native':
+                    c = corr_matrix[r_idx, i]
+                    r_corr[b] = float(c) if not np.isnan(c) else None
+
+        # Selection agreement with R
+        r_agreement = {}
+        if 'R_native' in pc['backends']:
+            r_selected = set(pc['backends']['R_native']['selected'])
+            for b in backends:
+                if b == 'R_native':
+                    continue
+                py_selected = set(pc['backends'][b]['selected'])
+                union = len(r_selected | py_selected)
+                intersection = len(r_selected & py_selected)
+                jaccard = intersection / union if union > 0 else 1.0
+                r_agreement[b] = {
+                    'jaccard': jaccard,
+                    'exact_match': r_selected == py_selected,
+                    'r_selected': len(r_selected),
+                    'py_selected': len(py_selected)
                 }
 
-        metrics = compute_comparison_metrics(results_for_metrics)
-
-        final_results.append({
-            'params': pr['params'],
-            'z_shape': pr['z_shape'],
-            'results': pr['backends'],
-            'metrics': metrics
+        comparison_results.append({
+            'params': pc['params'],
+            'backends': list(pc['backends'].keys()),
+            'r_correlation': r_corr,
+            'r_agreement': r_agreement,
+            'correlation_matrix': {
+                'backends': backends,
+                'values': corr_matrix.tolist()
+            }
         })
 
-    # Aggregate across all parameter sets
-    aggregated = aggregate_results(final_results)
+    # Aggregate across params
+    avg_r_corr = {}
+    avg_jaccard = {}
+    exact_match_count = {}
 
-    # Build full results
-    full_results = {
-        'output_dir': str(output_dir),
-        'timestamp': datetime.now().isoformat(),
-        'backends_found': list(all_backend_data.keys()),
-        'parameters_tested': {
-            'n_combinations': len(param_results)
-        },
-        'results': final_results,
-        'aggregated': aggregated
+    for cr in comparison_results:
+        for b, corr in cr['r_correlation'].items():
+            if b not in avg_r_corr:
+                avg_r_corr[b] = []
+            if corr is not None:
+                avg_r_corr[b].append(corr)
+
+        for b, agreement in cr['r_agreement'].items():
+            if b not in avg_jaccard:
+                avg_jaccard[b] = []
+                exact_match_count[b] = {'matches': 0, 'total': 0}
+            avg_jaccard[b].append(agreement['jaccard'])
+            exact_match_count[b]['total'] += 1
+            if agreement['exact_match']:
+                exact_match_count[b]['matches'] += 1
+
+    aggregated = {
+        'avg_r_correlation': {k: np.mean(v) if v else None for k, v in avg_r_corr.items()},
+        'avg_jaccard': {k: np.mean(v) if v else None for k, v in avg_jaccard.items()},
+        'exact_match_rate': {k: v['matches']/v['total'] if v['total'] > 0 else None
+                            for k, v in exact_match_count.items()}
     }
 
     # Save
+    full_results = {
+        'timestamp': datetime.now().isoformat(),
+        'backends_found': list(all_results.keys()),
+        'n_parameter_sets': len(comparison_results),
+        'comparison_results': comparison_results,
+        'aggregated': aggregated
+    }
+
     with open(output_dir / 'full_comparison.json', 'w') as f:
         json.dump(full_results, f, indent=2, default=str)
 
-    # Generate report
-    generate_report(full_results, output_dir)
+    # Print report
+    print("\n" + "="*70)
+    print("KNOCKOFF COMPARISON RESULTS")
+    print("="*70)
+    print(f"\nBackends: {', '.join(all_results.keys())}")
+    print(f"Parameter sets: {len(comparison_results)}")
 
-    logger.info(f"\nAggregated results saved to {output_dir / 'full_comparison.json'}")
+    print("\nAverage Correlation with R:")
+    for b, corr in aggregated['avg_r_correlation'].items():
+        print(f"  {b:30s}: {corr:.4f}" if corr else f"  {b:30s}: N/A")
+
+    print("\nAverage Jaccard Agreement with R:")
+    for b, j in aggregated['avg_jaccard'].items():
+        print(f"  {b:30s}: {j:.4f}" if j else f"  {b:30s}: N/A")
+
+    print("\nExact Match Rate with R:")
+    for b, rate in aggregated['exact_match_rate'].items():
+        print(f"  {b:30s}: {rate:.1%}" if rate else f"  {b:30s}: N/A")
+
+    print("\n" + "="*70)
+
+    logger.info(f"Full results saved to {output_dir / 'full_comparison.json'}")
 
 
 # =============================================================================
@@ -1056,55 +655,32 @@ def aggregate_backend_results(output_dir: str):
 # =============================================================================
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='Comprehensive knockoff implementation comparison',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__
-    )
-    parser.add_argument('--config', '-c', required=True,
-                        help='Path to YAML config file')
-    parser.add_argument('--output-dir', '-o', default=None,
-                        help='Output directory (default: auto-generated)')
-    parser.add_argument('--quick', action='store_true',
-                        help='Quick test mode (single parameter set)')
-    parser.add_argument('--seed', type=int, default=42,
-                        help='Random seed')
-    parser.add_argument('--backend', '-b', default=None,
-                        choices=['R_native', 'knockoff_filter', 'knockoff_filter_sklearn',
-                                 'knockpy_lsm', 'knockpy_lasso', 'custom_glmnet', 'all'],
-                        help='Run only specific backend (for array jobs). Default: all')
-    parser.add_argument('--aggregate', action='store_true',
-                        help='Aggregate results from individual backend runs')
+    parser = argparse.ArgumentParser(description='Knockoff Comparison (v2 - Optimized)')
+    parser.add_argument('--config', '-c', required=True, help='YAML config file')
+    parser.add_argument('--output-dir', '-o', required=True, help='Output directory')
+    parser.add_argument('--phase', required=True, choices=['love', 'knockoff', 'aggregate'],
+                        help='Phase to run: love, knockoff, or aggregate')
+    parser.add_argument('--love-backend', choices=['r', 'python'],
+                        help='LOVE backend (for phase=love)')
+    parser.add_argument('--backend', '-b', choices=ALL_BACKENDS,
+                        help='Knockoff backend (for phase=knockoff)')
+    parser.add_argument('--quick', action='store_true', help='Quick test mode')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed')
 
     args = parser.parse_args()
 
-    if args.output_dir is None:
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        args.output_dir = f"output_comparison/knockoff_cmp_{timestamp}"
+    if args.phase == 'love':
+        if not args.love_backend:
+            parser.error("--love-backend required for phase=love")
+        precompute_love(args.config, args.output_dir, args.love_backend, args.quick)
 
-    # Handle aggregate mode (combine results from array job)
-    if args.aggregate:
-        aggregate_backend_results(args.output_dir)
-        return 0
+    elif args.phase == 'knockoff':
+        if not args.backend:
+            parser.error("--backend required for phase=knockoff")
+        run_knockoff_backend(args.config, args.output_dir, args.backend, args.quick, args.seed)
 
-    # Handle single backend mode (for array jobs)
-    if args.backend and args.backend != 'all':
-        run_single_backend(
-            config_path=args.config,
-            output_dir=args.output_dir,
-            backend=args.backend,
-            quick=args.quick,
-            seed=args.seed
-        )
-        return 0
-
-    # Run all backends
-    results = run_full_comparison(
-        config_path=args.config,
-        output_dir=args.output_dir,
-        quick=args.quick,
-        seed=args.seed
-    )
+    elif args.phase == 'aggregate':
+        aggregate_results(args.output_dir)
 
     return 0
 
