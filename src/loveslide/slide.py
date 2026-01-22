@@ -268,9 +268,9 @@ class OptimizeSLIDE(SLIDE):
         Gamma_hat = love_result['Gamma']
         C_hat = love_result['C']
 
-        # Z-score X
+        # Z-score X (must match LOVE's standardization with ddof=1)
         x = self.data.X.values
-        x = (x - np.mean(x, axis=0)) / np.std(x, axis=0)
+        x = (x - np.mean(x, axis=0)) / np.std(x, axis=0, ddof=1)
 
         # Convert Gamma_hat to diagonal matrix and handle zeros
         Gamma_hat = np.where(Gamma_hat == 0, 1e-10, Gamma_hat)
