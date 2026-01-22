@@ -1,0 +1,27 @@
+==============================================================
+SLIDE Build Check Submission
+==============================================================
+Config file: build_check_config.yaml
+Base output: /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/build_check_outputs
+==============================================================
+
+Submitting SLURM array job (4 tasks)...
+sbatch: You have specified NO/WRONG partition, so defaulting to the HTC partition.
+Job submitted: 7489117
+
+Waiting for job to start...
+Output directory: /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/build_check_outputs/20260122_131721/
+
+==============================================================
+Monitoring job progress...
+==============================================================
+Job ID: 7489117
+Output: /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/build_check_outputs/20260122_131721/
+
+You can monitor progress with:
+  squeue -u $USER | grep 7489117
+  tail -f logs/build_check_7489117_*.out
+
+Waiting for job to complete...
+
+Status: RUNNING | Completed tasks: 0/4Status: RUNNING | Completed tasks: 0/4Status: RUNNING | Completed tasks: 0/4Status: RUNNING | Completed tasks: 0/4Status: RUNNING | Completed tasks: 0/4Status: RUNNING | Completed tasks: 2/4Status: RUNNING | Completed tasks: 2/4Status: RUNNING | Completed tasks: 2/4Status: RUNNING | Completed tasks: 2/4Status: RUNNING | Completed tasks: 2/4Status: RUNNING | Completed tasks: 2/4

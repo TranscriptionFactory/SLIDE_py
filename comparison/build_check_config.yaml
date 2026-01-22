@@ -1,0 +1,46 @@
+# =============================================================================
+# SLIDE Build Check Configuration
+# =============================================================================
+# Minimal configuration for automated build validation testing
+#
+# Tests 4 implementations:
+#   Task 0: R SLIDE (native R package - baseline)
+#   Task 1: Python SLIDE with Python LOVE + R Knockoffs
+#   Task 2: Python SLIDE with Python LOVE + knockoff-filter (glmnet)
+#   Task 3: Python SLIDE with Python LOVE + knockoff-filter (sklearn)
+#
+# Uses small HIV cytokine dataset for fast validation (<10 min total)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Data Paths - HIV Cytokine Example Data
+# -----------------------------------------------------------------------------
+x_path: /ix/djishnu/Aaron/1_general_use/SLIDE_py/example/HIV+cytokines_X.csv
+y_path: /ix/djishnu/Aaron/1_general_use/SLIDE_py/example/HIV+cytokines_y.csv
+
+# -----------------------------------------------------------------------------
+# Output Settings
+# -----------------------------------------------------------------------------
+out_path: /ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/build_check_outputs
+
+# -----------------------------------------------------------------------------
+# SLIDE Parameters - Single Configuration for Speed
+# -----------------------------------------------------------------------------
+delta:
+  - 0.1
+
+lambda:
+  - 0.5
+
+# Knockoff parameters
+spec: 0.1
+fdr: 0.1
+SLIDE_iter: 500
+thresh_fdr: 0.2
+eval_type: auc  # Binary outcome (TB status)
+
+# -----------------------------------------------------------------------------
+# Model Settings
+# -----------------------------------------------------------------------------
+y_factor: true  # Binary outcome
+do_interacts: true
