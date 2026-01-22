@@ -229,8 +229,12 @@ class OptimizeSLIDE(SLIDE):
             love_backend (str): Which LOVE implementation to use: 'python' (default) or 'r'.
         """
 
+        # Standardize X once (LOVE will use this internally, and we need it for Z calculation)
+        # Match R's scale(x, T, T) behavior
+        x_std = (x - x.mean(axis=0)) / x.std(axis=0, ddof=1)
+        
         love_result = call_love(
-            X=x,
+            X=x_std,
             lbd=lbd,
             mu=mu,
             pure_homo=pure_homo,
@@ -241,6 +245,7 @@ class OptimizeSLIDE(SLIDE):
             backend=love_backend
         )
         self.love_result = love_result
+        self.x_std = x_std  # Save for Z matrix calculation
 
         love_res_path = os.path.join(outpath, 'love_result.pkl')
         with open(love_res_path, 'wb') as f:
@@ -265,12 +270,33 @@ class OptimizeSLIDE(SLIDE):
 
     def calc_z_matrix(self, love_result):
         A_hat = love_result['A']
-        Gamma_hat = love_result['Gamma']
+        Gamma_hat = love_result['Gamma'].copy()  # Make a copy to modify
         C_hat = love_result['C']
+        I_hat = love_result['pureVec']  # Pure variable indices
 
-        # Z-score X (must match LOVE's standardization with ddof=1)
-        x = self.data.X.values
-        x = (x - np.mean(x, axis=0)) / np.std(x, axis=0, ddof=1)
+        # Use the standardized X that was passed to LOVE
+        x = self.x_std.values
+        
+        # Compute covariance matrix of standardized X
+        Sigma = np.cov(x, rowvar=False)
+        
+        # CRITICAL FIX: Estimate Gamma for non-pure variables
+        # R SLIDE does this at getLatentFactors.R line 165:
+        # Gamma_hat[-I_hat] <- diag(sigma[-I_hat, -I_hat]) - diag(A_hat[-I_hat,] %*% C_hat %*% t(A_hat[-I_hat, ]))
+        p = A_hat.shape[0]
+        all_indices = set(range(p))
+        pure_indices = set(I_hat) if I_hat is not None else set()
+        non_pure_indices = list(all_indices - pure_indices)
+        
+        if len(non_pure_indices) > 0:
+            A_J = A_hat[non_pure_indices, :]
+            # Gamma for non-pure = diag(Sigma_JJ) - diag(A_J @ C @ A_J.T)
+            Sigma_JJ_diag = np.diag(Sigma[np.ix_(non_pure_indices, non_pure_indices)])
+            ACA_diag = np.diag(A_J @ C_hat @ A_J.T)
+            Gamma_hat[non_pure_indices] = Sigma_JJ_diag - ACA_diag
+        
+        # Replace negative Gamma values (R uses 1e2 for non-pure, 1e-2 for pure)
+        Gamma_hat[Gamma_hat < 0] = 1e-2
 
         # Convert Gamma_hat to diagonal matrix and handle zeros
         Gamma_hat = np.where(Gamma_hat == 0, 1e-10, Gamma_hat)
