@@ -295,8 +295,10 @@ def LOVE(X: np.ndarray, lbd: float = 0.5, mu: float = 0.5,
 
         Gamma_hat = BI_C_res['Gamma'] * D_Sigma
 
-    # Ensure non-negative Gamma
-    Gamma_hat[Gamma_hat < 0] = 0
+    # Ensure non-negative Gamma - match R behavior: set negative values to 1e2
+    # R code: Gamma_hat[Gamma_hat < 0] <- 1e2 (for non-pure variables)
+    # This provides numerical stability for downstream computations
+    Gamma_hat[Gamma_hat < 0] = 1e2
 
     if verbose:
         print("Finish estimating the pure loadings...")
