@@ -1,0 +1,44 @@
+{
+  "love_dir": "/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/build_check_outputs/20260122_135613/R_native",
+  "backend": "custom_glmnet",
+  "fdr": 0.1,
+  "seed": 42,
+  "n_param_sets": 1,
+  "results": [
+    {
+      "params": {
+        "delta": 0.1,
+        "lambda": 0.5,
+        "fdr": 0.1
+      },
+      "z_shape": [
+        60,
+        16
+      ],
+      "param_dir": "/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/build_check_outputs/20260122_135613/R_native/0.1_0.5_out",
+      "result": {
+        "W": [
+          -0.0,
+          -5.3795380989391735,
+          0.0,
+          0.0,
+          -6.658234023034322,
+          -0.0,
+          -0.0,
+          0.0,
+          6.169963612389531,
+          0.0,
+          -3.5655960680579577,
+          -0.6474699217456614,
+          0.0,
+          4.762364838145298,
+          0.0,
+          1.038230076463764
+        ],
+        "threshold": "inf",
+        "selected": [],
+        "n_selected": 0
+      }
+    }
+  ]
+}

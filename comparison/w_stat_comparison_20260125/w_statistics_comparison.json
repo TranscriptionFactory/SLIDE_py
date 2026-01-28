@@ -1,0 +1,292 @@
+{
+  "summary": {
+    "R_native": {
+      "n_positive": 1,
+      "n_negative": 5,
+      "n_zero": 10,
+      "min": -7.589637625138935,
+      "max": 3.6034632809791045,
+      "mean": -0.6111002866294069,
+      "std": 2.3685179339881657,
+      "threshold": "inf",
+      "n_selected": 0,
+      "selected": []
+    },
+    "knockoff_filter": {
+      "n_positive": 1,
+      "n_negative": 3,
+      "n_zero": 12,
+      "min": -7.823978336184383,
+      "max": 5.0346339436932785,
+      "mean": -0.5751560058226484,
+      "std": 2.557325376221111,
+      "threshold": "inf",
+      "n_selected": 0,
+      "selected": []
+    },
+    "knockoff_filter_sklearn": {
+      "n_positive": 3,
+      "n_negative": 4,
+      "n_zero": 9,
+      "min": -7.705939220806402,
+      "max": 5.0346339436932785,
+      "mean": -0.4434680621717471,
+      "std": 3.281025891174237,
+      "threshold": "inf",
+      "n_selected": 0,
+      "selected": []
+    },
+    "knockpy_lsm": {
+      "n_positive": 4,
+      "n_negative": 12,
+      "n_zero": 0,
+      "min": -0.14844932061756103,
+      "max": 0.10980498934291162,
+      "mean": -0.03876595065208335,
+      "std": 0.07360108340098541,
+      "threshold": "inf",
+      "n_selected": 0,
+      "selected": []
+    },
+    "knockpy_lasso": {
+      "n_positive": 7,
+      "n_negative": 9,
+      "n_zero": 0,
+      "min": -1.162856677287535,
+      "max": 7.881975488433245,
+      "mean": 0.7925120761479414,
+      "std": 2.189261902456889,
+      "threshold": "inf",
+      "n_selected": 0,
+      "selected": []
+    },
+    "custom_glmnet": {
+      "n_positive": 4,
+      "n_negative": 12,
+      "n_zero": 0,
+      "min": -6.666340993676867,
+      "max": 6.084092122186467,
+      "mean": -0.6610904433384012,
+      "std": 3.500887825849646,
+      "threshold": "inf",
+      "n_selected": 0,
+      "selected": []
+    },
+    "knockpy_fortran_glmnet": {
+      "n_positive": 4,
+      "n_negative": 7,
+      "n_zero": 5,
+      "min": -6.0435646633252205,
+      "max": 5.0357997660611264,
+      "mean": -0.13873429632102124,
+      "std": 2.77562055735374,
+      "threshold": "inf",
+      "n_selected": 0,
+      "selected": []
+    }
+  },
+  "correlation_matrix": {
+    "backends": [
+      "R_native",
+      "knockoff_filter",
+      "knockoff_filter_sklearn",
+      "knockpy_lsm",
+      "knockpy_lasso",
+      "custom_glmnet",
+      "knockpy_fortran_glmnet"
+    ],
+    "values": [
+      [
+        1.0,
+        0.04370822479751029,
+        0.1514410910654965,
+        0.290180485717051,
+        0.048412218529834725,
+        0.05789260392635642,
+        0.1890302555287761
+      ],
+      [
+        0.04370822479751029,
+        1.0,
+        0.7815762331806738,
+        -0.38292092349093765,
+        -0.10011067441861973,
+        -0.09666452228923131,
+        0.4130777713509525
+      ],
+      [
+        0.1514410910654965,
+        0.7815762331806737,
+        1.0,
+        -0.44923507141449265,
+        -0.0909869267100743,
+        0.1019693277611986,
+        0.6559612895759274
+      ],
+      [
+        0.2901804857170511,
+        -0.38292092349093765,
+        -0.44923507141449265,
+        0.9999999999999998,
+        0.10012596934595744,
+        -0.30378453416990187,
+        -0.40191525698455377
+      ],
+      [
+        0.048412218529834725,
+        -0.10011067441861972,
+        -0.09098692671007429,
+        0.10012596934595744,
+        0.9999999999999998,
+        -0.3349456328777164,
+        -0.11704953565032641
+      ],
+      [
+        0.05789260392635642,
+        -0.09666452228923131,
+        0.10196932776119862,
+        -0.3037845341699018,
+        -0.33494563287771634,
+        1.0,
+        0.6894767693859813
+      ],
+      [
+        0.1890302555287761,
+        0.4130777713509525,
+        0.6559612895759274,
+        -0.40191525698455377,
+        -0.11704953565032641,
+        0.6894767693859813,
+        1.0
+      ]
+    ]
+  },
+  "pairwise_differences": {
+    "R_native_vs_knockoff_filter": {
+      "correlation": 0.04370822479751029,
+      "max_abs_diff": 9.993282865382731,
+      "mean_abs_diff": 1.6244748665796234,
+      "rmse": 3.409046000216581
+    },
+    "R_native_vs_knockoff_filter_sklearn": {
+      "correlation": 0.1514410910654965,
+      "max_abs_diff": 9.993282865382731,
+      "mean_abs_diff": 2.0307767375325994,
+      "rmse": 3.7482476094642707
+    },
+    "R_native_vs_knockpy_lsm": {
+      "correlation": 0.290180485717051,
+      "max_abs_diff": 7.4916840064978025,
+      "mean_abs_diff": 1.096439380903311,
+      "rmse": 2.4169586688318643
+    },
+    "R_native_vs_knockpy_lasso": {
+      "correlation": 0.048412218529834725,
+      "max_abs_diff": 7.881975488433245,
+      "mean_abs_diff": 2.399548723852032,
+      "rmse": 3.445403924667413
+    },
+    "R_native_vs_custom_glmnet": {
+      "correlation": 0.05789260392635642,
+      "max_abs_diff": 9.726812347237711,
+      "mean_abs_diff": 3.0420679349201514,
+      "rmse": 4.111995940815541
+    },
+    "R_native_vs_knockpy_fortran_glmnet": {
+      "correlation": 0.1890302555287761,
+      "max_abs_diff": 9.99444868775058,
+      "mean_abs_diff": 1.9800648979252076,
+      "rmse": 3.3244046133012377
+    },
+    "knockoff_filter_vs_knockoff_filter_sklearn": {
+      "correlation": 0.7815762331806738,
+      "max_abs_diff": 5.951008347056169,
+      "mean_abs_diff": 0.8755639870329226,
+      "rmse": 2.0509800693854174
+    },
+    "knockoff_filter_vs_knockpy_lsm": {
+      "correlation": -0.38292092349093765,
+      "max_abs_diff": 7.903121502837068,
+      "mean_abs_diff": 1.2584914986880702,
+      "rmse": 2.6414376222391627
+    },
+    "knockoff_filter_vs_knockpy_lasso": {
+      "correlation": -0.10011067441861973,
+      "max_abs_diff": 9.932572451233089,
+      "mean_abs_diff": 2.5197536981707804,
+      "rmse": 3.7847413384936304
+    },
+    "knockoff_filter_vs_custom_glmnet": {
+      "correlation": -0.09666452228923131,
+      "max_abs_diff": 13.908070458370851,
+      "mean_abs_diff": 3.012249979295153,
+      "rmse": 4.531486596382256
+    },
+    "knockoff_filter_vs_knockpy_fortran_glmnet": {
+      "correlation": 0.4130777713509525,
+      "max_abs_diff": 7.823978336184383,
+      "mean_abs_diff": 1.7815026061109178,
+      "rmse": 2.9275003335858085
+    },
+    "knockoff_filter_sklearn_vs_knockpy_lsm": {
+      "correlation": -0.44923507141449265,
+      "max_abs_diff": 7.785082387459087,
+      "mean_abs_diff": 2.110537412600661,
+      "rmse": 3.339356334778085
+    },
+    "knockoff_filter_sklearn_vs_knockpy_lasso": {
+      "correlation": -0.0909869267100743,
+      "max_abs_diff": 9.814533335855108,
+      "mean_abs_diff": 3.105649624169973,
+      "rmse": 4.28867907566798
+    },
+    "knockoff_filter_sklearn_vs_custom_glmnet": {
+      "correlation": 0.1019693277611986,
+      "max_abs_diff": 13.790031342992869,
+      "mean_abs_diff": 2.7156652689693894,
+      "rmse": 4.552599682373647
+    },
+    "knockoff_filter_sklearn_vs_knockpy_fortran_glmnet": {
+      "correlation": 0.6559612895759274,
+      "max_abs_diff": 7.705939220806402,
+      "mean_abs_diff": 1.461387771680485,
+      "rmse": 2.571874360476608
+    },
+    "knockpy_lsm_vs_knockpy_lasso": {
+      "correlation": 0.10012596934595744,
+      "max_abs_diff": 7.948098136178028,
+      "mean_abs_diff": 1.3589413201904805,
+      "rmse": 2.3360310250286207
+    },
+    "knockpy_lsm_vs_custom_glmnet": {
+      "correlation": -0.30378453416990187,
+      "max_abs_diff": 6.776145983019779,
+      "mean_abs_diff": 2.898337111834598,
+      "rmse": 3.5784734539006875
+    },
+    "knockpy_lsm_vs_knockpy_fortran_glmnet": {
+      "correlation": -0.40191525698455377,
+      "max_abs_diff": 6.1533696526681325,
+      "mean_abs_diff": 1.9896935491185777,
+      "rmse": 2.8077916131305525
+    },
+    "knockpy_lasso_vs_custom_glmnet": {
+      "correlation": -0.3349456328777164,
+      "max_abs_diff": 13.268063636122232,
+      "mean_abs_diff": 3.5776000752022474,
+      "rmse": 4.929130915489544
+    },
+    "knockpy_lasso_vs_knockpy_fortran_glmnet": {
+      "correlation": -0.11704953565032641,
+      "max_abs_diff": 7.881975488433245,
+      "mean_abs_diff": 3.090594857876993,
+      "rmse": 3.845344470256135
+    },
+    "custom_glmnet_vs_knockpy_fortran_glmnet": {
+      "correlation": 0.6894767693859813,
+      "max_abs_diff": 6.084092122186467,
+      "mean_abs_diff": 1.6604273610176246,
+      "rmse": 2.614127314573158
+    }
+  }
+}

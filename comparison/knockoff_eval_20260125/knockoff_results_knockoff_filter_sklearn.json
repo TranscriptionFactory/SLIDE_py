@@ -1,0 +1,44 @@
+{
+  "love_dir": "/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/build_check_outputs/20260122_135613/R_native",
+  "backend": "knockoff_filter_sklearn",
+  "fdr": 0.1,
+  "seed": 42,
+  "n_param_sets": 1,
+  "results": [
+    {
+      "params": {
+        "delta": 0.1,
+        "lambda": 0.5,
+        "fdr": 0.1
+      },
+      "z_shape": [
+        60,
+        16
+      ],
+      "param_dir": "/ix/djishnu/Aaron/1_general_use/SLIDE_py/comparison/build_check_outputs/20260122_135613/R_native/0.1_0.5_out",
+      "result": {
+        "W": [
+          -0.0,
+          -0.0,
+          0.0,
+          0.0,
+          -5.951008347741011,
+          -0.0,
+          -0.0,
+          4.390857670001912,
+          -7.7059392216932014,
+          0.0,
+          -4.390857670001912,
+          -2.022294031407384,
+          0.0,
+          5.034633944272664,
+          3.5491186610044316,
+          -0.0
+        ],
+        "threshold": "inf",
+        "selected": [],
+        "n_selected": 0
+      }
+    }
+  ]
+}
