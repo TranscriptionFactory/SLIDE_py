@@ -321,13 +321,22 @@ def create_gaussian(
     if diag_s.ndim == 2:
         diag_s = np.diag(diag_s)
 
-    # If diag_s is zero, we can only generate trivial knockoffs
+    # If diag_s is zero or near-zero, we can only generate trivial knockoffs
+    # FIX: Check for near-zero values (not just exactly zero) to catch degenerate SDP solutions
+    max_s = np.max(diag_s) if len(diag_s) > 0 else 0
     if np.all(diag_s == 0):
         warnings.warn(
             "The conditional knockoff covariance matrix is not positive definite. "
             "Knockoffs will have no power."
         )
         return X.copy()
+    elif max_s < 1e-6:
+        # Near-zero diag_s indicates degenerate SDP solution (likely from singular covariance)
+        warnings.warn(
+            f"diag_s values are near-zero (max={max_s:.2e}, expected 0.1-1.0). "
+            f"This typically occurs when n <= p and covariance regularization is insufficient. "
+            f"Consider using shrink=True or ensuring n > p. Knockoffs may have reduced power."
+        )
 
     # Compute knockoff distribution parameters
     # SigmaInv_s = Sigma^{-1} @ diag(s)
@@ -405,9 +414,21 @@ def create_second_order(
     High-dimensional Controlled Variable Selection, arXiv:1610.02351 (2016).
     """
     X = np.asarray(X, dtype=np.float64)
+    n, p = X.shape
 
     if method not in ['asdp', 'sdp', 'equi']:
         raise ValueError(f"method must be 'asdp', 'sdp', or 'equi', got '{method}'")
+
+    # FIX: Force Ledoit-Wolf shrinkage when n <= p (R-style regularization)
+    # When n <= p, the sample covariance matrix is singular (rank at most n-1),
+    # causing the SDP solver to return near-zero diag_s values and degenerate knockoffs.
+    # R's knockoff.filter automatically applies shrinkage in this case.
+    if not shrink and n <= p:
+        warnings.warn(
+            f"n={n} <= p={p}: Sample covariance is singular. "
+            f"Auto-enabling Ledoit-Wolf shrinkage to match R's knockoff.filter behavior."
+        )
+        shrink = True
 
     # Estimate the mean vector
     mu = np.mean(X, axis=0)
