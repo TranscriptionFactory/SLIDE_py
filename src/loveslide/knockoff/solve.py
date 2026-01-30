@@ -41,8 +41,8 @@ def _get_sdp_solver():
 
 def _solve_sdp_cvxpy(
     G: np.ndarray,
-    gaptol: float = 1e-6,
-    maxit: int = 1000,
+    gaptol: float = 1e-7,
+    maxit: int = 10000,
     verbose: bool = False,
 ) -> np.ndarray:
     """
@@ -190,8 +190,8 @@ def create_solve_equi(Sigma: np.ndarray, **kwargs) -> np.ndarray:
 
 def create_solve_sdp(
     Sigma: np.ndarray,
-    gaptol: float = 1e-6,
-    maxit: int = 1000,
+    gaptol: float = 1e-7,
+    maxit: int = 10000,
     verbose: bool = False,
     **kwargs
 ) -> np.ndarray:
@@ -210,9 +210,9 @@ def create_solve_sdp(
     ----------
     Sigma : array-like of shape (p, p)
         Positive-definite covariance matrix.
-    gaptol : float, default=1e-6
+    gaptol : float, default=1e-7
         Tolerance for duality gap.
-    maxit : int, default=1000
+    maxit : int, default=10000
         Maximum number of iterations for the solver.
     verbose : bool, default=False
         Whether to display progress.
@@ -364,7 +364,36 @@ def create_solve_sdp(
         )
 
     # Scale back for original covariance matrix
-    return s_val * np.diag(Sigma)
+    diag_s = s_val * np.diag(Sigma)
+
+    # Ensure feasibility on original Sigma (important when G was regularized)
+    # The constraint is: 2*Sigma - diag(diag_s) >= 0
+    # Use eigenvalue-based scaling to ensure feasibility
+    test_sigma = 2 * Sigma - np.diag(diag_s)
+    min_eig = np.linalg.eigvalsh(test_sigma)[0]
+
+    if min_eig < 1e-9:
+        # Scale diag_s down to ensure positive definiteness
+        # Need: 2*Sigma - alpha*diag(diag_s) >= 0 for some alpha < 1
+        # Binary search for the largest feasible alpha
+        alpha_low, alpha_high = 0.0, 1.0
+        for _ in range(50):  # Binary search iterations
+            alpha_mid = (alpha_low + alpha_high) / 2
+            test_mat = 2 * Sigma - np.diag(diag_s * alpha_mid)
+            if is_posdef(test_mat, tol=1e-9):
+                alpha_low = alpha_mid
+            else:
+                alpha_high = alpha_mid
+            if alpha_high - alpha_low < 1e-6:
+                break
+
+        # Use a slightly conservative alpha
+        alpha = alpha_low * 0.99
+        diag_s = diag_s * alpha
+        if verbose:
+            print(f"(Sigma feasibility: scaled by {alpha:.3f})")
+
+    return diag_s
 
 
 def _merge_clusters(clusters: np.ndarray, max_size: int) -> np.ndarray:
@@ -477,8 +506,8 @@ def _divide_sdp(
 def create_solve_asdp(
     Sigma: np.ndarray,
     max_size: int = 500,
-    gaptol: float = 1e-6,
-    maxit: int = 1000,
+    gaptol: float = 1e-7,
+    maxit: int = 10000,
     verbose: bool = False,
     **kwargs
 ) -> np.ndarray:
@@ -494,9 +523,9 @@ def create_solve_asdp(
         Positive-definite covariance matrix.
     max_size : int, default=500
         Maximum size of each block.
-    gaptol : float, default=1e-6
+    gaptol : float, default=1e-7
         Tolerance for duality gap.
-    maxit : int, default=1000
+    maxit : int, default=10000
         Maximum number of iterations.
     verbose : bool, default=False
         Whether to display progress.

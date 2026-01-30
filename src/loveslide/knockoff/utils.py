@@ -82,7 +82,7 @@ def is_posdef(A: np.ndarray, tol: float = 1e-9, **kwargs) -> bool:
             # Fallback to dense computation
             lambda_min = np.min(linalg.eigvalsh(A))
 
-    return lambda_min > tol * 10
+    return lambda_min > tol
 
 
 def canonical_svd(X: np.ndarray, **kwargs) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -156,6 +156,8 @@ def cov2cor(Sigma: np.ndarray, **kwargs) -> np.ndarray:
     """
     Convert a covariance matrix to a correlation matrix.
 
+    Enforces numerical symmetry and unit diagonal to match R's behavior.
+
     Parameters
     ----------
     Sigma : array-like of shape (p, p)
@@ -164,13 +166,18 @@ def cov2cor(Sigma: np.ndarray, **kwargs) -> np.ndarray:
     Returns
     -------
     np.ndarray of shape (p, p)
-        Correlation matrix.
+        Correlation matrix with enforced symmetry and unit diagonal.
     """
     Sigma = np.asarray(Sigma)
     d = np.sqrt(np.diag(Sigma))
     # Avoid division by zero
     d[d == 0] = 1.0
-    return Sigma / np.outer(d, d)
+    G = Sigma / np.outer(d, d)
+    # Enforce symmetry (R-style numerical stability)
+    G = (G + G.T) / 2
+    # Ensure unit diagonal
+    np.fill_diagonal(G, 1.0)
+    return G
 
 
 def rnorm_matrix(n: int, p: int, mean: float = 0.0, sd: float = 1.0, **kwargs) -> np.ndarray:

@@ -340,24 +340,26 @@ def create_gaussian(
     # Sigma_k = 2*diag(s) - diag(s) @ SigmaInv_s
     Sigma_k = 2 * diag_s_matrix - diag_s_matrix @ SigmaInv_s
 
-    # Ensure Sigma_k is positive definite (may need small adjustment)
+    # Try Cholesky decomposition with R-style scaled regularization
     try:
         L = linalg.cholesky(Sigma_k, lower=True)
     except linalg.LinAlgError:
-        # Add small regularization
-        eps = 1e-10
-        while eps < 1:
-            try:
-                L = linalg.cholesky(Sigma_k + eps * np.eye(p), lower=True)
-                break
-            except linalg.LinAlgError:
+        # Scale regularization to matrix magnitude (R-style)
+        max_diag = np.max(np.diag(Sigma_k))
+        eps = 1e-10 * max(1.0, max_diag)
+        try:
+            L = linalg.cholesky(Sigma_k + eps * np.eye(p), lower=True)
+        except linalg.LinAlgError:
+            # Fallback: iterative increase if scaled regularization fails
+            while eps < 1:
                 eps *= 10
-        else:
-            warnings.warn(
-                "Could not compute Cholesky decomposition of knockoff covariance. "
-                "Knockoffs will have no power."
-            )
-            return X.copy()
+                try:
+                    L = linalg.cholesky(Sigma_k + eps * np.eye(p), lower=True)
+                    break
+                except linalg.LinAlgError:
+                    continue
+            else:
+                raise ValueError("Cholesky decomposition failed even with large regularization")
 
     # Sample knockoffs: X_k = mu_k + randn(n, p) @ L.T
     X_k = mu_k + np.random.randn(n, p) @ L.T
@@ -411,8 +413,9 @@ def create_second_order(
     mu = np.mean(X, axis=0)
 
     # Estimate the covariance matrix
+    # Use ddof=1 to match R's cov() function (sample covariance with n-1 denominator)
     if not shrink:
-        Sigma = np.cov(X, rowvar=False)
+        Sigma = np.cov(X, rowvar=False, ddof=1)
         # Ensure it's 2D for single feature case
         if Sigma.ndim == 0:
             Sigma = np.array([[Sigma]])
@@ -420,6 +423,17 @@ def create_second_order(
         # Verify positive-definiteness
         if not is_posdef(Sigma):
             shrink = True
+
+        # Auto-enable shrinkage for ill-conditioned matrices
+        # High condition number causes degenerate SDP solutions
+        if not shrink:
+            cond_num = np.linalg.cond(Sigma)
+            if cond_num > 1e5:  # Threshold for ill-conditioning
+                warnings.warn(
+                    f"Covariance matrix is ill-conditioned (cond={cond_num:.1e}). "
+                    f"Auto-enabling Ledoit-Wolf shrinkage for better knockoff power."
+                )
+                shrink = True
 
     if shrink:
         try:
@@ -432,7 +446,8 @@ def create_second_order(
                 "sklearn is not installed. Using manual shrinkage."
             )
             # Manual shrinkage: λ * I + (1 - λ) * S
-            S = np.cov(X, rowvar=False)
+            # Use ddof=1 to match R's cov() function (sample covariance with n-1 denominator)
+            S = np.cov(X, rowvar=False, ddof=1)
             if S.ndim == 0:
                 S = np.array([[S]])
             n, p = X.shape
