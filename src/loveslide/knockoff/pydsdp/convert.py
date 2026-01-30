@@ -5,6 +5,9 @@ convert.py - Convert SeDuMi format to SDPA sparse format.
 This is a modified copy of pydsdp.convert with bug fixes:
 - Added str() conversion for float values in SDPA file output (lines 73, 108)
 - Use COO format for consistent row/col/data ordering in sparse matrices
+- FIX (2026-01-29): Corrected row/col indexing for column-major (order='F') flattening
+  Original code used row = k // blockSize, col = k % blockSize (row-major interpretation)
+  Fixed to use row = k % blockSize, col = k // blockSize (column-major interpretation)
 """
 
 __all__ = ['sedumi2sdpa']
@@ -94,8 +97,10 @@ def sedumi2sdpa(filename, A, b, c, K):
                                  :].data)]
             length = len(list_row)
             for i in range(length):
-                setCol_row = (list_row[i] // blockSize) + 1
-                setCol_col = (list_row[i] % blockSize) + 1
+                # FIX: For column-major (order='F') flattening:
+                # row = index % blockSize, col = index // blockSize
+                setCol_row = (list_row[i] % blockSize) + 1
+                setCol_col = (list_row[i] // blockSize) + 1
                 if setCol_row <= setCol_col:
                     fp.write(" ".join(("0", str(blocknum), str(setCol_row),
                                        str(setCol_col), str(list_val[i]))) + "\n")
@@ -133,8 +138,10 @@ def sedumi2sdpa(filename, A, b, c, K):
             list_val = [x for x in A_s_coo.data]
             length = len(list_row)
             for i in range(length):
-                setCol_row = (list_col[i] // blockSize) + 1
-                setCol_col = (list_col[i] % blockSize) + 1
+                # FIX: For column-major (order='F') flattening:
+                # row = index % blockSize, col = index // blockSize
+                setCol_row = (list_col[i] % blockSize) + 1
+                setCol_col = (list_col[i] // blockSize) + 1
                 if setCol_row <= setCol_col:
                     fp.write(" ".join((list_row[i], str(blocknum),
                                        str(setCol_row), str(setCol_col),
