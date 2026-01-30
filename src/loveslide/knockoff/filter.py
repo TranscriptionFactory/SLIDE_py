@@ -1,8 +1,11 @@
 """Main knockoff filter pipeline."""
 
 from dataclasses import dataclass
-from typing import Optional, Callable, Union, List
+from typing import Optional, Callable, Union, List, Dict, Any
 import numpy as np
+import warnings
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing
 
 from .create import create_second_order, create_fixed, KnockoffVariables
 
@@ -233,4 +236,267 @@ def knockoff_filter(
         threshold=t,
         selected=selected,
         feature_names=selected_names
+    )
+
+
+@dataclass
+class VotingResult:
+    """
+    Result of the knockoff voting procedure (SLIDE-style).
+
+    Attributes
+    ----------
+    selection_counts : np.ndarray
+        Number of times each variable was selected across iterations.
+    selection_frequency : np.ndarray
+        Proportion of iterations where each variable was selected (= W).
+    selected : np.ndarray
+        Indices of variables selected in >= spec proportion of runs.
+    threshold : float
+        The spec threshold used for selection.
+    niter : int
+        Number of knockoff iterations.
+    spec : float
+        Specificity threshold.
+    min_selections : int
+        Minimum selections required (= ceiling(niter * spec)).
+    """
+    selection_counts: np.ndarray
+    selection_frequency: np.ndarray  # This is the "W" for voting
+    selected: np.ndarray
+    threshold: float
+    niter: int
+    spec: float
+    min_selections: int
+
+    def __repr__(self) -> str:
+        n_selected = len(self.selected)
+        p = len(self.selection_counts)
+        return (
+            f"VotingResult(\n"
+            f"  n_features={p},\n"
+            f"  n_selected={n_selected},\n"
+            f"  selected={self.selected.tolist()},\n"
+            f"  niter={self.niter},\n"
+            f"  spec={self.spec},\n"
+            f"  min_selections={self.min_selections}\n"
+            f")"
+        )
+
+
+def _run_single_knockoff(args):
+    """
+    Worker function for parallel knockoff execution.
+
+    Returns the indices of selected variables for one iteration.
+    """
+    X, y, knockoffs, statistic, fdr, offset, seed = args
+
+    # Set random seed for this iteration
+    np.random.seed(seed)
+
+    try:
+        result = knockoff_filter(
+            X, y,
+            knockoffs=knockoffs,
+            statistic=statistic,
+            fdr=fdr,
+            offset=offset
+        )
+        return result.selected.tolist()
+    except Exception as e:
+        warnings.warn(f"Knockoff iteration failed (seed={seed}): {e}")
+        return []
+
+
+def knockoff_filter_voting(
+    X: np.ndarray,
+    y: np.ndarray,
+    knockoffs: Optional[Callable] = None,
+    statistic: Optional[Callable] = None,
+    fdr: float = 0.10,
+    offset: int = 1,
+    niter: int = 500,
+    spec: float = 0.1,
+    n_jobs: int = 1,
+    base_seed: int = 42,
+    verbose: bool = False,
+    **kwargs
+) -> VotingResult:
+    """
+    Run the Knockoff Filter with SLIDE-style voting for stable variable selection.
+
+    This function runs the knockoff filter multiple times with different random
+    seeds and selects variables that appear in at least `spec` proportion of runs.
+    This matches R's SLIDE voting methodology.
+
+    Parameters
+    ----------
+    X : array-like of shape (n, p)
+        Matrix of predictors.
+    y : array-like of shape (n,)
+        Response vector.
+    knockoffs : callable, optional
+        Function to construct knockoffs. Default: create_second_order.
+    statistic : callable, optional
+        Function to compute importance statistics. Default: stat_glmnet_coefdiff.
+    fdr : float, default=0.10
+        Target false discovery rate for each knockoff run.
+    offset : {0, 1}, default=1
+        Offset for knockoff threshold (1 = knockoffs+).
+    niter : int, default=500
+        Number of knockoff iterations to run.
+    spec : float, default=0.1
+        Specificity threshold - keep variables selected in >= spec * niter runs.
+    n_jobs : int, default=1
+        Number of parallel jobs. Use -1 for all available cores.
+    base_seed : int, default=42
+        Base seed for reproducibility. Each iteration uses base_seed + i.
+    verbose : bool, default=False
+        Print progress information.
+
+    Returns
+    -------
+    VotingResult
+        Object containing selection_counts, selection_frequency (W), selected,
+        and voting parameters.
+
+    Notes
+    -----
+    This implements the SLIDE voting approach:
+    1. Run knockoff filter `niter` times with different random seeds
+    2. Count how often each variable is selected
+    3. Keep variables selected in >= spec proportion of runs
+
+    The `selection_frequency` field serves as the "W" statistic for voting,
+    representing the proportion of runs where each variable was selected.
+
+    References
+    ----------
+    Barber and Candes, Controlling the false discovery rate via knockoffs.
+    Ann. Statist. 43 (2015), no. 5, 2055--2085.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from loveslide.knockoff import knockoff_filter_voting
+    >>> n, p = 100, 50
+    >>> X = np.random.randn(n, p)
+    >>> beta = np.zeros(p)
+    >>> beta[:5] = 3.0
+    >>> y = X @ beta + np.random.randn(n)
+    >>> result = knockoff_filter_voting(X, y, niter=100, spec=0.1)
+    >>> print(result.selected)
+    """
+    # Convert inputs
+    X = np.asarray(X, dtype=np.float64)
+    y = np.asarray(y)
+
+    if y.ndim > 1:
+        y = y.ravel()
+
+    n, p = X.shape
+
+    # Validate parameters
+    if niter < 1:
+        raise ValueError(f"niter must be >= 1, got {niter}")
+    if not 0 < spec <= 1:
+        raise ValueError(f"spec must be in (0, 1], got {spec}")
+
+    # Set defaults
+    if knockoffs is None:
+        knockoffs = create_second_order
+    if statistic is None:
+        from .stats import stat_glmnet_coefdiff
+        statistic = stat_glmnet_coefdiff
+
+    # Determine number of jobs
+    if n_jobs == -1:
+        n_jobs = multiprocessing.cpu_count()
+    n_jobs = max(1, min(n_jobs, niter))
+
+    # Initialize selection counts
+    selection_counts = np.zeros(p, dtype=np.int32)
+
+    if verbose:
+        print(f"Running {niter} knockoff iterations with {n_jobs} jobs...")
+
+    # Prepare arguments for each iteration
+    # Note: We can't pickle lambdas, so we pass knockoffs/statistic as None
+    # and rely on defaults, or we run sequentially
+
+    if n_jobs == 1:
+        # Sequential execution (safer, works with custom knockoffs/statistic)
+        for i in range(niter):
+            seed = base_seed + i
+            np.random.seed(seed)
+
+            try:
+                result = knockoff_filter(
+                    X, y,
+                    knockoffs=knockoffs,
+                    statistic=statistic,
+                    fdr=fdr,
+                    offset=offset
+                )
+                for idx in result.selected:
+                    selection_counts[idx] += 1
+
+                if verbose and (i + 1) % 50 == 0:
+                    print(f"  Completed {i + 1}/{niter} iterations")
+
+            except Exception as e:
+                warnings.warn(f"Knockoff iteration {i} failed: {e}")
+    else:
+        # Parallel execution (only works with default knockoffs/statistic)
+        if knockoffs is not create_second_order or statistic is not None:
+            warnings.warn(
+                "Parallel execution with custom knockoffs/statistic may not work. "
+                "Falling back to sequential execution."
+            )
+            return knockoff_filter_voting(
+                X, y, knockoffs=knockoffs, statistic=statistic,
+                fdr=fdr, offset=offset, niter=niter, spec=spec,
+                n_jobs=1, base_seed=base_seed, verbose=verbose, **kwargs
+            )
+
+        # Prepare arguments
+        args_list = [
+            (X, y, None, None, fdr, offset, base_seed + i)
+            for i in range(niter)
+        ]
+
+        with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+            futures = [executor.submit(_run_single_knockoff, args) for args in args_list]
+
+            for i, future in enumerate(as_completed(futures)):
+                try:
+                    selected = future.result()
+                    for idx in selected:
+                        selection_counts[idx] += 1
+                except Exception as e:
+                    warnings.warn(f"Knockoff iteration failed: {e}")
+
+                if verbose and (i + 1) % 50 == 0:
+                    print(f"  Completed {i + 1}/{niter} iterations")
+
+    # Compute selection frequency (this is the "W" for voting)
+    selection_frequency = selection_counts / niter
+
+    # Select variables appearing in >= spec proportion of runs
+    min_selections = int(np.ceil(niter * spec))
+    selected = np.where(selection_counts >= min_selections)[0]
+    selected = np.sort(selected)
+
+    if verbose:
+        print(f"  Selected {len(selected)} variables (>= {min_selections} selections)")
+
+    return VotingResult(
+        selection_counts=selection_counts,
+        selection_frequency=selection_frequency,
+        selected=selected,
+        threshold=spec,
+        niter=niter,
+        spec=spec,
+        min_selections=min_selections
     )

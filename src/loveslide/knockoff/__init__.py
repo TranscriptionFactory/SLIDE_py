@@ -43,8 +43,10 @@ __version__ = "0.1.0"
 # Main filter
 from .filter import (
     knockoff_filter,
+    knockoff_filter_voting,
     knockoff_threshold,
     KnockoffResult,
+    VotingResult,
 )
 
 # Knockoff construction methods
@@ -100,8 +102,10 @@ __all__ = [
     "__version__",
     # Main filter
     "knockoff_filter",
+    "knockoff_filter_voting",
     "knockoff_threshold",
     "KnockoffResult",
+    "VotingResult",
     # Knockoff construction
     "create_fixed",
     "create_gaussian",
