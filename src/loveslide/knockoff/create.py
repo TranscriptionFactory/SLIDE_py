@@ -392,6 +392,7 @@ def create_second_order(
     X: np.ndarray,
     method: str = 'asdp',
     shrink: bool = False,
+    match_r: bool = False,
     **kwargs
 ) -> np.ndarray:
     """
@@ -408,6 +409,11 @@ def create_second_order(
         Method for minimizing correlation between original and knockoffs.
     shrink : bool, default=False
         Whether to shrink the estimated covariance matrix.
+    match_r : bool, default=False
+        If True, skip the automatic Ledoit-Wolf shrinkage condition number
+        check (cond > 1e5) to match R's knockoff.filter behavior. R uses
+        raw sample covariance without this check, which can cause divergence
+        in n ~ p boundary cases. Use this for exact R compatibility testing.
 
     Returns
     -------
@@ -419,6 +425,11 @@ def create_second_order(
     If shrink=True, uses Ledoit-Wolf shrinkage for covariance estimation.
     Even if shrink=False, shrinkage will be applied if the estimated
     covariance matrix is not positive-definite.
+
+    When match_r=True, the condition number check that triggers automatic
+    shrinkage is bypassed, allowing ill-conditioned covariance matrices
+    to be used directly (as R does). This may result in suboptimal knockoffs
+    but ensures compatibility with R's knockoff.filter output.
 
     References
     ----------
@@ -437,7 +448,7 @@ def create_second_order(
     # insufficient degrees of freedom per parameter, causing the SDP solver to
     # produce suboptimal diag_s values and inconsistent knockoffs.
     # R's knockoff.filter automatically applies shrinkage in similar cases.
-    if not shrink and n <= 1.25 * p:
+    if not shrink and not match_r and n <= 1.25 * p:
         warnings.warn(
             f"n={n}, p={p} (n/p={n/p:.2f}): Insufficient samples for stable covariance. "
             f"Auto-enabling Ledoit-Wolf shrinkage to match R's knockoff.filter behavior."
@@ -461,7 +472,8 @@ def create_second_order(
 
         # Auto-enable shrinkage for ill-conditioned matrices
         # High condition number causes degenerate SDP solutions
-        if not shrink:
+        # Skip this check if match_r=True (R doesn't do this check)
+        if not shrink and not match_r:
             cond_num = np.linalg.cond(Sigma)
             if cond_num > 1e5:  # Threshold for ill-conditioning
                 warnings.warn(
