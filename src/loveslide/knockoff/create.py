@@ -321,22 +321,34 @@ def create_gaussian(
     if diag_s.ndim == 2:
         diag_s = np.diag(diag_s)
 
-    # If diag_s is zero or near-zero, we can only generate trivial knockoffs
+    # If diag_s is zero or near-zero, fall back to equicorrelated method (like R)
     # FIX: Check for near-zero values (not just exactly zero) to catch degenerate SDP solutions
     max_s = np.max(diag_s) if len(diag_s) > 0 else 0
-    if np.all(diag_s == 0):
-        warnings.warn(
-            "The conditional knockoff covariance matrix is not positive definite. "
-            "Knockoffs will have no power."
-        )
-        return X.copy()
-    elif max_s < 1e-6:
-        # Near-zero diag_s indicates degenerate SDP solution (likely from singular covariance)
-        warnings.warn(
-            f"diag_s values are near-zero (max={max_s:.2e}, expected 0.1-1.0). "
-            f"This typically occurs when n <= p and covariance regularization is insufficient. "
-            f"Consider using shrink=True or ensuring n > p. Knockoffs may have reduced power."
-        )
+    if np.all(diag_s == 0) or max_s < 1e-6:
+        # SDP failed - fall back to equicorrelated method (R's knockoff.filter behavior)
+        if method in ['sdp', 'asdp']:
+            warnings.warn(
+                f"SDP solver returned degenerate solution (max diag_s={max_s:.2e}). "
+                f"Falling back to equicorrelated method for robustness. "
+                f"This typically occurs when n <= p. Knockoffs may have reduced power."
+            )
+            diag_s = create_solve_equi(Sigma)
+            max_s = np.max(diag_s) if len(diag_s) > 0 else 0
+
+            # If equi also fails, return trivial knockoffs
+            if np.all(diag_s == 0) or max_s < 1e-6:
+                warnings.warn(
+                    "Both SDP and equicorrelated methods failed. "
+                    "The covariance matrix is not positive-definite. "
+                    "Knockoffs will have no power."
+                )
+                return X.copy()
+        else:
+            warnings.warn(
+                "The conditional knockoff covariance matrix is not positive definite. "
+                "Knockoffs will have no power."
+            )
+            return X.copy()
 
     # Compute knockoff distribution parameters
     # SigmaInv_s = Sigma^{-1} @ diag(s)
