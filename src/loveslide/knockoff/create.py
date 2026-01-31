@@ -419,13 +419,15 @@ def create_second_order(
     if method not in ['asdp', 'sdp', 'equi']:
         raise ValueError(f"method must be 'asdp', 'sdp', or 'equi', got '{method}'")
 
-    # FIX: Force Ledoit-Wolf shrinkage when n <= p (R-style regularization)
-    # When n <= p, the sample covariance matrix is singular (rank at most n-1),
-    # causing the SDP solver to return near-zero diag_s values and degenerate knockoffs.
-    # R's knockoff.filter automatically applies shrinkage in this case.
-    if not shrink and n <= p:
+    # FIX: Force Ledoit-Wolf shrinkage when n <= 1.25*p (R-style regularization)
+    # When n <= p, the sample covariance matrix is singular (rank at most n-1).
+    # When n is close to p (n/p < 1.25), covariance estimation is unstable with
+    # insufficient degrees of freedom per parameter, causing the SDP solver to
+    # produce suboptimal diag_s values and inconsistent knockoffs.
+    # R's knockoff.filter automatically applies shrinkage in similar cases.
+    if not shrink and n <= 1.25 * p:
         warnings.warn(
-            f"n={n} <= p={p}: Sample covariance is singular. "
+            f"n={n}, p={p} (n/p={n/p:.2f}): Insufficient samples for stable covariance. "
             f"Auto-enabling Ledoit-Wolf shrinkage to match R's knockoff.filter behavior."
         )
         shrink = True

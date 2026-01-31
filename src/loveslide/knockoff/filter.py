@@ -315,7 +315,7 @@ def knockoff_filter_voting(
     knockoffs: Optional[Callable] = None,
     statistic: Optional[Callable] = None,
     fdr: float = 0.10,
-    offset: int = 1,
+    offset: int = 0,
     niter: int = 500,
     spec: float = 0.1,
     n_jobs: int = 1,
@@ -342,8 +342,9 @@ def knockoff_filter_voting(
         Function to compute importance statistics. Default: stat_glmnet_coefdiff.
     fdr : float, default=0.10
         Target false discovery rate for each knockoff run.
-    offset : {0, 1}, default=1
-        Offset for knockoff threshold (1 = knockoffs+).
+    offset : {0, 1}, default=0
+        Offset for knockoff threshold. 0 = standard knockoff (matches R's knockoff.filter),
+        1 = knockoffs+ (more conservative).
     niter : int, default=500
         Number of knockoff iterations to run.
     spec : float, default=0.1
