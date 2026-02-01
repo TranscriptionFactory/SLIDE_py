@@ -263,6 +263,10 @@ class VotingResult:
         Specificity threshold.
     min_selections : int
         Minimum selections required (= ceiling(niter * spec)).
+    selected_list : List[np.ndarray], optional
+        List of selected indices per iteration (for findOptIter).
+    optimal_iter : int, optional
+        Index of the optimal iteration chosen by findOptIter.
     """
     selection_counts: np.ndarray
     selection_frequency: np.ndarray  # This is the "W" for voting
@@ -271,10 +275,13 @@ class VotingResult:
     niter: int
     spec: float
     min_selections: int
+    selected_list: Optional[List[np.ndarray]] = None
+    optimal_iter: Optional[int] = None
 
     def __repr__(self) -> str:
         n_selected = len(self.selected)
         p = len(self.selection_counts)
+        opt_iter_str = f", optimal_iter={self.optimal_iter}" if self.optimal_iter is not None else ""
         return (
             f"VotingResult(\n"
             f"  n_features={p},\n"
@@ -282,7 +289,7 @@ class VotingResult:
             f"  selected={self.selected.tolist()},\n"
             f"  niter={self.niter},\n"
             f"  spec={self.spec},\n"
-            f"  min_selections={self.min_selections}\n"
+            f"  min_selections={self.min_selections}{opt_iter_str}\n"
             f")"
         )
 
@@ -523,6 +530,109 @@ def _sample_knockoffs_from_cache(
     return X_k
 
 
+def find_opt_iter(
+    freq_vars: np.ndarray,
+    selected_list: List[np.ndarray]
+) -> tuple:
+    """
+    Find the iteration with maximum overlap with frequent variables (R SLIDE behavior).
+
+    This implements R SLIDE's findOptIter() function which refines the selection
+    by choosing variables from ONE optimal iteration rather than all variables
+    above the threshold.
+
+    The algorithm:
+    1. Find iterations with maximum overlap with freq_vars (the threshold-passing variables)
+    2. Tie-breaker: choose the iteration with the smallest total selection
+    3. Return the selected variables from that ONE iteration
+
+    Parameters
+    ----------
+    freq_vars : np.ndarray
+        Indices of variables that passed the threshold (selected in >= spec * niter runs).
+    selected_list : List[np.ndarray]
+        List of selected variable indices for each iteration.
+
+    Returns
+    -------
+    tuple
+        (selected_vars, optimal_iter) where:
+        - selected_vars: np.ndarray of indices from the optimal iteration
+        - optimal_iter: int index of the chosen iteration
+
+    Notes
+    -----
+    This matches R SLIDE's findOptIter() exactly:
+    ```r
+    mm <- max(unlist(lapply(selected_list, function(x) { sum(x %in% freq_vars) })))
+    max_overlap_ind <- which(... == mm)
+    overlap_list_len <- sapply(max_overlap_ind, function(x) { length(selected_list[[x]]) })
+    selected_run <- max_overlap_ind[which.min(overlap_list_len)]
+    selected_vars <- selected_list[[selected_run]]
+    ```
+
+    Examples
+    --------
+    >>> freq_vars = np.array([0, 2, 5])  # Variables passing threshold
+    >>> selected_list = [
+    ...     np.array([0, 2, 5, 7]),    # iter 0: 3 overlap, size 4
+    ...     np.array([0, 2, 5]),       # iter 1: 3 overlap, size 3 (winner - smallest)
+    ...     np.array([0, 2]),          # iter 2: 2 overlap, size 2
+    ... ]
+    >>> selected, opt_iter = find_opt_iter(freq_vars, selected_list)
+    >>> opt_iter
+    1
+    >>> selected
+    array([0, 2, 5])
+    """
+    if len(freq_vars) == 0:
+        # No frequent variables - return empty
+        return np.array([], dtype=int), None
+
+    if len(selected_list) == 0:
+        return np.array([], dtype=int), None
+
+    freq_vars_set = set(freq_vars)
+
+    # Compute overlap for each iteration
+    overlaps = []
+    for i, sel in enumerate(selected_list):
+        if sel is None or len(sel) == 0:
+            overlaps.append(0)
+        else:
+            overlap = len(set(sel) & freq_vars_set)
+            overlaps.append(overlap)
+
+    overlaps = np.array(overlaps)
+
+    # Find iterations with maximum overlap
+    max_overlap = np.max(overlaps)
+    if max_overlap == 0:
+        # No overlap at all - return freq_vars as-is (fallback)
+        return freq_vars, None
+
+    max_overlap_indices = np.where(overlaps == max_overlap)[0]
+
+    # Tie-breaker: choose iteration with smallest selection set
+    selection_sizes = np.array([
+        len(selected_list[i]) if selected_list[i] is not None else 0
+        for i in max_overlap_indices
+    ])
+
+    # Find the index within max_overlap_indices that has smallest size
+    min_size_idx = np.argmin(selection_sizes)
+    optimal_iter = max_overlap_indices[min_size_idx]
+
+    # Return variables from that ONE iteration
+    selected_vars = selected_list[optimal_iter]
+    if selected_vars is None:
+        selected_vars = np.array([], dtype=int)
+    else:
+        selected_vars = np.sort(np.asarray(selected_vars))
+
+    return selected_vars, int(optimal_iter)
+
+
 def knockoff_filter_voting(
     X: np.ndarray,
     y: np.ndarray,
@@ -537,6 +647,8 @@ def knockoff_filter_voting(
     verbose: bool = False,
     match_r: bool = False,
     use_cache: bool = True,
+    slide_selection: bool = False,
+    return_selected_list: bool = False,
     **kwargs
 ) -> VotingResult:
     """
@@ -580,6 +692,15 @@ def knockoff_filter_voting(
         Cholesky decomposition) once before the voting loop. This provides 3-4x speedup
         by avoiding redundant computations. Only applies when using default knockoffs.
         Set to False to use the original uncached behavior.
+    slide_selection : bool, default=False
+        If True, use R SLIDE's findOptIter() selection refinement:
+        - Find iterations with maximum overlap with threshold-passing variables
+        - Tie-breaker: choose iteration with smallest selection set
+        - Return variables from that ONE iteration
+        If False (default), return ALL variables passing the threshold.
+    return_selected_list : bool, default=False
+        If True, store the list of selected indices per iteration in the result.
+        Required for findOptIter but uses more memory.
 
     Returns
     -------
@@ -651,8 +772,9 @@ def knockoff_filter_voting(
         n_jobs = multiprocessing.cpu_count()
     n_jobs = max(1, min(n_jobs, niter))
 
-    # Initialize selection counts
+    # Initialize selection counts and optional list
     selection_counts = np.zeros(p, dtype=np.int32)
+    selected_list = [] if (slide_selection or return_selected_list) else None
 
     if verbose:
         print(f"Running {niter} knockoff iterations with {n_jobs} jobs...")
@@ -699,11 +821,17 @@ def knockoff_filter_voting(
                     for idx in selected_iter:
                         selection_counts[idx] += 1
 
+                    # Store selected list if needed for findOptIter
+                    if selected_list is not None:
+                        selected_list.append(selected_iter.copy())
+
                     if verbose and (i + 1) % 50 == 0:
                         print(f"  Completed {i + 1}/{niter} iterations")
 
                 except Exception as e:
                     warnings.warn(f"Knockoff iteration {i} failed: {e}")
+                    if selected_list is not None:
+                        selected_list.append(np.array([], dtype=int))
         else:
             # Original path for custom knockoffs
             for i in range(niter):
@@ -721,11 +849,17 @@ def knockoff_filter_voting(
                     for idx in result.selected:
                         selection_counts[idx] += 1
 
+                    # Store selected list if needed for findOptIter
+                    if selected_list is not None:
+                        selected_list.append(result.selected.copy())
+
                     if verbose and (i + 1) % 50 == 0:
                         print(f"  Completed {i + 1}/{niter} iterations")
 
                 except Exception as e:
                     warnings.warn(f"Knockoff iteration {i} failed: {e}")
+                    if selected_list is not None:
+                        selected_list.append(np.array([], dtype=int))
     else:
         # Parallel execution (only works with default knockoffs/statistic)
         # Note: check for lambda (match_r wrapper) or non-default knockoffs
@@ -740,7 +874,8 @@ def knockoff_filter_voting(
                 X, y, knockoffs=knockoffs, statistic=statistic,
                 fdr=fdr, offset=offset, niter=niter, spec=spec,
                 n_jobs=1, base_seed=base_seed, verbose=verbose,
-                match_r=match_r, **kwargs
+                match_r=match_r, slide_selection=slide_selection,
+                return_selected_list=return_selected_list, **kwargs
             )
 
         # Prepare arguments
@@ -754,11 +889,16 @@ def knockoff_filter_voting(
 
             for i, future in enumerate(as_completed(futures)):
                 try:
-                    selected = future.result()
-                    for idx in selected:
+                    selected_iter = future.result()
+                    for idx in selected_iter:
                         selection_counts[idx] += 1
+                    # Store selected list if needed for findOptIter
+                    if selected_list is not None:
+                        selected_list.append(np.array(selected_iter, dtype=int))
                 except Exception as e:
                     warnings.warn(f"Knockoff iteration failed: {e}")
+                    if selected_list is not None:
+                        selected_list.append(np.array([], dtype=int))
 
                 if verbose and (i + 1) % 50 == 0:
                     print(f"  Completed {i + 1}/{niter} iterations")
@@ -768,8 +908,17 @@ def knockoff_filter_voting(
 
     # Select variables appearing in >= spec proportion of runs
     min_selections = int(np.ceil(niter * spec))
-    selected = np.where(selection_counts >= min_selections)[0]
-    selected = np.sort(selected)
+    freq_vars = np.where(selection_counts >= min_selections)[0]
+    freq_vars = np.sort(freq_vars)
+
+    # Apply findOptIter refinement if requested (R SLIDE behavior)
+    optimal_iter = None
+    if slide_selection and selected_list is not None and len(freq_vars) > 0:
+        selected, optimal_iter = find_opt_iter(freq_vars, selected_list)
+        if verbose:
+            print(f"  findOptIter: chose iteration {optimal_iter} with {len(selected)} variables")
+    else:
+        selected = freq_vars
 
     if verbose:
         print(f"  Selected {len(selected)} variables (>= {min_selections} selections)")
@@ -781,5 +930,269 @@ def knockoff_filter_voting(
         threshold=spec,
         niter=niter,
         spec=spec,
-        min_selections=min_selections
+        min_selections=min_selections,
+        selected_list=selected_list if return_selected_list else None,
+        optimal_iter=optimal_iter
+    )
+
+
+def knockoff_filter_voting_slide(
+    X: np.ndarray,
+    y: np.ndarray,
+    knockoffs: Optional[Callable] = None,
+    statistic: Optional[Callable] = None,
+    fdr: float = 0.10,
+    offset: int = 0,
+    niter: int = 500,
+    spec: float = 0.1,
+    f_size: int = 100,
+    n_jobs: int = 1,
+    base_seed: int = 42,
+    verbose: bool = False,
+    match_r: bool = False,
+    use_cache: bool = True,
+    **kwargs
+) -> VotingResult:
+    """
+    Run the Knockoff Filter with full R SLIDE methodology.
+
+    This function implements R SLIDE's complete voting procedure including:
+    1. Feature chunking (f_size parameter)
+    2. Knockoff voting on each chunk
+    3. findOptIter refinement
+    4. Two-stage screening when multiple chunks
+
+    Parameters
+    ----------
+    X : array-like of shape (n, p)
+        Matrix of predictors.
+    y : array-like of shape (n,)
+        Response vector.
+    knockoffs : callable, optional
+        Function to construct knockoffs. Default: create_second_order.
+    statistic : callable, optional
+        Function to compute importance statistics. Default: stat_glmnet_coefdiff.
+    fdr : float, default=0.10
+        Target false discovery rate for each knockoff run.
+    offset : {0, 1}, default=0
+        Offset for knockoff threshold. 0 = standard knockoff (matches R's knockoff.filter),
+        1 = knockoffs+ (more conservative).
+    niter : int, default=500
+        Number of knockoff iterations to run.
+    spec : float, default=0.1
+        Specificity threshold - keep variables selected in >= spec * niter runs.
+    f_size : int, default=100
+        Maximum number of features per chunk. Features are split into
+        ceil(p / f_size) chunks, and knockoff voting is run on each chunk separately.
+        This matches R SLIDE's selectShortFreq() default behavior.
+    n_jobs : int, default=1
+        Number of parallel jobs. Use -1 for all available cores.
+    base_seed : int, default=42
+        Base seed for reproducibility.
+    verbose : bool, default=False
+        Print progress information.
+    match_r : bool, default=False
+        If True, skip the automatic Ledoit-Wolf shrinkage condition number
+        check to match R's knockoff.filter behavior.
+    use_cache : bool, default=True
+        If True (default), pre-compute invariant quantities once per chunk.
+
+    Returns
+    -------
+    VotingResult
+        Object containing selection_counts, selection_frequency (W), selected,
+        and voting parameters.
+
+    Notes
+    -----
+    This implements R SLIDE's selectShortFreq() procedure:
+
+    1. **Feature chunking**: Split p features into ceil(p/f_size) chunks
+    2. **Per-chunk voting**: Run knockoff_filter_voting on each chunk with slide_selection=True
+    3. **findOptIter refinement**: For each chunk, apply findOptIter to select variables
+       from ONE optimal iteration rather than all threshold-passing variables
+    4. **Two-stage screening**: If n_splits > 1, combine screened variables from all chunks
+       and re-run knockoff voting on the combined set
+
+    When p <= f_size, no chunking is needed and this behaves like knockoff_filter_voting
+    with slide_selection=True.
+
+    References
+    ----------
+    SLIDE: Significant Latent factor Interaction Discovery and Exploration across
+    biological domains.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from loveslide.knockoff import knockoff_filter_voting_slide
+    >>> n, p = 100, 200
+    >>> X = np.random.randn(n, p)
+    >>> beta = np.zeros(p)
+    >>> beta[:10] = 3.0
+    >>> y = X @ beta + np.random.randn(n)
+    >>> # With chunking (p=200 > f_size=100 means 2 chunks)
+    >>> result = knockoff_filter_voting_slide(X, y, niter=100, spec=0.1, f_size=100)
+    >>> print(result.selected)
+    """
+    import math
+
+    # Convert inputs
+    X = np.asarray(X, dtype=np.float64)
+    y = np.asarray(y)
+
+    if y.ndim > 1:
+        y = y.ravel()
+
+    n, p = X.shape
+
+    # Validate parameters
+    if f_size < 1:
+        raise ValueError(f"f_size must be >= 1, got {f_size}")
+
+    # Determine number of chunks
+    n_splits = int(math.ceil(p / f_size))
+
+    if n_splits == 1:
+        # No chunking needed - just run voting with SLIDE selection
+        if verbose:
+            print(f"Single chunk (p={p} <= f_size={f_size}), using direct voting...")
+        return knockoff_filter_voting(
+            X, y,
+            knockoffs=knockoffs,
+            statistic=statistic,
+            fdr=fdr,
+            offset=offset,
+            niter=niter,
+            spec=spec,
+            n_jobs=n_jobs,
+            base_seed=base_seed,
+            verbose=verbose,
+            match_r=match_r,
+            use_cache=use_cache,
+            slide_selection=True,
+            return_selected_list=True,
+            **kwargs
+        )
+
+    # Multiple chunks - implement R SLIDE's two-stage screening
+    if verbose:
+        print(f"Chunking: p={p} into {n_splits} chunks of ~{f_size} features...")
+
+    # Calculate chunk boundaries
+    feature_split = int(math.ceil(p / n_splits))
+    feature_starts = list(range(0, p, feature_split))
+    feature_stops = [min(start + feature_split, p) for start in feature_starts]
+
+    # Stage 1: Run knockoff voting on each chunk
+    screen_var = []
+
+    for chunk_idx, (start, stop) in enumerate(zip(feature_starts, feature_stops)):
+        if verbose:
+            print(f"  Chunk {chunk_idx + 1}/{n_splits}: features [{start}, {stop})")
+
+        X_chunk = X[:, start:stop]
+
+        # Run voting on this chunk with findOptIter
+        result_chunk = knockoff_filter_voting(
+            X_chunk, y,
+            knockoffs=knockoffs,
+            statistic=statistic,
+            fdr=fdr,
+            offset=offset,
+            niter=niter,
+            spec=spec,
+            n_jobs=n_jobs,
+            base_seed=base_seed,
+            verbose=verbose,
+            match_r=match_r,
+            use_cache=use_cache,
+            slide_selection=True,
+            return_selected_list=True,
+            **kwargs
+        )
+
+        # Map chunk indices back to global indices
+        chunk_selected = result_chunk.selected + start
+        if verbose:
+            print(f"    Selected {len(chunk_selected)} variables from chunk")
+
+        screen_var.extend(chunk_selected.tolist())
+
+    screen_var = np.array(screen_var, dtype=int)
+
+    if verbose:
+        print(f"  Stage 1 complete: {len(screen_var)} screened variables")
+
+    # Stage 2: Re-run knockoff voting on combined screened variables
+    if len(screen_var) <= 1:
+        # Not enough variables to re-screen
+        if verbose:
+            print(f"  Skipping Stage 2 (only {len(screen_var)} variables)")
+
+        # Return a VotingResult with global indices
+        selection_counts = np.zeros(p, dtype=np.int32)
+        for idx in screen_var:
+            selection_counts[idx] = int(np.ceil(niter * spec))  # Mark as selected
+
+        return VotingResult(
+            selection_counts=selection_counts,
+            selection_frequency=selection_counts / niter,
+            selected=np.sort(screen_var),
+            threshold=spec,
+            niter=niter,
+            spec=spec,
+            min_selections=int(np.ceil(niter * spec)),
+            selected_list=None,
+            optimal_iter=None
+        )
+
+    if verbose:
+        print(f"  Stage 2: Re-screening {len(screen_var)} combined variables...")
+
+    X_screen = X[:, screen_var]
+
+    # Run final voting with findOptIter
+    final_result = knockoff_filter_voting(
+        X_screen, y,
+        knockoffs=knockoffs,
+        statistic=statistic,
+        fdr=fdr,
+        offset=offset,
+        niter=niter,
+        spec=spec,
+        n_jobs=n_jobs,
+        base_seed=base_seed,
+        verbose=verbose,
+        match_r=match_r,
+        use_cache=use_cache,
+        slide_selection=True,
+        return_selected_list=True,
+        **kwargs
+    )
+
+    # Map screened indices back to global indices
+    final_selected = screen_var[final_result.selected]
+
+    if verbose:
+        print(f"  Final selection: {len(final_selected)} variables")
+
+    # Build global selection counts and frequency
+    selection_counts = np.zeros(p, dtype=np.int32)
+    for i, local_idx in enumerate(range(len(screen_var))):
+        global_idx = screen_var[local_idx]
+        selection_counts[global_idx] = final_result.selection_counts[local_idx]
+
+    selection_frequency = selection_counts / niter
+
+    return VotingResult(
+        selection_counts=selection_counts,
+        selection_frequency=selection_frequency,
+        selected=np.sort(final_selected),
+        threshold=spec,
+        niter=niter,
+        spec=spec,
+        min_selections=final_result.min_selections,
+        selected_list=None,  # Not meaningful after two-stage
+        optimal_iter=final_result.optimal_iter
     )

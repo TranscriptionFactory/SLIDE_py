@@ -44,7 +44,9 @@ __version__ = "0.1.0"
 from .filter import (
     knockoff_filter,
     knockoff_filter_voting,
+    knockoff_filter_voting_slide,
     knockoff_threshold,
+    find_opt_iter,
     KnockoffResult,
     VotingResult,
 )
@@ -103,7 +105,9 @@ __all__ = [
     # Main filter
     "knockoff_filter",
     "knockoff_filter_voting",
+    "knockoff_filter_voting_slide",
     "knockoff_threshold",
+    "find_opt_iter",
     "KnockoffResult",
     "VotingResult",
     # Knockoff construction
