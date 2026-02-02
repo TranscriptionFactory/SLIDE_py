@@ -177,8 +177,8 @@ def knockoff_voting_parallel_joblib(
     y: np.ndarray,
     fdr: float = 0.10,
     offset: int = 0,
-    niter: int = 500,
-    spec: float = 0.1,
+    niter: int = 1000,
+    spec: float = 0.3,
     n_jobs: int = -1,
     base_seed: int = 42,
     verbose: bool = False,
@@ -204,10 +204,10 @@ def knockoff_voting_parallel_joblib(
         Target false discovery rate.
     offset : int, default=0
         Knockoff offset (0 = standard, 1 = knockoffs+).
-    niter : int, default=500
-        Number of knockoff iterations.
-    spec : float, default=0.1
-        Specificity threshold for voting.
+    niter : int, default=1000
+        Number of knockoff iterations. Matches R SLIDE default.
+    spec : float, default=0.3
+        Specificity threshold for voting. Matches R SLIDE default.
     n_jobs : int, default=-1
         Number of parallel jobs (-1 = all cores).
     base_seed : int, default=42
@@ -314,8 +314,8 @@ def knockoff_voting_parallel_futures(
     y: np.ndarray,
     fdr: float = 0.10,
     offset: int = 0,
-    niter: int = 500,
-    spec: float = 0.1,
+    niter: int = 1000,
+    spec: float = 0.3,
     n_jobs: int = -1,
     base_seed: int = 42,
     verbose: bool = False,

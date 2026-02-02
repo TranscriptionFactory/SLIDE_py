@@ -640,12 +640,12 @@ def knockoff_filter_voting(
     statistic: Optional[Callable] = None,
     fdr: float = 0.10,
     offset: int = 0,
-    niter: int = 500,
-    spec: float = 0.1,
+    niter: int = 1000,
+    spec: float = 0.3,
     n_jobs: int = 1,
     base_seed: int = 42,
     verbose: bool = False,
-    match_r: bool = False,
+    match_r: bool = True,
     use_cache: bool = True,
     slide_selection: bool = False,
     return_selected_list: bool = False,
@@ -673,20 +673,21 @@ def knockoff_filter_voting(
     offset : {0, 1}, default=0
         Offset for knockoff threshold. 0 = standard knockoff (matches R's knockoff.filter),
         1 = knockoffs+ (more conservative).
-    niter : int, default=500
-        Number of knockoff iterations to run.
-    spec : float, default=0.1
+    niter : int, default=1000
+        Number of knockoff iterations to run. Matches R SLIDE default.
+    spec : float, default=0.3
         Specificity threshold - keep variables selected in >= spec * niter runs.
+        Matches R SLIDE default.
     n_jobs : int, default=1
         Number of parallel jobs. Use -1 for all available cores.
     base_seed : int, default=42
         Base seed for reproducibility. Each iteration uses base_seed + i.
     verbose : bool, default=False
         Print progress information.
-    match_r : bool, default=False
-        If True, skip the automatic Ledoit-Wolf shrinkage condition number
-        check to match R's knockoff.filter behavior. Use this for exact
-        R compatibility testing in n ~ p boundary cases.
+    match_r : bool, default=True
+        If True (default), skip the automatic Ledoit-Wolf shrinkage condition
+        number check to match R's knockoff.filter behavior exactly. Set to False
+        to enable Python's more conservative auto-shrinkage for ill-conditioned cases.
     use_cache : bool, default=True
         If True (default), pre-compute invariant quantities (covariance, SDP solution,
         Cholesky decomposition) once before the voting loop. This provides 3-4x speedup
@@ -943,13 +944,13 @@ def knockoff_filter_voting_slide(
     statistic: Optional[Callable] = None,
     fdr: float = 0.10,
     offset: int = 0,
-    niter: int = 500,
-    spec: float = 0.1,
+    niter: int = 1000,
+    spec: float = 0.3,
     f_size: int = 100,
     n_jobs: int = 1,
     base_seed: int = 42,
     verbose: bool = False,
-    match_r: bool = False,
+    match_r: bool = True,
     use_cache: bool = True,
     **kwargs
 ) -> VotingResult:
@@ -977,10 +978,11 @@ def knockoff_filter_voting_slide(
     offset : {0, 1}, default=0
         Offset for knockoff threshold. 0 = standard knockoff (matches R's knockoff.filter),
         1 = knockoffs+ (more conservative).
-    niter : int, default=500
-        Number of knockoff iterations to run.
-    spec : float, default=0.1
+    niter : int, default=1000
+        Number of knockoff iterations to run. Matches R SLIDE default.
+    spec : float, default=0.3
         Specificity threshold - keep variables selected in >= spec * niter runs.
+        Matches R SLIDE default.
     f_size : int, default=100
         Maximum number of features per chunk. Features are split into
         ceil(p / f_size) chunks, and knockoff voting is run on each chunk separately.
@@ -991,8 +993,8 @@ def knockoff_filter_voting_slide(
         Base seed for reproducibility.
     verbose : bool, default=False
         Print progress information.
-    match_r : bool, default=False
-        If True, skip the automatic Ledoit-Wolf shrinkage condition number
+    match_r : bool, default=True
+        If True (default), skip the automatic Ledoit-Wolf shrinkage condition number
         check to match R's knockoff.filter behavior.
     use_cache : bool, default=True
         If True (default), pre-compute invariant quantities once per chunk.
