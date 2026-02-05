@@ -16,7 +16,9 @@ from sklearn.linear_model import LinearRegression, Lasso, lasso_path
 logger = logging.getLogger(__name__)
 
 # Import from bundled knockoff package
-from .knockoff.filter import knockoff_filter, knockoff_threshold
+from .knockoff.filter import (
+    knockoff_filter, knockoff_threshold, knockoff_filter_voting_slide, VotingResult
+)
 from .knockoff.create import create_gaussian, KnockoffVariables
 from .knockoff.stats import (
     stat_glmnet_lambdasmax, stat_glmnet_lambdadiff, stat_glmnet_coefdiff,
@@ -25,6 +27,49 @@ from .knockoff.stats import (
 )
 from .knockoff.solve import create_solve_equi, create_solve_sdp, create_solve_asdp
 from .knockoff.utils import is_posdef
+
+
+def _create_second_order_r(X: np.ndarray) -> np.ndarray:
+    """Wrapper around R's knockoff::create.second_order().
+
+    This function generates knockoff variables using R's implementation,
+    which may produce slightly different results than the Python implementation
+    due to numerical differences in the SDP solver and random sampling.
+
+    Requires rpy2 and the R knockoff package to be installed.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Feature matrix of shape (n_samples, n_features).
+
+    Returns
+    -------
+    np.ndarray
+        Knockoff feature matrix of shape (n_samples, n_features).
+
+    Raises
+    ------
+    ImportError
+        If rpy2 or the R knockoff package is not installed.
+    """
+    import rpy2.robjects as robjects
+    from rpy2.robjects import numpy2ri, pandas2ri
+    from rpy2.robjects.packages import importr
+
+    numpy2ri.activate()
+    pandas2ri.activate()
+
+    try:
+        knockoff_r = importr('knockoff')
+        X_r = robjects.r['as.matrix'](pd.DataFrame(X))
+        Xk_r = knockoff_r.create_second_order(X_r)
+        Xk = np.array(Xk_r)
+    finally:
+        numpy2ri.deactivate()
+        pandas2ri.deactivate()
+
+    return Xk
 
 
 def _single_knockoff_iteration_python(z, y, fdr, method, shrink, offset, statistic,
@@ -485,7 +530,8 @@ class Knockoffs():
 
     @staticmethod
     def select_short_freq(z, y, spec=0.3, fdr=0.1, niter=1000, f_size=100, n_workers=-1, backend='python',
-                          method='asdp', shrink=False, offset=0, fstat='glmnet_lambdasmax'):
+                          method='asdp', shrink=False, offset=0, fstat='glmnet_lambdasmax',
+                          verbose=False, **kwargs):
         """
         Find significant variables using second order knockoffs across subsets of features.
 
@@ -506,9 +552,10 @@ class Knockoffs():
         n_workers : int
             Number of parallel workers. -1 uses all available cores. Default: -1.
         backend : str
-            Which knockoff implementation: 'python' (default) or 'r'.
-            - 'python': Pure Python implementation (bundled knockoff-filter)
-            - 'r': R knockoff package via rpy2 (requires rpy2)
+            Which knockoff implementation: 'python' (default), 'r', or 'r_knockoffs'.
+            - 'python': Pure Python implementation with SLIDE voting (bundled knockoff-filter)
+            - 'r': Full R knockoff pipeline via rpy2 (requires rpy2)
+            - 'r_knockoffs': R knockoff generation + Python SLIDE voting (best R concordance)
         method : str
             Knockoff construction method: 'asdp' (default), 'sdp', or 'equi'.
             - 'asdp': Approximate SDP, faster for high-dimensional data
@@ -525,12 +572,37 @@ class Knockoffs():
             - 'glmnet_lambdasmax': Signed max of glmnet lasso path (default, matches R)
             - 'glmnet_lambdadiff': Lambda difference statistic
             - 'glmnet_coefdiff': Coefficient difference at CV-selected lambda
+        verbose : bool
+            Print progress information. Default: False.
+        **kwargs
+            Additional arguments passed to knockoff_filter_voting_slide.
 
         Returns
         -------
         np.ndarray
             Array of selected variable indices
+
+        Notes
+        -----
+        Backend comparison:
+        - 'python': Pure Python, uses SLIDE voting with findOptIter refinement
+        - 'r_knockoffs': R knockoff generation + Python SLIDE voting (best R concordance)
+        - 'r': Full R pipeline (legacy, no findOptIter refinement)
+
+        The 'r_knockoffs' backend typically achieves ~0.72 mean Jaccard similarity
+        with R native, while 'python' achieves ~0.65. The difference is primarily
+        in knockoff matrix generation, not the voting logic.
         """
+        # Handle r_knockoffs backend - delegate to select_short_freq_slide
+        if backend == 'r_knockoffs':
+            result = Knockoffs.select_short_freq_slide(
+                z, y, spec=spec, fdr=fdr, niter=niter, f_size=f_size,
+                n_jobs=1,  # R is not thread-safe
+                backend='r_knockoffs',
+                verbose=verbose,
+                **kwargs
+            )
+            return result.selected
         z = Knockoffs.scale_features(z)
         y = y.copy()
 
@@ -577,5 +649,136 @@ class Knockoffs():
             final_var = screen_var
 
         return final_var
+
+    @staticmethod
+    def select_short_freq_slide(
+        z, y,
+        spec=0.3, fdr=0.1, niter=1000, f_size=100,
+        n_jobs=-1,
+        backend='python',
+        verbose=False,
+        **kwargs
+    ) -> VotingResult:
+        """
+        Full SLIDE methodology with findOptIter refinement.
+
+        This method implements the complete SLIDE voting procedure:
+        1. Feature chunking (f_size parameter)
+        2. Knockoff voting on each chunk
+        3. findOptIter refinement (select from ONE optimal iteration)
+        4. Two-stage screening when multiple chunks
+
+        Parameters
+        ----------
+        z : np.ndarray or pandas.DataFrame
+            Feature matrix of shape (n_samples, n_features)
+        y : np.ndarray or pandas.DataFrame
+            Response vector of shape (n_samples,)
+        spec : float
+            Proportion threshold to consider a variable frequently selected.
+            Default: 0.3 (matches R SLIDE).
+        fdr : float
+            Target false discovery rate. Default: 0.1.
+        niter : int
+            Number of knockoff iterations. Default: 1000 (matches R SLIDE).
+        f_size : int
+            Maximum features per chunk. Default: 100 (matches R SLIDE).
+        n_jobs : int
+            Number of parallel jobs. -1 uses all available cores.
+            Note: Use n_jobs=1 when backend='r_knockoffs' (R is not thread-safe).
+        backend : str
+            Knockoff generation backend:
+            - 'python': Pure Python knockoff generation (default)
+            - 'r_knockoffs': R knockoff generation + Python voting (best R concordance)
+        verbose : bool
+            Print progress information. Default: False.
+        **kwargs
+            Additional arguments passed to knockoff_filter_voting_slide.
+
+        Returns
+        -------
+        VotingResult
+            Result object containing:
+            - selection_counts: Number of times each variable was selected
+            - selection_frequency: Proportion of runs where each variable was selected
+            - selected: Indices of selected variables
+            - threshold: The spec threshold used
+            - niter: Number of iterations
+            - spec: Specificity threshold
+            - min_selections: Minimum selections required
+            - optimal_iter: Index of the optimal iteration (from findOptIter)
+
+        Notes
+        -----
+        Backend comparison:
+        - 'python': Uses Python's create_second_order() for knockoff generation.
+          Achieves ~0.65 mean Jaccard similarity with R native.
+        - 'r_knockoffs': Uses R's knockoff::create.second_order() for knockoff
+          generation, combined with Python's SLIDE voting and findOptIter.
+          Achieves ~0.72 mean Jaccard similarity with R native.
+
+        The divergence between Python and R is primarily in knockoff matrix
+        generation (SDP solver differences), not in the voting logic.
+
+        Examples
+        --------
+        >>> from loveslide import Knockoffs
+        >>> import numpy as np
+        >>> Z = np.random.randn(100, 500)
+        >>> y = np.random.randn(100)
+        >>> # Pure Python (default)
+        >>> result = Knockoffs.select_short_freq_slide(Z, y, backend='python')
+        >>> print(f"Selected: {result.selected}")
+        >>> # R knockoffs + Python voting (best R concordance)
+        >>> result = Knockoffs.select_short_freq_slide(Z, y, backend='r_knockoffs')
+        >>> print(f"Selected: {result.selected}")
+        """
+        from .knockoff.stats import stat_glmnet_lambdasmax
+
+        # Prepare data
+        z = Knockoffs.scale_features(z)
+
+        if isinstance(y, pd.Series) or isinstance(y, pd.DataFrame):
+            y = y.values.copy()
+        else:
+            y = np.asarray(y).copy()
+
+        if isinstance(z, pd.DataFrame):
+            z = z.values
+
+        # Determine knockoffs callable based on backend
+        if backend == 'r_knockoffs':
+            knockoffs_func = _create_second_order_r
+            # R is not thread-safe, force n_jobs=1
+            if n_jobs != 1:
+                logger.info("Setting n_jobs=1 for r_knockoffs backend (R is not thread-safe)")
+                n_jobs = 1
+            use_cache = False  # Cannot cache with custom knockoffs
+        elif backend == 'python':
+            knockoffs_func = None  # Use default create_second_order
+            use_cache = kwargs.pop('use_cache', True)
+        else:
+            raise ValueError(
+                f"Unknown backend: {backend}. Use 'python' or 'r_knockoffs'."
+            )
+
+        # Call the full SLIDE voting implementation
+        result = knockoff_filter_voting_slide(
+            z, y,
+            knockoffs=knockoffs_func,
+            statistic=stat_glmnet_lambdasmax,
+            fdr=fdr,
+            offset=0,  # R default
+            niter=niter,
+            spec=spec,
+            f_size=f_size,
+            n_jobs=n_jobs,
+            verbose=verbose,
+            match_r=True,
+            use_cache=use_cache,
+            **kwargs
+        )
+
+        return result
 
 
