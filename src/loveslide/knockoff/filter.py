@@ -368,10 +368,11 @@ def _prepare_knockoff_cache(
         method = 'sdp'
 
     # Auto-enable shrinkage for n <= 1.25*p (R-style regularization)
-    if not shrink and n <= 1.25 * p:
+    # Skip this check if match_r=True (R doesn't auto-shrink based on n/p ratio)
+    if not shrink and not match_r and n <= 1.25 * p:
         warnings.warn(
             f"n={n}, p={p} (n/p={n/p:.2f}): Insufficient samples for stable covariance. "
-            f"Auto-enabling Ledoit-Wolf shrinkage to match R's knockoff.filter behavior."
+            f"Auto-enabling Ledoit-Wolf shrinkage for better knockoff power."
         )
         shrink = True
 
