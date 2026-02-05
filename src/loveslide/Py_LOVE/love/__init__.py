@@ -32,8 +32,6 @@ from .est_nonpure import EstY, EstAJInv, EstAJDant
 from .utilities import recoverGroup, threshA, offSum
 
 __version__ = "1.0.0"
-__author__ = "Xin Bing"
-__email__ = "xb43@cornell.edu"
 
 __all__ = [
     # Main functions
