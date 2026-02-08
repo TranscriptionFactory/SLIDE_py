@@ -1,7 +1,7 @@
 """
 Setup script for loveslide with optional C extension.
 
-The pydsdp_ext C extension provides fast SDP solving via DSDP.
+The dsdp_solver C extension provides fast SDP solving via DSDP.
 If compilation fails (missing BLAS/LAPACK or compiler), the package
 still installs successfully and falls back to cvxpy for SDP solving.
 
@@ -151,19 +151,19 @@ def get_blas_info():
     return library_dirs, libraries, extra_link_args
 
 
-def get_pydsdp_extension():
+def get_dsdp_solverension():
     """
     Create the pydsdp5 Extension object.
     """
     # Get source files
-    base_dir = 'src/loveslide/pydsdp_ext'
+    base_dir = 'src/loveslide/dsdp_solver'
     c_dir = os.path.join(base_dir, 'dsdp', 'C')
 
     sources = [os.path.join(c_dir, 'pyreadsdpa.c')]
     sources.extend(glob(os.path.join(c_dir, 'allc', '*.c')))
 
     if not sources or len(sources) < 2:
-        warnings.warn("Could not find pydsdp_ext C source files")
+        warnings.warn("Could not find dsdp_solver C source files")
         return None
 
     # Get include directories
@@ -184,7 +184,7 @@ def get_pydsdp_extension():
         extra_compile_args.extend(['-Wno-unused-function', '-Wno-maybe-uninitialized'])
 
     return Extension(
-        'loveslide.pydsdp_ext.pydsdp5',
+        'loveslide.dsdp_solver.pydsdp5',
         sources=sources,
         include_dirs=include_dirs,
         library_dirs=library_dirs,
@@ -196,9 +196,9 @@ def get_pydsdp_extension():
 
 # Build extension list
 ext_modules = []
-pydsdp_ext = get_pydsdp_extension()
-if pydsdp_ext:
-    ext_modules.append(pydsdp_ext)
+dsdp_solver = get_dsdp_solverension()
+if dsdp_solver:
+    ext_modules.append(dsdp_solver)
 
 # Setup (metadata comes from pyproject.toml)
 setup(

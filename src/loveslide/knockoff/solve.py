@@ -232,7 +232,7 @@ def create_solve_sdp(
     if solver is None:
         raise ImportError(
             "No SDP solver available. Install either:\n"
-            "  - scikit-dsdp (for exact R match): rebuild C extension in pydsdp_ext/\n"
+            "  - scikit-dsdp (for exact R match): rebuild C extension in dsdp_solver/\n"
             "  - cvxpy (pure Python fallback): pip install cvxpy"
         )
 

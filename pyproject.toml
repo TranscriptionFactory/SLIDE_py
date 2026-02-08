@@ -96,7 +96,7 @@ include-package-data = true
 
 [tool.setuptools.package-data]
 "loveslide.knockoff._vendor" = ["**/*"]
-"loveslide.pydsdp_ext" = ["*.so", "dsdp/**/*"]
+"loveslide.dsdp_solver" = ["*.so", "dsdp/**/*"]
 
 [project.urls]
 Homepage = "https://github.com/alw399/SLIDE_py"

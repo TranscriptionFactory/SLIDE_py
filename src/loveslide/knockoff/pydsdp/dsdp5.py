@@ -13,16 +13,16 @@ from numpy import array, matrix, reshape
 from os import remove, path
 from tempfile import NamedTemporaryFile
 
-# Try bundled pydsdp_ext first, then fall back to system package
+# Try bundled dsdp_solver first, then fall back to system package
 try:
-    from ...pydsdp_ext.pydsdp5 import pyreadsdpa  # Bundled C extension
+    from ...dsdp_solver.pydsdp5 import pyreadsdpa  # Bundled C extension
 except ImportError:
     try:
         from pydsdp.pydsdp5 import pyreadsdpa  # System package fallback
     except ImportError:
         raise ImportError(
             "DSDP C extension not available. Either:\n"
-            "  - Rebuild the bundled extension: cd src/loveslide/pydsdp_ext && python setup.py build_ext --inplace\n"
+            "  - Rebuild the bundled extension: cd src/loveslide/dsdp_solver && python setup.py build_ext --inplace\n"
             "  - Install the system package: pip install pydsdp"
         )
 

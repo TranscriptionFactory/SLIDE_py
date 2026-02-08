@@ -139,8 +139,8 @@ SLIDE_py/
 │   │   ├── love.py
 │   │   ├── knockoffs.py
 │   │   ├── ...
-│   │   ├── LOVE-master/       # (Legacy) Original LOVE code
-│   │   └── LOVE-SLIDE/        # Customized LOVE implementation for SLIDE
+│   │   ├── love_r/            # R reference implementation of LOVE
+│   │   └── slide_r/           # R utilities for SLIDE (sourced via rpy2)
 ├── dist/
 ├── example/
 ├── ...

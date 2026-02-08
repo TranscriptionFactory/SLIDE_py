@@ -7,7 +7,7 @@ import os
 import warnings
 import numpy as np
 
-from .Py_LOVE.love import LOVE
+from .love_python.love import LOVE
 
 
 def call_love_r(X, lbd=0.5, delta=None, thresh_fdr=0.2, rep_CV=50,
@@ -46,9 +46,9 @@ def call_love_r(X, lbd=0.5, delta=None, thresh_fdr=0.2, rep_CV=50,
     numpy2ri.activate()
 
     # Get path to R scripts
-    r_script_dir = os.path.join(os.path.dirname(__file__), 'LOVE-SLIDE')
+    r_script_dir = os.path.join(os.path.dirname(__file__), 'slide_r')
 
-    # Source all R scripts in the LOVE-SLIDE directory
+    # Source all R scripts in the slide_r directory
     r_source = robjects.r['source']
     import glob
     for script_path in glob.glob(os.path.join(r_script_dir, '*.R')):
@@ -201,7 +201,7 @@ def call_love(X, lbd=0.5, mu=0.5, est_non_pure_row="HT", thresh_fdr=0.2, verbose
         if verbose:
             print("Using Python LOVE backend")
 
-        # For pure_homo=True, use Dantzig by default to match R LOVE-SLIDE behavior
+        # For pure_homo=True, use Dantzig by default to match R slide_r behavior
         # unless the user explicitly requested a different method
         actual_est_method = est_non_pure_row
         if pure_homo and est_non_pure_row == "HT":
