@@ -4,17 +4,8 @@ Pytest configuration and fixtures for SLIDE_py tests.
 This module provides shared fixtures and configuration for the test suite.
 """
 
-import sys
-from pathlib import Path
-
 import pytest
 import numpy as np
-
-
-# Add src to path for all tests
-_SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-if _SRC_DIR.exists() and str(_SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(_SRC_DIR))
 
 
 def pytest_configure(config):

@@ -3,28 +3,10 @@
 End-to-end tests comparing SLIDE knockoff backend implementations.
 
 This test suite compares the three available backends:
-1. 'python': Pure Python implementation with SLIDE voting
-2. 'r_knockoffs': R knockoff generation + Python SLIDE voting (best R concordance)
+1. 'python': Pure Python implementation of SLIDE
+2. 'r_knockoffs': R knockoff generation + Python SLIDE
 3. 'r': Full R knockoff pipeline via rpy2
-
-Validation results show:
-- R_knockoffs_py_voting: ~0.72 mean Jaccard vs R_native
-- python_voting_slide: ~0.65 mean Jaccard vs R_native
-
-The divergence is primarily in knockoff matrix generation (SDP solver),
-not in the voting logic.
-
-Author: Testing Agent
-Date: 2026-02-05
 """
-
-import sys
-from pathlib import Path
-
-# Add src to path for imports
-_SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-if _SRC_DIR.exists() and str(_SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(_SRC_DIR))
 
 import pytest
 import numpy as np

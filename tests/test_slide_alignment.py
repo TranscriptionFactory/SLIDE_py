@@ -15,14 +15,6 @@ Author: Testing Agent
 Date: 2026-02-01
 """
 
-import sys
-from pathlib import Path
-
-# Add src to path for imports
-_SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-if _SRC_DIR.exists() and str(_SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(_SRC_DIR))
-
 import pytest
 import numpy as np
 import warnings
