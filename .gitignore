@@ -9,8 +9,10 @@ test_results/*
 archive/
 **/*.out
 **/*.err
-
+.pytest_cache/
+*.egg-info/
 **/**output*/**
-
+.conda*/
+conda_envs/
 # Test conda environment
 tests/test_env/
