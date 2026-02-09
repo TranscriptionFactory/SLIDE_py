@@ -1,11 +1,16 @@
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
-import seaborn as sns
 import os
 import numpy as np
 import pandas as pd
-import seaborn.objects as so
 import networkx as nx
+
+try:
+    import seaborn as sns
+    import seaborn.objects as so
+except ImportError:
+    sns = None
+    so = None
 
 
 class Plotter:
@@ -132,13 +137,18 @@ class Plotter:
     def plot_controlplot(scores, outdir=None, title='Control Plot'):
         """
         Plot control plot for different latent factor configurations.
-        
+
         Parameters:
         - scores: Dictionary where keys are latent factor configurations (e.g., 'z_matrix', 'marginals', 'marginals&interactions')
                  and values are lists of performance scores (e.g., AUC values)
         - outdir: Optional directory to save the plot
         - title: Title for the plot and output filename
         """
+        if sns is None:
+            raise ImportError(
+                "seaborn is required for plot_controlplot. "
+                "Install it with: pip install loveslide[viz]"
+            )
         # Create figure with white background
         sns.set_style('whitegrid')
         fig, ax = plt.subplots(figsize=(8, 6), dpi=300)

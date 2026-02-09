@@ -48,7 +48,7 @@ echo "Location: $(which python)"
 # ---------------------------------------------------------------------------
 echo "=== Installing loveslide ==="
 cd "${PROJECT_DIR}"
-pip install ".[dev,r]"
+pip install ".[dev,r,viz]"
 
 echo ""
 echo "=== Installed packages ==="
