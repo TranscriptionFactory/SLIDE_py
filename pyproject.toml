@@ -20,7 +20,7 @@ license = "MIT"
 license-files = ["LICEN[CS]E*"]
 
 dependencies = [
-    # Core scientific computing
+    # Core scientific computing (actually used in code)
     "numpy>=1.20.0",
     "scipy>=1.7.0",
     "scikit-learn>=1.0.0",
@@ -33,59 +33,92 @@ dependencies = [
     # Progress bars and parallelization
     "tqdm>=4.60.0",
     "pqdm",
-    "enlighten",
-
-    # Visualization
-    "matplotlib>=3.7.0",
-    "altair>=5.0.0",
-    "adjustText>=1.0.0",
-    "wordcloud",
-    "pysankeybeta",
-
-    # Single-cell analysis
-    "scanpy>=1.10.0",
-    "anndata>=0.10.0",
-    "magic-impute",
-
-    # Deep learning
-    "torch>=2.0.0",
-    "torchvision>=0.15.0",
-    "pyro-ppl",
 
     # Graph analysis
     "networkx>=3.0.0",
-    "python-igraph>=0.10.0",
 
-    # Genomics
+    # Visualization (core)
+    "matplotlib>=3.7.0",
+
+    # Utilities
+    "easydict",
+]
+
+[project.optional-dependencies]
+# Visualization extras
+viz = [
+    "seaborn>=0.12.0",
+    "adjustText>=1.0.0",
+    "altair>=5.0.0",
+    "wordcloud",
+    "pysankeybeta",
+]
+
+# Single-cell analysis
+single-cell = [
+    "scanpy>=1.10.0",
+    "anndata>=0.10.0",
+    "magic-impute",
+]
+
+# Deep learning
+deep-learning = [
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "pyro-ppl",
+]
+
+# Genomics tools
+genomics = [
     "genomepy>=0.16.0",
     "goatools>=1.4.0",
     "h5py>=3.8.0",
     "pyarrow>=12.0.0",
-
-    # Other utilities
-    "numba>=0.57.0",
-    "pysal>=24.1",
-    "certifi>=2024.0.0",
-    "group-lasso",
-    "easydict",
-    "ipykernel",
-    "shiny>=0.6.0",
-    "commot",
-    "pytest>=7.0.0",
 ]
 
-[project.optional-dependencies]
+# Spatial analysis
+spatial = [
+    "pysal>=24.1",
+    "commot",
+]
+
+# Extended graph analysis
+graph-extended = [
+    "python-igraph>=0.10.0",
+]
+
+# Optimization extras
+optimization = [
+    "numba>=0.57.0",
+    "group-lasso",
+]
+
+# Web/interactive tools
+web = [
+    "shiny>=0.6.0",
+    "ipykernel",
+]
+
+# Additional progress bars
+progress-extended = [
+    "enlighten",
+]
+
+# R integration
 r = [
     "rpy2>=3.5.0",
 ]
-full = [
-    "rpy2>=3.5.0",
-    "seaborn>=0.12.0",
-]
+
+# Development tools
 dev = [
     "pytest>=7.0.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
+]
+
+# Everything (for legacy compatibility)
+full = [
+    "loveslide[viz,single-cell,deep-learning,genomics,spatial,graph-extended,optimization,web,progress-extended,r]",
 ]
 
 [tool.setuptools.packages.find]
