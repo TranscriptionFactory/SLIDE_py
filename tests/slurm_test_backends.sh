@@ -64,11 +64,8 @@ echo "Location: $(which python)"
 # ---------------------------------------------------------------------------
 echo "=== Creating per-job build copy at ${BUILD_COPY} ==="
 mkdir -p "${BUILD_COPY}"
-cp -a "${PROJECT_DIR}/src"             "${BUILD_COPY}/src"
-cp    "${PROJECT_DIR}/pyproject.toml"  "${BUILD_COPY}/"
-cp    "${PROJECT_DIR}/setup.py"        "${BUILD_COPY}/"
-cp    "${PROJECT_DIR}/MANIFEST.in"     "${BUILD_COPY}/"
-cp    "${PROJECT_DIR}/README.md"       "${BUILD_COPY}/"
+(cd "${PROJECT_DIR}" && tar cf - src pyproject.toml setup.py MANIFEST.in README.md) \
+  | (cd "${BUILD_COPY}" && tar xf -)
 rm -rf "${BUILD_COPY}"/src/*.egg-info
 
 echo "=== Installing loveslide from isolated build copy ==="
