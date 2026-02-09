@@ -1,4 +1,4 @@
-**/__pycache__
+__pycache__/
 *.txt
 !requirements.txt
 *.csv
@@ -6,8 +6,11 @@ example_data/*
 example_results/*
 test_results/*
 *.out
-
+archive/
 **/*.out
 **/*.err
 
 **/**output*/**
+
+# Test conda environment
+tests/test_env/

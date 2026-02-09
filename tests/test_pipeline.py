@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 End-to-end pipeline tests for loveslide v1.0.0.
 
@@ -325,6 +324,38 @@ class TestKnockoffPipeline:
         assert hasattr(result, "optimal_iter")
         print(f"\nKnockoff SLIDE: {len(result.selected)} selected, "
               f"optimal_iter={result.optimal_iter}")
+
+    def test_knockoff_reproducibility(self, hiv_data, love_result_on_hiv):
+        """Same base_seed should produce identical selections."""
+        from loveslide import Knockoffs
+
+        X, y = hiv_data
+        A = love_result_on_hiv["A"]
+        X_std = (X - X.mean(axis=0)) / X.std(axis=0, ddof=1)
+        C = love_result_on_hiv["C"]
+        z = X_std.values @ A @ np.linalg.inv(C)
+
+        kwargs = dict(backend="python", niter=20, spec=0.1, f_size=100, base_seed=42)
+        r1 = Knockoffs.select_short_freq_slide(z, y.values, **kwargs)
+        r2 = Knockoffs.select_short_freq_slide(z, y.values, **kwargs)
+
+        assert np.array_equal(r1.selected, r2.selected)
+        assert np.array_equal(r1.selection_counts, r2.selection_counts)
+
+    def test_invalid_backend_raises(self, hiv_data, love_result_on_hiv):
+        """Invalid backend name should raise ValueError."""
+        from loveslide import Knockoffs
+
+        X, y = hiv_data
+        A = love_result_on_hiv["A"]
+        X_std = (X - X.mean(axis=0)) / X.std(axis=0, ddof=1)
+        C = love_result_on_hiv["C"]
+        z = X_std.values @ A @ np.linalg.inv(C)
+
+        with pytest.raises(ValueError, match="Unknown backend"):
+            Knockoffs.select_short_freq_slide(
+                z, y.values, backend="invalid_backend", niter=10, spec=0.1,
+            )
 
 
 # ===========================================================================
