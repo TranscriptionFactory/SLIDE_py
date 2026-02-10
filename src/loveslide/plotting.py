@@ -100,7 +100,9 @@ class Plotter:
             
             features = X[lf_genes]
             corr = features.corr().where(lambda x: abs(x) > minimum, 0)
-            np.fill_diagonal(corr.values, 0)
+            corr_vals = corr.to_numpy(copy=True)
+            np.fill_diagonal(corr_vals, 0)
+            corr = pd.DataFrame(corr_vals, index=corr.index, columns=corr.columns)
 
             G = nx.from_pandas_adjacency(corr)
 

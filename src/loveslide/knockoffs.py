@@ -57,17 +57,12 @@ def _create_second_order_r(X: np.ndarray) -> np.ndarray:
     from rpy2.robjects import numpy2ri, pandas2ri
     from rpy2.robjects.packages import importr
 
-    numpy2ri.activate()
-    pandas2ri.activate()
-
-    try:
+    converter = robjects.default_converter + numpy2ri.converter + pandas2ri.converter
+    with converter.context():
         knockoff_r = importr('knockoff')
         X_r = robjects.r['as.matrix'](pd.DataFrame(X))
         Xk_r = knockoff_r.create_second_order(X_r)
         Xk = np.array(Xk_r)
-    finally:
-        numpy2ri.deactivate()
-        pandas2ri.deactivate()
 
     return Xk
 
@@ -188,26 +183,25 @@ class Knockoffs():
         from rpy2.robjects import pandas2ri
         from rpy2.robjects.packages import importr
 
-        pandas2ri.activate()
-        z_r = pandas2ri.py2rpy(pd.DataFrame(z))
-        y_r = pandas2ri.py2rpy(pd.Series(y.flatten()))
-
         knockoff = importr('knockoff')
+        converter = robjects.default_converter + pandas2ri.converter
 
         results = []
-        for _ in range(niter):
-            result = knockoff.knockoff_filter(
-                X=z_r,
-                y=y_r,
-                knockoffs=knockoff.create_second_order,
-                statistic=knockoff.stat_glmnet_lambdasmax,
-                offset=0,
-                fdr=fdr
-            )
-            selected = result.rx2('selected')
-            results.append(pandas2ri.rpy2py(selected))
+        with converter.context():
+            z_r = robjects.conversion.get_conversion().py2rpy(pd.DataFrame(z))
+            y_r = robjects.conversion.get_conversion().py2rpy(pd.Series(y.flatten()))
 
-        pandas2ri.deactivate()
+            for _ in range(niter):
+                result = knockoff.knockoff_filter(
+                    X=z_r,
+                    y=y_r,
+                    knockoffs=knockoff.create_second_order,
+                    statistic=knockoff.stat_glmnet_lambdasmax,
+                    offset=0,
+                    fdr=fdr
+                )
+                selected = result.rx2('selected')
+                results.append(robjects.conversion.get_conversion().rpy2py(selected))
 
         results = np.concatenate(results, axis=0)
         results = results - 1  # Convert to 0-based indexing
@@ -529,7 +523,7 @@ class Knockoffs():
 
 
     @staticmethod
-    def select_short_freq(z, y, spec=0.3, fdr=0.1, niter=1000, f_size=100, n_workers=-1, backend='python',
+    def select_short_freq(z, y, spec=0.1, fdr=0.1, niter=1000, f_size=100, n_workers=-1, backend='python',
                           method='asdp', shrink=False, offset=0, fstat='glmnet_lambdasmax',
                           verbose=False, **kwargs):
         """
@@ -653,7 +647,7 @@ class Knockoffs():
     @staticmethod
     def select_short_freq_slide(
         z, y,
-        spec=0.3, fdr=0.1, niter=1000, f_size=100,
+        spec=0.1, fdr=0.1, niter=1000, f_size=100,
         n_jobs=-1,
         backend='python',
         verbose=False,
@@ -676,7 +670,7 @@ class Knockoffs():
             Response vector of shape (n_samples,)
         spec : float
             Proportion threshold to consider a variable frequently selected.
-            Default: 0.3 (matches R SLIDE).
+            Default: 0.1 (matches R SLIDE).
         fdr : float
             Target false discovery rate. Default: 0.1.
         niter : int

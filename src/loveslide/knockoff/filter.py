@@ -642,7 +642,7 @@ def knockoff_filter_voting(
     fdr: float = 0.10,
     offset: int = 0,
     niter: int = 1000,
-    spec: float = 0.3,
+    spec: float = 0.1,
     n_jobs: int = 1,
     base_seed: int = 42,
     verbose: bool = False,
@@ -676,7 +676,7 @@ def knockoff_filter_voting(
         1 = knockoffs+ (more conservative).
     niter : int, default=1000
         Number of knockoff iterations to run. Matches R SLIDE default.
-    spec : float, default=0.3
+    spec : float, default=0.1
         Specificity threshold - keep variables selected in >= spec * niter runs.
         Matches R SLIDE default.
     n_jobs : int, default=1
@@ -946,7 +946,7 @@ def knockoff_filter_voting_slide(
     fdr: float = 0.10,
     offset: int = 0,
     niter: int = 1000,
-    spec: float = 0.3,
+    spec: float = 0.1,
     f_size: int = 100,
     n_jobs: int = 1,
     base_seed: int = 42,
@@ -981,7 +981,7 @@ def knockoff_filter_voting_slide(
         1 = knockoffs+ (more conservative).
     niter : int, default=1000
         Number of knockoff iterations to run. Matches R SLIDE default.
-    spec : float, default=0.3
+    spec : float, default=0.1
         Specificity threshold - keep variables selected in >= spec * niter runs.
         Matches R SLIDE default.
     f_size : int, default=100
