@@ -67,6 +67,46 @@ def _create_second_order_r(X: np.ndarray) -> np.ndarray:
     return Xk
 
 
+def _solve_sdp_r(Sigma: np.ndarray, method: str = 'sdp') -> np.ndarray:
+    """Compute knockoff diagonal s-vector using R's SDP solver via rpy2.
+
+    Calls R's create.solve_sdp (or create.solve_asdp/equi) once to get the
+    diagonal of the knockoff covariance matrix.  The result can be fed into
+    the Python cached iteration loop so that R's SDP solution is used for
+    knockoff generation without re-invoking R on every iteration.
+
+    Parameters
+    ----------
+    Sigma : np.ndarray
+        Covariance matrix of shape (p, p).
+    method : str
+        SDP method: 'sdp' (default), 'asdp', or 'equi'.
+
+    Returns
+    -------
+    np.ndarray
+        Diagonal s-vector of shape (p,).
+    """
+    import rpy2.robjects as robjects
+    from rpy2.robjects import numpy2ri
+    from rpy2.robjects.packages import importr
+
+    converter = robjects.default_converter + numpy2ri.converter
+    with converter.context():
+        knockoff_r = importr('knockoff')
+
+        if method == 'equi':
+            diag_s_r = knockoff_r.create_solve_equi(Sigma)
+        elif method == 'asdp':
+            diag_s_r = knockoff_r.create_solve_asdp(Sigma)
+        else:  # sdp
+            diag_s_r = knockoff_r.create_solve_sdp(Sigma)
+
+        diag_s = np.asarray(diag_s_r).flatten()
+
+    return diag_s
+
+
 def _single_knockoff_iteration_python(z, y, fdr, method, shrink, offset, statistic,
                                        mu, Sigma, diag_s):
     """Execute a single knockoff filter iteration with cached covariance.
@@ -588,10 +628,11 @@ class Knockoffs():
         in knockoff matrix generation, not the voting logic.
         """
         # Handle r_knockoffs backend - delegate to select_short_freq_slide
+        # R SDP solver is called once per chunk; iterations use Python cached path
         if backend == 'r_knockoffs':
             result = Knockoffs.select_short_freq_slide(
                 z, y, spec=spec, fdr=fdr, niter=niter, f_size=f_size,
-                n_jobs=1,  # R is not thread-safe
+                n_jobs=1,
                 backend='r_knockoffs',
                 verbose=verbose,
                 **kwargs
@@ -742,12 +783,10 @@ class Knockoffs():
 
         # Determine knockoffs callable based on backend
         if backend == 'r_knockoffs':
-            knockoffs_func = _create_second_order_r
-            # R is not thread-safe, force n_jobs=1
-            if n_jobs != 1:
-                logger.info("Setting n_jobs=1 for r_knockoffs backend (R is not thread-safe)")
-                n_jobs = 1
-            use_cache = False  # Cannot cache with custom knockoffs
+            # Use R's SDP solver once per chunk, then Python cached iteration loop
+            knockoffs_func = None  # Use default Python knockoff sampling
+            use_cache = kwargs.pop('use_cache', True)
+            kwargs['sdp_solver'] = _solve_sdp_r
         elif backend == 'python':
             knockoffs_func = None  # Use default create_second_order
             use_cache = kwargs.pop('use_cache', True)

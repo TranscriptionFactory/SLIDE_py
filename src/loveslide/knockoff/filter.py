@@ -324,6 +324,7 @@ def _prepare_knockoff_cache(
     method: str = 'asdp',
     shrink: bool = False,
     match_r: bool = False,
+    sdp_solver: Optional[Callable] = None,
     **kwargs
 ) -> Dict[str, Any]:
     """
@@ -415,8 +416,10 @@ def _prepare_knockoff_cache(
             shrinkage_param = min(1.0, max(0.0, (p / n)))
             Sigma = (1 - shrinkage_param) * S + shrinkage_param * (trace_S / p) * np.eye(p)
 
-    # Compute diag_s using the solver
-    if method == 'equi':
+    # Compute diag_s using the solver (or external solver, e.g. R's SDP)
+    if sdp_solver is not None:
+        diag_s = sdp_solver(Sigma, method)
+    elif method == 'equi':
         diag_s = create_solve_equi(Sigma)
     elif method == 'sdp':
         diag_s = create_solve_sdp(Sigma)
@@ -785,6 +788,9 @@ def knockoff_filter_voting(
     # Note: We can't pickle lambdas, so we pass knockoffs/statistic as None
     # and rely on defaults, or we run sequentially
 
+    # Extract sdp_solver from kwargs (used by r_knockoffs backend)
+    sdp_solver = kwargs.pop('sdp_solver', None)
+
     if n_jobs == 1:
         # Sequential execution (safer, works with custom knockoffs/statistic)
         # Check if we can use caching optimization (default knockoffs and use_cache enabled)
@@ -792,15 +798,21 @@ def knockoff_filter_voting(
                      (knockoffs is not None and callable(knockoffs) and
                       hasattr(knockoffs, '__name__') and knockoffs.__name__ == '<lambda>' and match_r))
 
+        # Force caching when an external SDP solver is provided (r_knockoffs hybrid path)
+        if sdp_solver is not None and use_cache:
+            can_use_cache = True
+
         if can_use_cache:
             # OPTIMIZED PATH: Pre-compute invariant quantities once
             # This avoids redundant SDP solving, covariance estimation, and Cholesky
             # decomposition on every iteration (3-4x speedup)
             if verbose:
-                print("  Using cached knockoff computation (optimized path)...")
+                solver_name = "R SDP" if sdp_solver is not None else "Python"
+                print(f"  Using cached knockoff computation ({solver_name} solver)...")
 
             try:
-                cache = _prepare_knockoff_cache(X, method='asdp', shrink=False, match_r=match_r)
+                cache = _prepare_knockoff_cache(X, method='asdp', shrink=False, match_r=match_r,
+                                                sdp_solver=sdp_solver)
             except Exception as e:
                 warnings.warn(f"Cache preparation failed: {e}. Falling back to uncached path.")
                 can_use_cache = False
