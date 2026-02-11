@@ -18,7 +18,6 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 license = "MIT"
-license-files = ["LICEN[CS]E*"]
 
 dependencies = [
     # Core scientific computing (actually used in code)

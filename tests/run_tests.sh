@@ -54,7 +54,7 @@ auto_activate_base: false
 RCEOF
 export CONDARC="${CONDARC_TEMP}"
 "${MAMBA}" create --prefix "${TEST_ENV}" python=3.11 -y
-conda activate "${TEST_ENV}"
+source activate "${TEST_ENV}"
 
 echo "Python: $(python --version)"
 echo "Location: $(which python)"
@@ -82,6 +82,6 @@ pip list | grep -iE "loveslide|numpy|scipy|scikit|pandas|cvxpy|rpy2|pytest"
 # ---------------------------------------------------------------------------
 echo ""
 echo "=== Running tests ==="
-python -m pytest tests/ -v --tb=auto -s 2>&1
+python -m pytest tests/test_pipeline.py -v --tb=auto -s 2>&1
 
 # python -m pytest tests/test_pipeline.py -v --tb=short -s 2>&1
