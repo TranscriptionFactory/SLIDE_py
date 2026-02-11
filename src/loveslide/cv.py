@@ -526,7 +526,7 @@ class SLIDEcv:
                 labels=["SLIDE", "SLIDE_y"],
             )
 
-        ax.set_ylabel("Metric value")
+        ax.set_ylabel(metric_label)
         ax.set_title("SLIDEcv: SLIDE vs permuted-y null")
         ax.grid(True, linestyle="--", alpha=0.3)
 
