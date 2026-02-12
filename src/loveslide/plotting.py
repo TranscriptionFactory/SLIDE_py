@@ -136,7 +136,7 @@ class Plotter:
                        dpi=300, bbox_inches='tight', facecolor='white')
 
     @staticmethod
-    def plot_controlplot(scores, outdir=None, title='Control Plot'):
+    def plot_controlplot(scores, outdir=None, title='Control Plot', xlabel='Score'):
         """
         Plot control plot for different latent factor configurations.
 
@@ -145,6 +145,7 @@ class Plotter:
                  and values are lists of performance scores (e.g., AUC values)
         - outdir: Optional directory to save the plot
         - title: Title for the plot and output filename
+        - xlabel: Label for the x-axis (e.g., 'auc' or 'corr')
         """
         if sns is None:
             raise ImportError(
@@ -156,21 +157,23 @@ class Plotter:
         fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
         fig.patch.set_facecolor('white')
         
-        # Plot density for s1_random and s2_random with filled area
-        for score_type, color in [('full_random', 'blue'), ('partial_random', 'green'), ('s3', 'red')]:
+        # Plot density for random baselines
+        for score_type, color in [('full_random', 'blue'), ('partial_random', 'green')]:
+            if score_type not in scores:
+                continue
             if len(set(scores[score_type])) == 1:  # If all values are the same
                 ax.axvline(x=scores[score_type][0], color=color, label=f'{score_type}', linewidth=2)
             else:
                 sns.kdeplot(scores[score_type], label=score_type, ax=ax, fill=True, alpha=0.3, color=color)
             
-        s3_max = np.max([x for x in scores['s3'] if x is not None])
-        ax.axvline(x=s3_max, color='red', linestyle='--', label=f's3 best: {s3_max:.3f}')
+        # Plot real model score as vertical line
+        perreal = scores['real']
+        ax.axvline(x=perreal, color='red', linestyle='--', label=f'real: {perreal:.3f}', linewidth=2)
         
         # Customize plot appearance
         ax.set_title(title, fontsize=14, pad=15, fontweight='bold')
-        ax.set_xlabel('Score', fontsize=12, labelpad=10)
+        ax.set_xlabel(xlabel, fontsize=12, labelpad=10)
         ax.set_ylabel('Density', fontsize=12, labelpad=10)
-        ax.set_xlim(-0.1, 1.1)
         
         # Customize grid and spines
         ax.grid(True, linestyle='--', alpha=0.3)

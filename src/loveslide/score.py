@@ -182,7 +182,7 @@ class SLIDE_Estimator(Estimator):
         s1 = latent_factors.loc[:, sig_LFs] # standalone LFs
         s2 = Knockoffs.get_interaction_terms(s1, latent_factors_z2.loc[:, sig_interacts]).reshape(n, -1)        # interaction LF terms
         s3 = np.concatenate([s1, s2], axis=1) if len(s2) > 0 else s1
-        scores['s3'] = Estimator.get_aucs(s3, y, n_iters, test_size, scaler)
+        scores['real'] = np.mean(Estimator.get_aucs(s3, y, n_iters, test_size, scaler))
 
         n_marginals = s1.shape[1]
         n_interactions = s2.shape[1]

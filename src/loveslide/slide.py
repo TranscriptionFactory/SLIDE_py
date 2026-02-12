@@ -136,7 +136,7 @@ class SLIDE:
             partial_random = 'NA'
             full_random = 'NA'
         else:
-            true_scores = np.mean([x for x in scores['s3'] if x is not None])
+            true_scores = scores['real']
             partial_random = np.mean([x for x in scores['partial_random'] if x is not None])
             full_random = np.mean([x for x in scores['full_random'] if x is not None])
 
