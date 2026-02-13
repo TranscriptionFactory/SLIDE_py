@@ -35,6 +35,8 @@ trap cleanup EXIT
 module load python/ondemand-jupyter-python3.11
 module load r/4.4.0
 
+export PYTHONUNBUFFERED=1
+
 eval "$(conda shell.bash hook)"
 
 # ---------------------------------------------------------------------------
@@ -82,9 +84,9 @@ pip list | grep -iE "loveslide|numpy|scipy|scikit|pandas|cvxpy|rpy2"
 # ---------------------------------------------------------------------------
 echo ""
 echo "=== Running SSc multi-delta/lambda pipeline ==="
-echo "  deltas:   [0.01, 0.05, 0.1, 0.2]"
+echo "  deltas:   [0.01, 0.1]"
 echo "  lambdas:  [0.1, 1.0]"
-echo "  backends: r_knockoffs, r (python completed in job 7948693)"
+echo "  backends: r_knockoffs, r, python"
 echo ""
 
 python "${RUN_DIR}/run_ssc.py" 2>&1
