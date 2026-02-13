@@ -70,6 +70,11 @@ class SLIDEcv:
             )
             self.eval_type = "corr"
 
+        # Compute f_size once from full dataset (matches R SLIDEcv behavior)
+        self._f_size: int = kwargs.pop(
+            "f_size", calc_default_fsize(self.n_samples, self.n_lfs)
+        )
+
         # Knockoff parameters forwarded from the fitted model
         params = slide_obj.input_params
         self._ko_params: dict = dict(
@@ -233,7 +238,7 @@ class SLIDEcv:
             Predicted values for the validation set ``(n_valid,)``.
         """
         n_train, n_lfs = train_z.shape
-        f_size = calc_default_fsize(n_train, n_lfs)
+        f_size = self._f_size
         ko = self._ko_params
 
         # --- Step 1: marginal selection ---
@@ -333,8 +338,7 @@ class SLIDEcv:
             corrected_y = Knockoffs.correct_y(z_marginal, train_y)
 
             # Knockoff filter on interaction terms
-            n_train = train_z.shape[0]
-            int_f_size = calc_default_fsize(n_train, len(candidate_idxs))
+            int_f_size = self._f_size
 
             sig_local = Knockoffs.select_short_freq(
                 z=interaction_terms,
