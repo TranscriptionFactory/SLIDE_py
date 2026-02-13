@@ -534,6 +534,16 @@ def _sample_knockoffs_from_cache(
     return X_k
 
 
+def _cached_iteration(X, y, cache, statistic, fdr, offset, seed):
+    """Single cached knockoff iteration for parallel execution."""
+    np.random.seed(seed)
+    Xk = _sample_knockoffs_from_cache(X, cache)
+    W = statistic(X, Xk, y)
+    t = knockoff_threshold(W, fdr=fdr, offset=offset)
+    selected = np.where(W >= t)[0]
+    return selected
+
+
 def find_opt_iter(
     freq_vars: np.ndarray,
     selected_list: List[np.ndarray]
@@ -791,34 +801,48 @@ def knockoff_filter_voting(
     # Extract sdp_solver from kwargs (used by r_knockoffs backend)
     sdp_solver = kwargs.pop('sdp_solver', None)
 
-    if n_jobs == 1:
-        # Sequential execution (safer, works with custom knockoffs/statistic)
-        # Check if we can use caching optimization (default knockoffs and use_cache enabled)
-        can_use_cache = use_cache and (knockoffs is create_second_order or
-                     (knockoffs is not None and callable(knockoffs) and
-                      hasattr(knockoffs, '__name__') and knockoffs.__name__ == '<lambda>' and match_r))
+    # Check if we can use caching optimization (default knockoffs and use_cache enabled)
+    can_use_cache = use_cache and (knockoffs is create_second_order or
+                 (knockoffs is not None and callable(knockoffs) and
+                  hasattr(knockoffs, '__name__') and knockoffs.__name__ == '<lambda>' and match_r))
 
-        # Force caching when an external SDP solver is provided (r_knockoffs hybrid path)
-        if sdp_solver is not None and use_cache:
-            can_use_cache = True
+    # Force caching when an external SDP solver is provided (r_knockoffs hybrid path)
+    if sdp_solver is not None and use_cache:
+        can_use_cache = True
 
-        if can_use_cache:
-            # OPTIMIZED PATH: Pre-compute invariant quantities once
-            # This avoids redundant SDP solving, covariance estimation, and Cholesky
-            # decomposition on every iteration (3-4x speedup)
+    if can_use_cache:
+        # OPTIMIZED PATH: Pre-compute invariant quantities once
+        # This avoids redundant SDP solving, covariance estimation, and Cholesky
+        # decomposition on every iteration (3-4x speedup)
+        if verbose:
+            solver_name = "R SDP" if sdp_solver is not None else "Python"
+            print(f"  Using cached knockoff computation ({solver_name} solver)...")
+
+        try:
+            cache = _prepare_knockoff_cache(X, method='asdp', shrink=False, match_r=match_r,
+                                            sdp_solver=sdp_solver)
+        except Exception as e:
+            warnings.warn(f"Cache preparation failed: {e}. Falling back to uncached path.")
+            can_use_cache = False
+
+    if can_use_cache:
+        # Fast path with caching - supports both sequential and parallel
+        if n_jobs > 1:
+            from joblib import Parallel, delayed
+            results_list = Parallel(n_jobs=n_jobs, backend="loky")(
+                delayed(_cached_iteration)(
+                    X, y, cache, statistic, fdr, offset, base_seed + i
+                )
+                for i in range(niter)
+            )
+            for i, selected_iter in enumerate(results_list):
+                for idx in selected_iter:
+                    selection_counts[idx] += 1
+                if selected_list is not None:
+                    selected_list.append(selected_iter.copy())
             if verbose:
-                solver_name = "R SDP" if sdp_solver is not None else "Python"
-                print(f"  Using cached knockoff computation ({solver_name} solver)...")
-
-            try:
-                cache = _prepare_knockoff_cache(X, method='asdp', shrink=False, match_r=match_r,
-                                                sdp_solver=sdp_solver)
-            except Exception as e:
-                warnings.warn(f"Cache preparation failed: {e}. Falling back to uncached path.")
-                can_use_cache = False
-
-        if can_use_cache:
-            # Fast path with caching
+                print(f"  Completed {niter}/{niter} iterations ({n_jobs} parallel jobs)")
+        else:
             for i in range(niter):
                 seed = base_seed + i
                 np.random.seed(seed)
@@ -846,37 +870,36 @@ def knockoff_filter_voting(
                     warnings.warn(f"Knockoff iteration {i} failed: {e}")
                     if selected_list is not None:
                         selected_list.append(np.array([], dtype=int))
-        else:
-            # Original path for custom knockoffs
-            for i in range(niter):
-                seed = base_seed + i
-                np.random.seed(seed)
+    elif n_jobs == 1:
+        # Sequential uncached path for custom knockoffs
+        for i in range(niter):
+            seed = base_seed + i
+            np.random.seed(seed)
 
-                try:
-                    result = knockoff_filter(
-                        X, y,
-                        knockoffs=knockoffs,
-                        statistic=statistic,
-                        fdr=fdr,
-                        offset=offset
-                    )
-                    for idx in result.selected:
-                        selection_counts[idx] += 1
+            try:
+                result = knockoff_filter(
+                    X, y,
+                    knockoffs=knockoffs,
+                    statistic=statistic,
+                    fdr=fdr,
+                    offset=offset
+                )
+                for idx in result.selected:
+                    selection_counts[idx] += 1
 
-                    # Store selected list if needed for findOptIter
-                    if selected_list is not None:
-                        selected_list.append(result.selected.copy())
+                # Store selected list if needed for findOptIter
+                if selected_list is not None:
+                    selected_list.append(result.selected.copy())
 
-                    if verbose and (i + 1) % 50 == 0:
-                        print(f"  Completed {i + 1}/{niter} iterations")
+                if verbose and (i + 1) % 50 == 0:
+                    print(f"  Completed {i + 1}/{niter} iterations")
 
-                except Exception as e:
-                    warnings.warn(f"Knockoff iteration {i} failed: {e}")
-                    if selected_list is not None:
-                        selected_list.append(np.array([], dtype=int))
+            except Exception as e:
+                warnings.warn(f"Knockoff iteration {i} failed: {e}")
+                if selected_list is not None:
+                    selected_list.append(np.array([], dtype=int))
     else:
-        # Parallel execution (only works with default knockoffs/statistic)
-        # Note: check for lambda (match_r wrapper) or non-default knockoffs
+        # Parallel uncached execution (only works with default knockoffs/statistic)
         is_default_knockoffs = (knockoffs is create_second_order or
                                 (match_r and callable(knockoffs) and knockoffs.__name__ == '<lambda>'))
         if not is_default_knockoffs or statistic is not None:

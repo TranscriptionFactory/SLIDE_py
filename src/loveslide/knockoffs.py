@@ -632,7 +632,7 @@ class Knockoffs():
         if backend == 'r_knockoffs':
             result = Knockoffs.select_short_freq_slide(
                 z, y, spec=spec, fdr=fdr, niter=niter, f_size=f_size,
-                n_jobs=1,
+                n_jobs=n_workers,
                 backend='r_knockoffs',
                 verbose=verbose,
                 **kwargs
