@@ -1,105 +1,76 @@
 #!/usr/bin/env Rscript
-#
-# Native R SLIDE ground-truth run on SSc data.
-# Mirrors the Python loveslide run (job 8039789) with identical parameters
-# so outputs can be compared directly.
-#
-# Usage:  Rscript run_ssc_R.R [out_path]
-
-args <- commandArgs(trailingOnly = TRUE)
+# Native R SLIDE ground truth for SSc data.
+# Matches Python loveslide run (job 8039789) parameters exactly.
+# Pattern: SLIDEHelpdesk/getHelp.R
 
 cat("\n**********************************************************************\n")
-cat("****** SSc Ground-Truth: Native R SLIDE ******\n")
+cat("****** SSc R Ground Truth -- SLIDE native ******\n")
 cat("**********************************************************************\n\n")
 
 seed_num <- 42
 set.seed(seed_num)
 cat("Seed:", seed_num, "\n")
 
-t_start <- proc.time()
-
-# ---------------------------------------------------------------------------
-# Load SLIDE from local repo (matches lab convention in getHelp.R)
-# ---------------------------------------------------------------------------
 library(devtools)
 
-slide_repo <- Sys.getenv("SLIDE_LOCAL_REPO",
-                         unset = "/ix/djishnu/Aaron/1_general_use/SLIDE")
+# --- Load SLIDE from local repo -----------------------------------------------
+slide_repo <- Sys.getenv("SLIDE_LOCAL_REPO")
+if (slide_repo == "") {
+  stop("Set SLIDE_LOCAL_REPO env var (e.g. /ix/djishnu/Aaron/1_general_use/SLIDE)")
+}
 cat("Loading SLIDE from:", slide_repo, "\n")
 devtools::load_all(slide_repo)
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
-ssc_x <- "/ix/djishnu/Aaron/1_general_use/SLIDE/Data_Scripts/SSc/UnTx/X.csv"
-ssc_y <- "/ix/djishnu/Aaron/1_general_use/SLIDE/Data_Scripts/SSc/UnTx/Y.csv"
-
-timestamp_str <- format(Sys.time(), "%Y%m%d_%H%M%S")
-
-if (length(args) >= 1) {
-  out_path <- args[1]
-} else {
-  out_path <- paste0(
-    "/ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/ssc_multi_param/",
-    "output_R_ground_truth_", timestamp_str
-  )
+# --- Load YAML ----------------------------------------------------------------
+yaml_path <- "ssc_ground_truth.yaml"
+if (!file.exists(yaml_path)) {
+  stop(paste("YAML not found:", yaml_path))
 }
-dir.create(out_path, recursive = TRUE, showWarnings = FALSE)
-cat("Output directory:", out_path, "\n\n")
+input_params <- yaml::yaml.load_file(yaml_path)
 
-# ---------------------------------------------------------------------------
-# Build input_params (matching Python job 8039789 exactly)
-# ---------------------------------------------------------------------------
-input_params <- list(
-  x_path       = ssc_x,
-  y_path       = ssc_y,
-  out_path     = out_path,
-  y_factor     = FALSE,
-  delta        = c(0.01, 0.1),
-  lambda       = c(0.1, 1.0),
-  spec         = 0.1,
-  fdr          = 0.1,
-  thresh_fdr   = 0.2,
-  eval_type    = "corr",
-  SLIDE_iter   = 500,
-  SLIDE_top_feats = 10,
-  do_interacts = TRUE,
-  sampleCV_iter = 500,
-  rep_cv       = 50
-)
+# --- Create timestamped output directory --------------------------------------
+timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
+job_id <- Sys.getenv("SLURM_JOB_ID", unset = "local")
+out_dir <- paste0("output_R_", timestamp, "_", job_id)
+dir.create(out_dir, recursive = TRUE)
+input_params$out_path <- out_dir
 
-# Write top-level yaml for reproducibility and SLIDEcv consumption
-yaml_path <- file.path(out_path, "yaml_params.yaml")
-yaml::write_yaml(input_params, yaml_path)
-cat("Wrote top-level yaml to:", yaml_path, "\n\n")
+# Write updated YAML (with out_path set) so SLIDEcv can read it
+updated_yaml <- file.path(out_dir, "yaml_parameters.yaml")
+yaml::write_yaml(input_params, updated_yaml)
 
-# ---------------------------------------------------------------------------
-# Run optimizeSLIDE (handles the full delta x lambda grid internally)
-# ---------------------------------------------------------------------------
-cat("********** Running optimizeSLIDE **********\n")
-summary_table <- withCallingHandlers(
-  optimizeSLIDE(input_params, sink_file = FALSE, continue_on_error = TRUE)
-)
-cat("\n********** optimizeSLIDE complete **********\n\n")
+cat("\nOutput directory:", out_dir, "\n")
+cat("Parameters:\n")
+str(input_params)
 
-# ---------------------------------------------------------------------------
-# Run SLIDEcv on each completed run (nrep=10, k=5 to match Python job)
-# ---------------------------------------------------------------------------
-cat("********** Running SLIDEcv (nrep=10, k=5) **********\n")
-tryCatch({
-  withCallingHandlers(SLIDEcv(yaml_path, nrep = 10, k = 5))
-  cat("\n********** SLIDEcv complete **********\n")
-}, error = function(e) {
-  cat("\nSLIDEcv failed:", conditionMessage(e), "\n")
-})
+# --- Pipeline -----------------------------------------------------------------
+cat("\n========== checkDataParams ==========\n")
+withCallingHandlers(checkDataParams(input_params))
 
-# ---------------------------------------------------------------------------
-# Timing
-# ---------------------------------------------------------------------------
-elapsed <- proc.time() - t_start
-cat(sprintf("\nTotal wall time: %.1f min (%.0f sec)\n",
-            elapsed["elapsed"] / 60, elapsed["elapsed"]))
+cat("\n========== optimizeSLIDE ==========\n")
+withCallingHandlers(SLIDE::optimizeSLIDE(input_params, sink_file = FALSE))
+
+cat("\n========== plotCorrelationNetworks ==========\n")
+withCallingHandlers(SLIDE::plotCorrelationNetworks(input_params))
+
+cat("\n========== SLIDEcv (nrep=10, k=5) ==========\n")
+withCallingHandlers(SLIDE::SLIDEcv(updated_yaml, nrep = 10, k = 5))
+
+# --- Summary ------------------------------------------------------------------
+cat("\n========== Summary ==========\n")
+cat("Output:", out_dir, "\n")
+
+# List all delta/lambda output subdirectories
+sub_dirs <- list.dirs(out_dir, recursive = FALSE)
+for (d in sub_dirs) {
+  summary_file <- file.path(d, "summary_table.csv")
+  if (file.exists(summary_file)) {
+    cat("\n---", basename(d), "---\n")
+    summary_df <- read.csv(summary_file)
+    print(summary_df)
+  }
+}
 
 cat("\n**********************************************************************\n")
-cat("****** DONE ******\n")
+cat("****** SSc R Ground Truth -- COMPLETE ******\n")
 cat("**********************************************************************\n")
