@@ -240,7 +240,7 @@ class Knockoffs():
                     offset=0,
                     fdr=fdr
                 )
-                selected = result.rx2('selected')
+                selected = result['selected']
                 results.append(robjects.conversion.get_conversion().rpy2py(selected))
 
         results = np.concatenate(results, axis=0)
