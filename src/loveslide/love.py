@@ -8,6 +8,7 @@ import warnings
 import numpy as np
 
 from .love_python.love import LOVE
+from .knockoffs import _rlist_get
 
 
 def call_love_r(X, lbd=0.5, delta=None, thresh_fdr=0.2, rep_CV=50,
@@ -75,16 +76,16 @@ def call_love_r(X, lbd=0.5, delta=None, thresh_fdr=0.2, rep_CV=50,
         verbose=verbose
     )
 
-    # Convert R result to Python dict (rpy2 3.5+ uses dict-like access)
+    # Convert R result to Python dict (version-resilient named-list access)
     result_dict = {
-        'K': int(result['K'][0]),
-        'pureVec': np.array(result['pureVec']) - 1,  # R is 1-indexed
-        'pureInd': _convert_r_pure_ind(result['purInd']),
+        'K': int(_rlist_get(result, 'K')[0]),
+        'pureVec': np.array(_rlist_get(result, 'pureVec')) - 1,  # R is 1-indexed
+        'pureInd': _convert_r_pure_ind(_rlist_get(result, 'purInd')),
         'group': None,  # Not returned by R function
-        'A': np.array(result['A']),
-        'C': np.array(result['C']),
+        'A': np.array(_rlist_get(result, 'A')),
+        'C': np.array(_rlist_get(result, 'C')),
         'Omega': None,  # Not returned by R function
-        'Gamma': np.array(result['Gamma']),
+        'Gamma': np.array(_rlist_get(result, 'Gamma')),
         'optDelta': delta[0] if len(delta) == 1 else delta[0],
     }
 
@@ -98,8 +99,10 @@ def _convert_r_pure_ind(r_list):
     result = []
     for i in range(len(r_list)):
         item = r_list[i]
-        pos = np.array(item['pos']) - 1 if item['pos'] != robjects.NULL else np.array([])
-        neg = np.array(item['neg']) - 1 if item['neg'] != robjects.NULL else np.array([])
+        pos_r = _rlist_get(item, 'pos')
+        neg_r = _rlist_get(item, 'neg')
+        pos = np.array(pos_r) - 1 if pos_r != robjects.NULL else np.array([])
+        neg = np.array(neg_r) - 1 if neg_r != robjects.NULL else np.array([])
         result.append({'pos': pos.astype(int), 'neg': neg.astype(int)})
     return result
 

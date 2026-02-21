@@ -15,6 +15,20 @@ from sklearn.linear_model import LinearRegression, Lasso, lasso_path
 
 logger = logging.getLogger(__name__)
 
+
+def _rlist_get(robj, name):
+    """Access named element of an R list, compatible with rpy2 3.5.x and 3.6.x.
+
+    rpy2 3.5 supports result['name']; rpy2 3.6 deprecated OrdDict and broke
+    string-key access.  Fall back to names-based integer indexing.
+    """
+    try:
+        return robj[name]
+    except TypeError:
+        names = list(robj.names)
+        return robj[names.index(name)]
+
+
 # Import from bundled knockoff package
 from .knockoff.filter import (
     knockoff_filter, knockoff_threshold, knockoff_filter_voting_slide, VotingResult
@@ -240,7 +254,7 @@ class Knockoffs():
                     offset=0,
                     fdr=fdr
                 )
-                selected = result['selected']
+                selected = _rlist_get(result, 'selected')
                 results.append(robjects.conversion.get_conversion().rpy2py(selected))
 
         results = np.concatenate(results, axis=0)
@@ -627,13 +641,14 @@ class Knockoffs():
         with R native, while 'python' achieves ~0.65. The difference is primarily
         in knockoff matrix generation, not the voting logic.
         """
-        # Handle r_knockoffs backend - delegate to select_short_freq_slide
-        # R SDP solver is called once per chunk; iterations use Python cached path
-        if backend == 'r_knockoffs':
+        # Route python and r_knockoffs through select_short_freq_slide for
+        # consistent SLIDE methodology (findOptIter, deterministic seeding,
+        # feature chunking, two-stage screening).
+        if backend in ('r_knockoffs', 'python'):
             result = Knockoffs.select_short_freq_slide(
                 z, y, spec=spec, fdr=fdr, niter=niter, f_size=f_size,
                 n_jobs=n_workers,
-                backend='r_knockoffs',
+                backend=backend,
                 verbose=verbose,
                 **kwargs
             )
