@@ -324,7 +324,7 @@ def LOVE(X: np.ndarray, lbd: float = 0.5, mu: float = 0.5,
             sigma_bar_sup = np.max(cross_AI_inv @ se_est[I_hat_list])
             J_list = [i for i in range(p) if i not in I_hat_list]
             AJ = EstAJDant(C_hat, EstY(Sigma, A_hat, I_hat),
-                           mu * optDelta * sigma_bar_sup,
+                           lbd * optDelta * sigma_bar_sup,
                            sigma_bar_sup + se_est[J_list])
             Omega = None
         else:

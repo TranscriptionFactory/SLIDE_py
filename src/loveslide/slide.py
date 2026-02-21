@@ -296,7 +296,7 @@ class OptimizeSLIDE(SLIDE):
             Gamma_hat[non_pure_indices] = Sigma_JJ_diag - ACA_diag
         
         # Replace negative Gamma values (R uses 1e2 for non-pure, 1e-2 for pure)
-        Gamma_hat[Gamma_hat < 0] = 1e-2
+        Gamma_hat[Gamma_hat < 0] = 1e2
 
         # Convert Gamma_hat to diagonal matrix and handle zeros
         Gamma_hat = np.where(Gamma_hat == 0, 1e-10, Gamma_hat)

@@ -10,14 +10,17 @@ from typing import List, Optional
 
 def EstY(Sigma: np.ndarray, AI: np.ndarray, pureVec: np.ndarray) -> np.ndarray:
     """
-    Estimate the K by |J| submatrix of Sigma.
+    Estimate Sigma_TJ via sign-adjusted averaging (matches R's estSigmaTJ).
+
+    For each factor k, averages the sign-adjusted correlations between
+    pure variables in cluster k and all non-pure variables.
 
     Parameters
     ----------
     Sigma : np.ndarray
-        The p by p covariance matrix.
+        The p by p covariance/correlation matrix.
     AI : np.ndarray
-        The p by K loading matrix.
+        The p by K loading matrix (non-pure rows should be zero).
     pureVec : np.ndarray
         Array of pure variable indices.
 
@@ -26,25 +29,35 @@ def EstY(Sigma: np.ndarray, AI: np.ndarray, pureVec: np.ndarray) -> np.ndarray:
     np.ndarray
         A K by |J| matrix (where J is the set of non-pure variables).
     """
-    pureVec = list(pureVec)
+    pureVec_set = set(pureVec)
     p = Sigma.shape[0]
+    K = AI.shape[1]
 
     # Get non-pure indices
-    nonPureVec = [i for i in range(p) if i not in pureVec]
+    nonPureVec = [i for i in range(p) if i not in pureVec_set]
+    n_J = len(nonPureVec)
 
-    AI_sub = AI[pureVec, :]
+    # Step 1: Sign-adjust sigma according to AI (R's adjustSign)
+    # For each pure variable i, multiply its correlation row by the sign
+    # of its non-zero loading entry. Non-pure rows stay zero.
+    signed_sigma = np.zeros_like(Sigma)
+    for i in range(p):
+        nz = np.where(AI[i, :] != 0)[0]
+        if len(nz) > 0:
+            signed_sigma[i, :] = np.sign(AI[i, nz[0]]) * Sigma[i, :]
 
-    # solve(crossprod(AI_sub), t(AI_sub) @ Sigma[pureVec, -pureVec])
-    # = inv(AI_sub.T @ AI_sub) @ AI_sub.T @ Sigma[pureVec, nonPureVec]
-    cross_AI = AI_sub.T @ AI_sub
-    Sigma_IJ = Sigma[np.ix_(pureVec, nonPureVec)]
+    # Step 2: Subset to non-pure columns
+    sigma_J = signed_sigma[:, nonPureVec]
 
-    try:
-        Y = np.linalg.solve(cross_AI, AI_sub.T @ Sigma_IJ)
-    except np.linalg.LinAlgError:
-        Y = np.linalg.pinv(cross_AI) @ AI_sub.T @ Sigma_IJ
+    # Step 3: For each factor k, average signed correlations across its
+    # pure variables to get the factor-to-nonpure correlation estimate
+    sigma_TJ = np.zeros((K, n_J))
+    for k in range(K):
+        group_k = np.where(AI[:, k] != 0)[0]  # pure nodes in cluster k
+        if len(group_k) > 0:
+            sigma_TJ[k, :] = np.mean(sigma_J[group_k, :], axis=0)
 
-    return Y
+    return sigma_TJ
 
 
 def EstAJInv(Omega: np.ndarray, Y: np.ndarray, lbd: float) -> np.ndarray:
