@@ -22,6 +22,7 @@ from scipy.optimize import linear_sum_assignment
 # ── Directory configuration ──────────────────────────────────────────────────
 BASE = os.path.dirname(os.path.abspath(__file__))
 
+
 IMPLEMENTATIONS = {
     "native_R": {
         "path": os.path.join(BASE, "output_native_R"),
@@ -29,17 +30,17 @@ IMPLEMENTATIONS = {
         "desc": "Native R SLIDE",
     },
     "python": {
-        "path": os.path.join(BASE, "output_20260221_184201", "python"),
+        "path": os.path.join(BASE, "output_20260224_131418", "python"),
         "type": "python",
         "desc": "Python SLIDE (pure Python backend)",
     },
     "r_backend": {
-        "path": os.path.join(BASE, "output_20260221_184120", "r"),
+        "path": os.path.join(BASE, "output_20260224_131401", "r"),
         "type": "python",  # outputs written by Python wrapper
         "desc": "Python SLIDE (rpy2 R backend)",
     },
     "r_knockoffs": {
-        "path": os.path.join(BASE, "output_20260221_184120", "r_knockoffs"),
+        "path": os.path.join(BASE, "output_20260224_131325", "r_knockoffs"),
         "type": "python",
         "desc": "Python SLIDE (R knockoffs only)",
     },
@@ -49,12 +50,13 @@ IMPLEMENTATIONS = {
 PARAM_COMBOS = [
     {"delta": 0.01, "lam": 0.1},
     {"delta": 0.01, "lam": 1.0},
-    {"delta": 0.1,  "lam": 0.1},
-    {"delta": 0.1,  "lam": 1.0},
+    {"delta": 0.1, "lam": 0.1},
+    {"delta": 0.1, "lam": 1.0},
 ]
 
 
 # ── Path resolution ──────────────────────────────────────────────────────────
+
 
 def _param_dir(impl_path, impl_type, delta, lam):
     """Resolve parameter subdirectory, handling R's int-lambda naming."""
@@ -72,6 +74,7 @@ def _param_dir(impl_path, impl_type, delta, lam):
 
 # ── Data loaders ─────────────────────────────────────────────────────────────
 
+
 def load_z_matrix(path, impl_type):
     """Load z_matrix.csv, normalizing column names to 0-based indices."""
     f = os.path.join(path, "z_matrix.csv")
@@ -80,9 +83,7 @@ def load_z_matrix(path, impl_type):
     df = pd.read_csv(f, index_col=0)
     if impl_type == "r":
         # Native R: 1-based columns (Z1..ZN) → rename to 0-based (Z0..ZN-1)
-        df.columns = [
-            "Z%d" % (int(c.strip('"')[1:]) - 1) for c in df.columns
-        ]
+        df.columns = ["Z%d" % (int(c.strip('"')[1:]) - 1) for c in df.columns]
     return df
 
 
@@ -126,7 +127,9 @@ def load_feature_lists(path, impl_type):
                 df = pd.read_csv(os.path.join(path, f), sep="\t", index_col=0)
                 result[lf_name] = {
                     "features": set(df.index.tolist()),
-                    "loadings": dict(zip(df.index, df["loading"])) if "loading" in df else {},
+                    "loadings": dict(zip(df.index, df["loading"]))
+                    if "loading" in df
+                    else {},
                 }
             except Exception as e:
                 print(f"    WARN: failed to load {f}: {e}")
@@ -193,6 +196,7 @@ def load_summary_table(impl_path):
 
 # ── Comparison helpers ───────────────────────────────────────────────────────
 
+
 def jaccard(s1, s2):
     if not s1 and not s2:
         return 1.0
@@ -215,8 +219,7 @@ def z_matrix_corr_summary(z1, z2):
         return None
 
     # Common columns (LFs)
-    common_cols = sorted(set(z1.columns) & set(z2.columns),
-                         key=lambda c: int(c[1:]))
+    common_cols = sorted(set(z1.columns) & set(z2.columns), key=lambda c: int(c[1:]))
     if not common_cols:
         return None
 
@@ -290,15 +293,18 @@ def match_lfs_hungarian(feat1, feat2):
 
 W = 80
 
+
 def section(title):
     print(f"\n{'=' * W}")
     print(f"  {title}")
     print(f"{'=' * W}")
 
+
 def subsection(title):
     print(f"\n  {'─' * 40}")
     print(f"  {title}")
     print(f"  {'─' * 40}")
+
 
 def param_label(p):
     return f"delta={p['delta']}, lambda={p['lam']}"
@@ -306,18 +312,31 @@ def param_label(p):
 
 # ── Main report ──────────────────────────────────────────────────────────────
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Compare SLIDE outputs across implementations")
-    parser.add_argument("--detailed", action="store_true",
-                        help="Show per-column/per-LF details")
-    parser.add_argument("--param", type=str, default=None,
-                        help="Only compare a specific combo, e.g. '0.1_1'")
-    parser.add_argument("--output", type=str, default=None,
-                        help="Write report to file instead of stdout")
+    parser = argparse.ArgumentParser(
+        description="Compare SLIDE outputs across implementations"
+    )
+    parser.add_argument(
+        "--detailed", action="store_true", help="Show per-column/per-LF details"
+    )
+    parser.add_argument(
+        "--param",
+        type=str,
+        default=None,
+        help="Only compare a specific combo, e.g. '0.1_1'",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Write report to file instead of stdout",
+    )
     args = parser.parse_args()
 
     if args.output:
         import sys
+
         sys.stdout = open(args.output, "w")
 
     # Filter params if requested
@@ -350,11 +369,25 @@ def main():
         for _, row in st.iterrows():
             d = row.get("delta", "")
             lam = row.get("lambda", "")
-            n_lfs = int(row["n_LFs"]) if "n_LFs" in row and pd.notna(row["n_LFs"]) else "-"
-            n_sig = int(row["n_sig"]) if "n_sig" in row and pd.notna(row["n_sig"]) else "-"
-            n_int = int(row["n_interact"]) if "n_interact" in row and pd.notna(row["n_interact"]) else "-"
-            cv = f"{row['cv_perf']:.4f}" if "cv_perf" in row and pd.notna(row["cv_perf"]) else "-"
-            print(f"  {name:<16} {d:>6} {lam:>7} {str(n_lfs):>5} {str(n_sig):>5} {str(n_int):>5} {cv:>8}")
+            n_lfs = (
+                int(row["n_LFs"]) if "n_LFs" in row and pd.notna(row["n_LFs"]) else "-"
+            )
+            n_sig = (
+                int(row["n_sig"]) if "n_sig" in row and pd.notna(row["n_sig"]) else "-"
+            )
+            n_int = (
+                int(row["n_interact"])
+                if "n_interact" in row and pd.notna(row["n_interact"])
+                else "-"
+            )
+            cv = (
+                f"{row['cv_perf']:.4f}"
+                if "cv_perf" in row and pd.notna(row["cv_perf"])
+                else "-"
+            )
+            print(
+                f"  {name:<16} {d:>6} {lam:>7} {str(n_lfs):>5} {str(n_sig):>5} {str(n_int):>5} {cv:>8}"
+            )
 
     # ─────────────────────────────────────────────────────────────────────
     # Per-parameter comparison
@@ -389,13 +422,17 @@ def main():
         for name in impl_names:
             d = data[name]
             sig = sorted(d["sig_lfs"], key=lambda x: int(x[1:])) if d["sig_lfs"] else []
-            inter = sorted(d["sig_interacts"], key=lambda x: int(x[1:])) if d["sig_interacts"] else []
+            inter = (
+                sorted(d["sig_interacts"], key=lambda x: int(x[1:]))
+                if d["sig_interacts"]
+                else []
+            )
             print(f"  {name:15s}  marginals={sig}")
             if inter:
                 print(f"  {' ':15s}  interacts={inter}")
 
         print()
-        for (n1, n2) in combinations(impl_names, 2):
+        for n1, n2 in combinations(impl_names, 2):
             s1, s2 = data[n1]["sig_lfs"], data[n2]["sig_lfs"]
             j = jaccard(s1, s2)
             common = s1 & s2
@@ -409,7 +446,7 @@ def main():
 
         # ── 3. Z-matrix correlation ──
         subsection("Z Matrix Correlation")
-        for (n1, n2) in combinations(impl_names, 2):
+        for n1, n2 in combinations(impl_names, 2):
             res = z_matrix_corr_summary(data[n1]["Z"], data[n2]["Z"])
             if res is None:
                 print(f"  {n1} vs {n2}: SKIP (missing z_matrix)")
@@ -429,7 +466,7 @@ def main():
             if args.detailed:
                 worst = sorted(
                     res["col_corrs"].items(),
-                    key=lambda x: x[1] if not np.isnan(x[1]) else 2.0
+                    key=lambda x: x[1] if not np.isnan(x[1]) else 2.0,
                 )[:5]
                 print(f"    Worst 5 columns:")
                 for col, r in worst:
@@ -437,7 +474,7 @@ def main():
 
         # ── 4. Feature-list LF matching ──
         subsection("Latent Factor Matching (Jaccard on feature sets)")
-        for (n1, n2) in combinations(impl_names, 2):
+        for n1, n2 in combinations(impl_names, 2):
             f1, f2 = data[n1]["features"], data[n2]["features"]
             if not f1 or not f2:
                 print(f"  {n1} vs {n2}: SKIP (no feature lists)")
@@ -445,9 +482,9 @@ def main():
 
             matches = match_lfs_hungarian(f1, f2)
             perfect = [m for m in matches if m[2] >= 1.0]
-            high    = [m for m in matches if 0.5 <= m[2] < 1.0]
-            low     = [m for m in matches if 0.0 < m[2] < 0.5]
-            zero    = [m for m in matches if m[2] == 0.0]
+            high = [m for m in matches if 0.5 <= m[2] < 1.0]
+            low = [m for m in matches if 0.0 < m[2] < 0.5]
+            zero = [m for m in matches if m[2] == 0.0]
 
             print(
                 f"  {n1} ({len(f1)} LFs) vs {n2} ({len(f2)} LFs): "
@@ -455,7 +492,11 @@ def main():
                 f"{len(low)} partial, {len(zero)} unmatched"
             )
 
-            show_matches = matches if (args.detailed or len(matches) <= 25) else [m for m in matches if m[2] > 0]
+            show_matches = (
+                matches
+                if (args.detailed or len(matches) <= 25)
+                else [m for m in matches if m[2] > 0]
+            )
             for lf1, lf2, j_score in show_matches:
                 if j_score == 0.0 and not args.detailed:
                     continue
@@ -467,11 +508,13 @@ def main():
                     f"({len(shared)} shared, +{len(s1 - s2)} {n1}, +{len(s2 - s1)} {n2})"
                 )
                 if args.detailed and shared:
-                    print(f"      shared: {sorted(shared)[:10]}{'...' if len(shared) > 10 else ''}")
+                    print(
+                        f"      shared: {sorted(shared)[:10]}{'...' if len(shared) > 10 else ''}"
+                    )
 
         # ── 5. A matrix comparison ──
         subsection("A Matrix Comparison")
-        for (n1, n2) in combinations(impl_names, 2):
+        for n1, n2 in combinations(impl_names, 2):
             a1, a2 = data[n1]["A"], data[n2]["A"]
             if a1 is None or a2 is None:
                 # Try to build from feature lists for R
@@ -484,12 +527,15 @@ def main():
                 continue
 
             common_feats = sorted(set(a1.index) & set(a2.index))
-            common_lfs = sorted(set(a1.columns) & set(a2.columns),
-                                key=lambda c: int(c[1:]))
+            common_lfs = sorted(
+                set(a1.columns) & set(a2.columns), key=lambda c: int(c[1:])
+            )
 
             if not common_feats or not common_lfs:
-                print(f"  {n1} vs {n2}: no overlap (feats={len(set(a1.index) & set(a2.index))}, "
-                      f"LFs={len(set(a1.columns) & set(a2.columns))})")
+                print(
+                    f"  {n1} vs {n2}: no overlap (feats={len(set(a1.index) & set(a2.index))}, "
+                    f"LFs={len(set(a1.columns) & set(a2.columns))})"
+                )
                 continue
 
             v1 = a1.loc[common_feats, common_lfs].values.astype(float)
@@ -528,14 +574,17 @@ def main():
 
             same_sig = "SAME" if sig_lo == sig_hi else "DIFFER"
             same_int = "SAME" if int_lo == int_hi else "DIFFER"
-            print(f"  {name:15s} delta={delta}: "
-                  f"marginals {same_sig} (J={j_sig:.3f}), "
-                  f"interactions {same_int} (J={j_int:.3f})")
+            print(
+                f"  {name:15s} delta={delta}: "
+                f"marginals {same_sig} (J={j_sig:.3f}), "
+                f"interactions {same_int} (J={j_int:.3f})"
+            )
 
     section("END OF REPORT")
 
     if args.output:
         import sys
+
         sys.stdout.close()
 
 

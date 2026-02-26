@@ -44,6 +44,7 @@ dependencies = [
 
     # Utilities
     "easydict",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

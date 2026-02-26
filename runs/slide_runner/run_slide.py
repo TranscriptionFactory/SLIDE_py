@@ -1,13 +1,12 @@
 """
-SSc multi-delta/lambda SLIDE run across python, r_knockoffs, and r backends.
+Generic YAML-driven SLIDE runner.
 
-Supports two modes:
-  1. --config <yaml>   Read all parameters from a YAML config file.
-  2. (no config)       Use hardcoded SSc defaults (legacy behavior).
+All parameters come from the config file — nothing is hardcoded.
 
-delta = [0.01, 0.1]
-lambda = [0.1, 1.0]
-backends = python, r_knockoffs, r
+Usage:
+    python run_slide.py --config config.yaml                          # all knockoff backends
+    python run_slide.py --config config.yaml --backend python         # single knockoff backend
+    python run_slide.py --config config.yaml --out-dir ./out     # override output
 """
 import sys
 import os
@@ -16,40 +15,53 @@ import warnings
 import logging
 import traceback
 from itertools import product
+from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+import yaml
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 from loveslide import OptimizeSLIDE, SLIDEcv
 
-# ── Legacy hardcoded defaults (used when no --config is given) ────────────────
-SSC_X = "/ix/djishnu/Aaron/1_general_use/SLIDE/Data_Scripts/SSc/UnTx/X.csv"
-SSC_Y = "/ix/djishnu/Aaron/1_general_use/SLIDE/Data_Scripts/SSc/UnTx/Y.csv"
-DEFAULT_OUT_BASE = "/ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/ssc_multi_param/output"
-
-DELTAS = [0.01, 0.1]
-LAMBDAS = [0.1, 1.0]
-BACKENDS = ["r_knockoffs", "r", "python"]
+REQUIRED_DATA_KEYS = ["x_path", "y_path"]
 
 
 def load_config(config_path):
-    """Load a YAML config and return a normalized dict."""
-    import yaml
-    with open(config_path) as f:
-        cfg = yaml.safe_load(f)
+    """Load and validate a YAML config, resolving relative paths."""
+    config_path = Path(config_path).resolve()
+    config_dir = config_path.parent
 
-    data = cfg.get("data", {})
-    slide = cfg.get("slide", {})
-    cv = cfg.get("cv", {})
-    output = cfg.get("output", {})
+    with open(config_path) as f:
+        raw = yaml.safe_load(f)
+
+    data = raw.get("data", {})
+    slide = raw.get("slide", {})
+    cv = raw.get("cv", {})
+    output = raw.get("output", {})
+
+    # Validate required fields
+    for key in REQUIRED_DATA_KEYS:
+        if key not in data:
+            raise ValueError(f"Missing required config key: data.{key}")
+
+    if not slide.get("knockoff_backends"):
+        raise ValueError("Missing required config key: slide.knockoff_backends")
+
+    def _resolve(p):
+        """Resolve a path: absolute stays absolute, relative is from config dir."""
+        p = Path(p)
+        return str(p if p.is_absolute() else (config_dir / p).resolve())
 
     return {
-        "x_path": data.get("x_path", SSC_X),
-        "y_path": data.get("y_path", SSC_Y),
+        # data
+        "x_path": _resolve(data["x_path"]),
+        "y_path": _resolve(data["y_path"]),
         "y_factor": data.get("y_factor", False),
-        "backends": slide.get("backends", BACKENDS),
-        "deltas": slide.get("deltas", DELTAS),
-        "lambdas": slide.get("lambdas", LAMBDAS),
+        # slide
+        "knockoff_backends": slide["knockoff_backends"],
+        "deltas": slide.get("deltas", [0.1]),
+        "lambdas": slide.get("lambdas", [1.0]),
         "niter": slide.get("niter", 500),
         "top_feats": slide.get("top_feats", 10),
         "fdr": slide.get("fdr", 0.1),
@@ -63,45 +75,20 @@ def load_config(config_path):
         "knockoff_shrink": slide.get("knockoff_shrink", False),
         "knockoff_offset": slide.get("knockoff_offset", 0),
         "fstat": slide.get("fstat", "glmnet_lambdasmax"),
+        # cv
         "cv_enabled": cv.get("enabled", True),
         "cv_nrep": cv.get("nrep", 10),
         "cv_k": cv.get("k", 5),
         "cv_eval_type": cv.get("eval_type", "corr"),
-        "out_base": output.get("base_dir", DEFAULT_OUT_BASE),
-    }
-
-
-def default_config():
-    """Return the legacy hardcoded config as a dict."""
-    return {
-        "x_path": SSC_X,
-        "y_path": SSC_Y,
-        "y_factor": False,
-        "backends": BACKENDS,
-        "deltas": DELTAS,
-        "lambdas": LAMBDAS,
-        "niter": 500,
-        "top_feats": 10,
-        "fdr": 0.1,
-        "thresh_fdr": 0.2,
-        "pure_homo": True,
-        "do_interacts": True,
-        "n_workers": 4,
-        "spec": 0.1,
-        "love_backend": "python",
-        "knockoff_method": "asdp",
-        "knockoff_shrink": False,
-        "knockoff_offset": 0,
-        "fstat": "glmnet_lambdasmax",
-        "cv_enabled": True,
-        "cv_nrep": 10,
-        "cv_k": 5,
-        "cv_eval_type": "corr",
-        "out_base": DEFAULT_OUT_BASE,
+        # output
+        "out_base": _resolve(output.get("base_dir", "./output")),
+        # metadata
+        "config_path": str(config_path),
     }
 
 
 def run_backend(backend, cfg, out_base):
+    """Run SLIDE pipeline + optional CV for a single backend."""
     out_dir = os.path.join(out_base, backend)
     os.makedirs(out_dir, exist_ok=True)
 
@@ -144,7 +131,7 @@ def run_backend(backend, cfg, out_base):
 
     for delta_iter, lambda_iter in product(cfg["deltas"], cfg["lambdas"]):
         out_iter = os.path.join(out_dir, f"{delta_iter}_{lambda_iter}_out")
-        if not os.path.exists(os.path.join(out_iter, 'z_matrix.csv')):
+        if not os.path.exists(os.path.join(out_iter, "z_matrix.csv")):
             logger.warning(f"Skipping CV for {delta_iter}_{lambda_iter}: no z_matrix.csv")
             continue
 
@@ -155,12 +142,20 @@ def run_backend(backend, cfg, out_base):
 
         logger.info(f"Running SLIDEcv for delta={delta_iter}, lambda={lambda_iter}")
         try:
-            cv = SLIDEcv(slider, nrep=cfg["cv_nrep"], k=cfg["cv_k"],
-                         eval_type=cfg["cv_eval_type"])
+            cv = SLIDEcv(
+                slider,
+                nrep=cfg["cv_nrep"],
+                k=cfg["cv_k"],
+                eval_type=cfg["cv_eval_type"],
+            )
             cv_results = cv.run(outpath=out_iter)
 
-            slide_mean = cv_results.loc[cv_results.method == 'SLIDE', 'metric_value'].mean()
-            null_mean = cv_results.loc[cv_results.method == 'SLIDE_y', 'metric_value'].mean()
+            slide_mean = cv_results.loc[
+                cv_results.method == "SLIDE", "metric_value"
+            ].mean()
+            null_mean = cv_results.loc[
+                cv_results.method == "SLIDE_y", "metric_value"
+            ].mean()
             logger.info(f"CV done: SLIDE={slide_mean:.3f}, null={null_mean:.3f}")
         except Exception as e:
             logger.error(f"CV failed for {delta_iter}_{lambda_iter}: {e}")
@@ -170,40 +165,46 @@ def run_backend(backend, cfg, out_base):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="SLIDE multi-param run")
+    parser = argparse.ArgumentParser(
+        description="Generic YAML-driven SLIDE runner",
+    )
     parser.add_argument(
-        "--config", metavar="YAML",
-        help="YAML config file (overrides all hardcoded defaults)",
+        "--config",
+        required=True,
+        metavar="YAML",
+        help="Path to YAML config file (see example_config.yaml)",
     )
     parser.add_argument(
         "--backend",
-        help="Run a single backend (default: run all from config)",
+        help="Run a single knockoff backend (default: run all from config)",
     )
     parser.add_argument(
         "--out-dir",
-        help="Top-level output directory (overrides config/default)",
+        help="Override output base directory from config",
     )
     args = parser.parse_args()
 
-    cfg = load_config(args.config) if args.config else default_config()
+    cfg = load_config(args.config)
 
     if args.out_dir:
-        cfg["out_base"] = args.out_dir
+        cfg["out_base"] = os.path.abspath(args.out_dir)
 
-    backends = [args.backend] if args.backend else cfg["backends"]
+    backends = [args.backend] if args.backend else cfg["knockoff_backends"]
 
-    # Validate backend names against config
-    valid = set(cfg["backends"])
+    valid = set(cfg["knockoff_backends"])
     for b in backends:
         if b not in valid:
             logger.warning(f"Backend '{b}' not in config backends {cfg['backends']}")
 
     os.makedirs(cfg["out_base"], exist_ok=True)
 
-    logger.info(f"Config: {'from ' + args.config if args.config else 'hardcoded defaults'}")
+    logger.info(f"Config:   {cfg['config_path']}")
+    logger.info(f"Data:     {cfg['x_path']}")
+    logger.info(f"          {cfg['y_path']}")
     logger.info(f"Backends: {backends}")
-    logger.info(f"Deltas: {cfg['deltas']}, Lambdas: {cfg['lambdas']}")
-    logger.info(f"Output: {cfg['out_base']}")
+    logger.info(f"Deltas:   {cfg['deltas']}")
+    logger.info(f"Lambdas:  {cfg['lambdas']}")
+    logger.info(f"Output:   {cfg['out_base']}")
 
     for backend in backends:
         try:

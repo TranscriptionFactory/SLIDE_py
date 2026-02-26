@@ -37,7 +37,7 @@ class Plotter:
         n_lfs = len(lfs)
         max_genes = max(len(df) for df in lfs.values())
         
-        fig_width = min(20, max(10, n_lfs * 2.5)) + 2  # extra space for title
+        fig_width = min(20, max(20, n_lfs * 2.5)) + 2  # extra space for title
         fig_height = min(30, max(6, max_genes * 0.6))  # scaled height for readability
 
         fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=300)

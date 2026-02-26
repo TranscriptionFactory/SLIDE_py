@@ -1,12 +1,21 @@
 #!/bin/bash
 #SBATCH --job-name=ssc_multi_param
-#SBATCH --time=12:00:00
-#SBATCH --mem=32G
-#SBATCH --cpus-per-task=4
+#SBATCH --time=2-12:00:00
+#SBATCH --mem=100G
+#SBATCH --cpus-per-task=20
 #SBATCH --cluster=htc
 #SBATCH --output=/ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/ssc_multi_param/ssc_run_%j.log
+#
+# Usage:
+#   sbatch submit_ssc.sh              # build env, clean up after
+#   sbatch submit_ssc.sh --keep-env   # build env, keep it for reuse
 
 set -euo pipefail
+
+KEEP_ENV=false
+if [[ "${1:-}" == "--keep-env" ]]; then
+    KEEP_ENV=true
+fi
 
 PROJECT_DIR="/ix/djishnu/Aaron/1_general_use/SLIDE_py"
 RUN_DIR="${PROJECT_DIR}/runs/ssc_multi_param"
@@ -17,15 +26,23 @@ BUILD_COPY="${RUN_DIR}/conda_envs/build_${JOB_TAG}"
 MAMBA=~/.local/bin/mamba
 
 # ---------------------------------------------------------------------------
-# Cleanup: always remove the build env, even on failure
+# Cleanup: remove build artifacts; remove env only if --keep-env not set
 # ---------------------------------------------------------------------------
 cleanup() {
     echo ""
-    echo "=== Cleaning up conda environment ==="
     conda deactivate 2>/dev/null || true
-    "${MAMBA}" env remove --prefix "${TEST_ENV}" -y 2>/dev/null || true
-    rm -rf "${TEST_ENV}" "${PKG_CACHE}" "${BUILD_COPY}" 2>/dev/null || true
-    echo "=== Cleanup complete ==="
+    # Always clean up build copy and pkg cache
+    rm -rf "${PKG_CACHE}" "${BUILD_COPY}" 2>/dev/null || true
+
+    if [[ "$KEEP_ENV" == true ]]; then
+        echo "=== --keep-env: preserving conda env at ${TEST_ENV} ==="
+        echo "  Reuse with:  sbatch submit_ssc_array.sh ${TEST_ENV}"
+    else
+        echo "=== Cleaning up conda environment ==="
+        "${MAMBA}" env remove --prefix "${TEST_ENV}" -y 2>/dev/null || true
+        rm -rf "${TEST_ENV}" 2>/dev/null || true
+        echo "=== Cleanup complete ==="
+    fi
 }
 trap cleanup EXIT
 
