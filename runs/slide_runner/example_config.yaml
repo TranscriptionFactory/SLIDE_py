@@ -20,6 +20,12 @@ data:
   y_factor: false                  # true if Y is categorical
 
 slide:
+  # Each backend becomes a separate SLURM array task.
+  #   python       = Python LOVE + Python knockoffs
+  #   r_knockoffs  = Python LOVE + R knockoffs
+  #   r            = R LOVE      + R knockoffs
+  backends: [r_knockoffs, r, python]
+
   deltas: [0.01, 0.1]
   lambdas: [0.1, 1.0]
   niter: 500
@@ -31,12 +37,6 @@ slide:
   n_workers: 4
   spec: 0.1
   fstat: glmnet_lambdasmax
-
-  # LOVE decomposition backend (runs inside every job)
-  love_backend: python             # python | r
-
-  # Knockoff backends — each one becomes a separate SLURM array task
-  knockoff_backends: [r_knockoffs, r, python]
   knockoff_method: asdp            # asdp | sdp | equi
   knockoff_shrink: false
   knockoff_offset: 0

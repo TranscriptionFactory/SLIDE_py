@@ -103,7 +103,7 @@ if [[ -z "${SLURM_ARRAY_TASK_ID:-}" ]]; then
 
     PROJECT_DIR="$(_resolve_project_dir)"
 
-    N_BACKENDS=$(yaml_query "len(cfg['slide']['knockoff_backends'])")
+    N_BACKENDS=$(yaml_query "len(cfg['slide']['backends'])")
     JOB_NAME=$(yaml_query   "cfg.get('slurm',{}).get('job_name','slide_run')")
     SLURM_TIME=$(yaml_query "cfg.get('slurm',{}).get('time','2-12:00:00')")
     SLURM_MEM=$(yaml_query  "cfg.get('slurm',{}).get('mem','50G')")
@@ -166,8 +166,8 @@ export PYTHONUNBUFFERED=1
 eval "$(conda shell.bash hook)"
 
 PROJECT_DIR="$(_resolve_project_dir)"
-BACKEND=$(yaml_query "cfg['slide']['knockoff_backends'][${SLURM_ARRAY_TASK_ID}]")
-N_BACKENDS=$(yaml_query "len(cfg['slide']['knockoff_backends'])")
+BACKEND=$(yaml_query "cfg['slide']['backends'][${SLURM_ARRAY_TASK_ID}]")
+N_BACKENDS=$(yaml_query "len(cfg['slide']['backends'])")
 OUT_BASE_RAW=$(yaml_query "cfg.get('output',{}).get('base_dir','./output')")
 OUT_BASE="$(resolve_path "$OUT_BASE_RAW")"
 PY_VERSION=$(yaml_query "cfg.get('env',{}).get('python_version','3.11')")

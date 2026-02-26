@@ -26,6 +26,25 @@ from loveslide import OptimizeSLIDE, SLIDEcv
 
 REQUIRED_DATA_KEYS = ["x_path", "y_path"]
 
+# Backend name → (love_backend, knockoff_backend) mapping.
+# "python"       = Python LOVE  + Python knockoffs
+# "r_knockoffs"  = Python LOVE  + R knockoffs
+# "r"            = R LOVE       + R knockoffs
+BACKEND_MAP = {
+    "python":       ("python", "python"),
+    "r_knockoffs":  ("python", "r"),
+    "r":            ("r",      "r"),
+}
+
+
+def resolve_backend(name):
+    """Return (love_backend, knockoff_backend) for a backend name."""
+    if name not in BACKEND_MAP:
+        raise ValueError(
+            f"Unknown backend '{name}'. Valid backends: {list(BACKEND_MAP)}"
+        )
+    return BACKEND_MAP[name]
+
 
 def load_config(config_path):
     """Load and validate a YAML config, resolving relative paths."""
@@ -45,8 +64,11 @@ def load_config(config_path):
         if key not in data:
             raise ValueError(f"Missing required config key: data.{key}")
 
-    if not slide.get("knockoff_backends"):
-        raise ValueError("Missing required config key: slide.knockoff_backends")
+    if not slide.get("backends"):
+        raise ValueError("Missing required config key: slide.backends")
+
+    for b in slide["backends"]:
+        resolve_backend(b)  # validates names early
 
     def _resolve(p):
         """Resolve a path: absolute stays absolute, relative is from config dir."""
@@ -59,7 +81,7 @@ def load_config(config_path):
         "y_path": _resolve(data["y_path"]),
         "y_factor": data.get("y_factor", False),
         # slide
-        "knockoff_backends": slide["knockoff_backends"],
+        "backends": slide["backends"],
         "deltas": slide.get("deltas", [0.1]),
         "lambdas": slide.get("lambdas", [1.0]),
         "niter": slide.get("niter", 500),
@@ -70,7 +92,6 @@ def load_config(config_path):
         "do_interacts": slide.get("do_interacts", True),
         "n_workers": slide.get("n_workers", 4),
         "spec": slide.get("spec", 0.1),
-        "love_backend": slide.get("love_backend", "python"),
         "knockoff_method": slide.get("knockoff_method", "asdp"),
         "knockoff_shrink": slide.get("knockoff_shrink", False),
         "knockoff_offset": slide.get("knockoff_offset", 0),
@@ -89,6 +110,7 @@ def load_config(config_path):
 
 def run_backend(backend, cfg, out_base):
     """Run SLIDE pipeline + optional CV for a single backend."""
+    love_be, knockoff_be = resolve_backend(backend)
     out_dir = os.path.join(out_base, backend)
     os.makedirs(out_dir, exist_ok=True)
 
@@ -105,8 +127,8 @@ def run_backend(backend, cfg, out_base):
         "do_interacts": cfg["do_interacts"],
         "n_workers": cfg["n_workers"],
         "spec": cfg["spec"],
-        "love_backend": cfg["love_backend"],
-        "knockoff_backend": backend,
+        "love_backend": love_be,
+        "knockoff_backend": knockoff_be,
         "knockoff_method": cfg["knockoff_method"],
         "knockoff_shrink": cfg["knockoff_shrink"],
         "knockoff_offset": cfg["knockoff_offset"],
@@ -115,7 +137,7 @@ def run_backend(backend, cfg, out_base):
         "lambda": cfg["lambdas"],
     }
 
-    logger.info(f"=== Starting {backend} backend ===")
+    logger.info(f"=== Starting {backend} backend (love={love_be}, knockoffs={knockoff_be}) ===")
     logger.info(f"  deltas={cfg['deltas']}, lambdas={cfg['lambdas']}")
     logger.info(f"  output: {out_dir}")
 
@@ -189,9 +211,9 @@ def main():
     if args.out_dir:
         cfg["out_base"] = os.path.abspath(args.out_dir)
 
-    backends = [args.backend] if args.backend else cfg["knockoff_backends"]
+    backends = [args.backend] if args.backend else cfg["backends"]
 
-    valid = set(cfg["knockoff_backends"])
+    valid = set(cfg["backends"])
     for b in backends:
         if b not in valid:
             logger.warning(f"Backend '{b}' not in config backends {cfg['backends']}")

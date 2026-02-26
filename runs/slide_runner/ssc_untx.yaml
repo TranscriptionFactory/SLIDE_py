@@ -10,6 +10,7 @@ data:
   y_factor: false
 
 slide:
+  backends: [r_knockoffs, r, python]
   deltas: [0.01, 0.1]
   lambdas: [0.1, 1.0]
   niter: 500
@@ -21,8 +22,6 @@ slide:
   n_workers: 4
   spec: 0.1
   fstat: glmnet_lambdasmax
-  love_backend: python
-  knockoff_backends: [r_knockoffs, r, python]
   knockoff_method: asdp
   knockoff_shrink: false
   knockoff_offset: 0
