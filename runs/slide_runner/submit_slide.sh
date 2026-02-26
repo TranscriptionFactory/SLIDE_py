@@ -134,10 +134,37 @@ if [[ -z "${SLURM_ARRAY_TASK_ID:-}" ]]; then
     )
 
     if [[ -n "$ENV_ARG" ]]; then
-        sbatch "${SBATCH_ARGS[@]}" "${BASH_SOURCE[0]}" "$CONFIG" "$ENV_ARG"
+        SLIDE_JOB=$(sbatch --parsable "${SBATCH_ARGS[@]}" "${BASH_SOURCE[0]}" "$CONFIG" "$ENV_ARG")
     else
-        sbatch "${SBATCH_ARGS[@]}" "${BASH_SOURCE[0]}" "$CONFIG"
+        SLIDE_JOB=$(sbatch --parsable "${SBATCH_ARGS[@]}" "${BASH_SOURCE[0]}" "$CONFIG")
     fi
+
+    # Extract numeric job ID (sbatch --parsable may return "JOBID;CLUSTER")
+    SLIDE_JOB_ID="${SLIDE_JOB%%;*}"
+    echo "  Submitted array job: ${SLIDE_JOB_ID}"
+
+    # ── Submit comparison job (runs after all array tasks finish) ─────────
+    COMPARE_SCRIPT="${SCRIPT_DIR}/compare_outputs.py"
+    if [[ -f "$COMPARE_SCRIPT" ]]; then
+        COMPARE_JOB=$(sbatch --parsable \
+            --job-name="${JOB_NAME}_compare" \
+            --dependency="afterok:${SLIDE_JOB_ID}" \
+            --time="00:30:00" \
+            --mem="8G" \
+            --cpus-per-task=1 \
+            --cluster="${SLURM_CLUSTER}" \
+            --output="${LOG_DIR}/${JOB_NAME}_compare_%j.log" \
+            --wrap="module load python/ondemand-jupyter-python3.11 && \
+                    python '${COMPARE_SCRIPT}' \
+                    --config '${CONFIG}' \
+                    --job-id '${SLIDE_JOB_ID}' \
+                    --output '${LOG_DIR}/comparison_report_${SLIDE_JOB_ID}.txt'"
+        )
+        COMPARE_JOB_ID="${COMPARE_JOB%%;*}"
+        echo "  Submitted comparison job: ${COMPARE_JOB_ID} (afterok:${SLIDE_JOB_ID})"
+        echo "  Report will be at: ${LOG_DIR}/comparison_report_${SLIDE_JOB_ID}.txt"
+    fi
+
     exit 0
 fi
 
