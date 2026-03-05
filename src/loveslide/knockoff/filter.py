@@ -430,32 +430,23 @@ def _prepare_knockoff_cache(
     if diag_s.ndim == 2:
         diag_s = np.diag(diag_s)
 
-    # Check for degenerate SDP solution and fall back to equicorrelated
-    max_s = np.max(diag_s) if len(diag_s) > 0 else 0
-    if np.all(diag_s == 0) or max_s < 1e-6:
-        if method in ['sdp', 'asdp']:
-            warnings.warn(
-                f"SDP solver returned degenerate solution (max diag_s={max_s:.2e}). "
-                f"Falling back to equicorrelated method for robustness."
-            )
-            diag_s = create_solve_equi(Sigma)
-            method = 'equi'
-            max_s = np.max(diag_s) if len(diag_s) > 0 else 0
-
-            if np.all(diag_s == 0) or max_s < 1e-6:
-                warnings.warn(
-                    "Both SDP and equicorrelated methods failed. "
-                    "Knockoffs will have no power."
-                )
-                return {
-                    'mu': mu,
-                    'Sigma': Sigma,
-                    'diag_s': diag_s,
-                    'SigmaInv_s': None,
-                    'L': None,
-                    'method': method,
-                    'degenerate': True
-                }
+    # Match R's create.gaussian: if all(diag_s == 0), warn and mark degenerate.
+    # R does NOT fall back to equicorrelated — it returns X as knockoffs,
+    # giving W ~0 and no variables selected (zero power).
+    if np.all(diag_s == 0):
+        warnings.warn(
+            "The conditional knockoff covariance matrix is not positive definite. "
+            "Knockoffs will have no power."
+        )
+        return {
+            'mu': mu,
+            'Sigma': Sigma,
+            'diag_s': diag_s,
+            'SigmaInv_s': None,
+            'L': None,
+            'method': method,
+            'degenerate': True
+        }
 
     # Compute knockoff distribution parameters
     diag_s_matrix = np.diag(diag_s)

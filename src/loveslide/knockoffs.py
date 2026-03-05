@@ -365,10 +365,15 @@ class Knockoffs():
             else:
                 diag_s = create_solve_sdp(Sigma)
         except ImportError as e:
-            # Fall back to equi if cvxpy not available for SDP/ASDP
-            logger.warning(f"SDP/ASDP method failed ({e}), falling back to equi method")
+            # Fall back to equi only if solver package not installed
+            logger.warning(f"SDP/ASDP solver not available ({e}), falling back to equi method")
             method = 'equi'
             diag_s = create_solve_equi(Sigma)
+
+        # Match R: if SDP returns all zeros, return empty (no power)
+        if np.all(diag_s == 0):
+            logger.warning("SDP solver returned all-zero solution. Knockoffs will have no power.")
+            return np.array([], dtype=int)
 
         logger.info(f"Running {niter} knockoff iterations with {n_jobs} parallel jobs")
 

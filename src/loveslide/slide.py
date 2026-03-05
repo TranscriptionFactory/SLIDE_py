@@ -296,6 +296,17 @@ class OptimizeSLIDE(SLIDE):
             outpath=outpath,
             backend=love_backend,
         )
+
+        # Match R: if LOVE returned None (e.g. Dantzig LP failure), skip this delta
+        if love_result is None:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"LOVE returned None for delta={delta} — Dantzig LP solver failed. "
+                "Skipping this parameter combination (matches R behavior)."
+            )
+            self.love_result = None
+            return
+
         self.love_result = love_result
         self.x_std = x_std  # Save for Z matrix calculation
 
@@ -734,6 +745,13 @@ class OptimizeSLIDE(SLIDE):
                         outpath=out_iter,
                         love_backend=self.input_params.get("love_backend", "python"),
                     )
+
+                    # Handle LOVE returning None (Dantzig LP failure, matches R)
+                    if self.love_result is None:
+                        if verbose:
+                            print(f"LOVE returned None for delta={delta_iter}, "
+                                  f"lambda={lambda_iter} — skipping.")
+                        continue
 
                     if verbose:
                         print(

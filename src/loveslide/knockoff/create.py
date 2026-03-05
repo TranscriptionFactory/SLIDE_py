@@ -321,34 +321,15 @@ def create_gaussian(
     if diag_s.ndim == 2:
         diag_s = np.diag(diag_s)
 
-    # If diag_s is zero or near-zero, fall back to equicorrelated method (like R)
-    # FIX: Check for near-zero values (not just exactly zero) to catch degenerate SDP solutions
-    max_s = np.max(diag_s) if len(diag_s) > 0 else 0
-    if np.all(diag_s == 0) or max_s < 1e-6:
-        # SDP failed - fall back to equicorrelated method (R's knockoff.filter behavior)
-        if method in ['sdp', 'asdp']:
-            warnings.warn(
-                f"SDP solver returned degenerate solution (max diag_s={max_s:.2e}). "
-                f"Falling back to equicorrelated method for robustness. "
-                f"This typically occurs when n <= p. Knockoffs may have reduced power."
-            )
-            diag_s = create_solve_equi(Sigma)
-            max_s = np.max(diag_s) if len(diag_s) > 0 else 0
-
-            # If equi also fails, return trivial knockoffs
-            if np.all(diag_s == 0) or max_s < 1e-6:
-                warnings.warn(
-                    "Both SDP and equicorrelated methods failed. "
-                    "The covariance matrix is not positive-definite. "
-                    "Knockoffs will have no power."
-                )
-                return X.copy()
-        else:
-            warnings.warn(
-                "The conditional knockoff covariance matrix is not positive definite. "
-                "Knockoffs will have no power."
-            )
-            return X.copy()
+    # Match R's create.gaussian: if all(diag_s == 0), warn and return X.
+    # R does NOT fall back to equicorrelated — it returns the original matrix,
+    # which gives W statistics ~0 and no variables selected (zero power).
+    if np.all(diag_s == 0):
+        warnings.warn(
+            "The conditional knockoff covariance matrix is not positive definite. "
+            "Knockoffs will have no power."
+        )
+        return X.copy()
 
     # Compute knockoff distribution parameters
     # SigmaInv_s = Sigma^{-1} @ diag(s)

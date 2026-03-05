@@ -174,13 +174,25 @@ fi
 
 # ── Read config values ────────────────────────────────────────────────────────
 # We need modules loaded before yaml_query works inside SLURM, so we parse
-# the modules list with a minimal python snippet that doesn't need pyyaml.
+# the modules list with a minimal regex-based approach that doesn't need pyyaml.
 _parse_modules() {
+    # Extract modules from YAML without pyyaml — handles "- module_name" lines
+    # under the env.modules key. Falls back silently if parsing fails.
     python3 -c "
-import yaml
-cfg = yaml.safe_load(open('${CONFIG}'))
-for m in cfg.get('env',{}).get('modules',[]):
-    print(m)
+import re, sys
+text = open('${CONFIG}').read()
+# Find the modules: block under env:
+m = re.search(r'(?:^|\n)env:\s*\n((?:[ \t]+.*\n)*)', text)
+if not m:
+    sys.exit(0)
+env_block = m.group(1)
+m2 = re.search(r'modules:\s*\n((?:[ \t]+- .*\n)*)', env_block)
+if not m2:
+    sys.exit(0)
+for line in m2.group(1).strip().split('\n'):
+    mod = re.sub(r'^\s*-\s*', '', line).strip()
+    if mod:
+        print(mod)
 " 2>/dev/null || true
 }
 
@@ -190,7 +202,29 @@ while IFS= read -r mod; do
 done < <(_parse_modules)
 
 export PYTHONUNBUFFERED=1
-eval "$(conda shell.bash hook)"
+
+# Activate conda — try multiple paths since module loading may provide it
+if ! command -v conda &>/dev/null; then
+    # Try common conda locations
+    for _conda_path in \
+        "${HOME}/miniconda3/etc/profile.d/conda.sh" \
+        "${HOME}/anaconda3/etc/profile.d/conda.sh" \
+        "${HOME}/.conda/etc/profile.d/conda.sh" \
+        "/opt/conda/etc/profile.d/conda.sh"; do
+        if [[ -f "$_conda_path" ]]; then
+            source "$_conda_path"
+            break
+        fi
+    done
+fi
+if command -v conda &>/dev/null; then
+    eval "$(conda shell.bash hook)"
+else
+    echo "ERROR: conda not found after loading modules. Check env.modules in config." >&2
+    echo "  Tried loading modules from: ${CONFIG}" >&2
+    echo "  Ensure a module provides conda (e.g., python/ondemand-jupyter-python3.11)" >&2
+    exit 1
+fi
 
 PROJECT_DIR="$(_resolve_project_dir)"
 BACKEND=$(yaml_query "cfg['slide']['backends'][${SLURM_ARRAY_TASK_ID}]")

@@ -326,6 +326,11 @@ def LOVE(X: np.ndarray, lbd: float = 0.5, mu: float = 0.5,
             AJ = EstAJDant(C_hat, EstY(Sigma, A_hat, I_hat),
                            lbd * optDelta * sigma_bar_sup,
                            sigma_bar_sup + se_est[J_list])
+            # Match R: if Dantzig LP failed for any row, return None
+            if AJ is None:
+                if verbose:
+                    print("Dantzig LP solver failed — returning None (matches R behavior)")
+                return None
             Omega = None
         else:
             if diagonal:

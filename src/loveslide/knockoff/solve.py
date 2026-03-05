@@ -175,16 +175,14 @@ def create_solve_equi(Sigma: np.ndarray, **kwargs) -> np.ndarray:
     s = np.ones(p) * min(2 * lambda_min, 1)
 
     # Compensate for numerical errors (feasibility)
-    # FIX: Cap feasibility shrinkage at 1% instead of 10% to preserve knockoff power
+    # Match R's feasibility shrinkage: allow up to 10% (s_eps <= 0.1)
     s_eps = 1e-8
-    while s_eps <= 0.01:  # Was 0.1, now capped at 1%
-        test_matrix = 2 * G - np.diag(s * (1 - s_eps))
-        if is_posdef(test_matrix):
+    psd = False
+    while s_eps <= 0.1:
+        if is_posdef(2 * G - np.diag(s * (1 - s_eps))):
+            psd = True
             break
         s_eps *= 10
-
-    if s_eps > 0.01:
-        s_eps = 0.01  # Cap at 1%
 
     s = s * (1 - s_eps)
 
@@ -347,20 +345,14 @@ def create_solve_sdp(
     if verbose:
         print("Verifying that the solution is correct ... ", end="", flush=True)
 
-    # FIX: Cap feasibility shrinkage at 1% instead of 10% to preserve knockoff power
+    # Match R's feasibility shrinkage: allow up to 10% (s_eps <= 0.1)
     s_eps = 1e-8
-    while s_eps <= 0.01:  # Was 0.1, now capped at 1%
-        test_matrix = 2 * G - np.diag(s_val * (1 - s_eps))
-        if is_posdef(test_matrix, tol=1e-9):
-            break
-        s_eps *= 10
-
-    if s_eps > 0.01:
-        warnings.warn(
-            f"Feasibility shrinkage of {s_eps*100:.1f}% exceeded 1% cap. "
-            "Knockoffs may have reduced power."
-        )
-        s_eps = 0.01
+    psd = False
+    while (not psd) and (s_eps <= 0.1):
+        if is_posdef(2 * G - np.diag(s_val * (1 - s_eps)), tol=1e-9):
+            psd = True
+        else:
+            s_eps *= 10
 
     s_val = s_val * (1 - s_eps)
     s_val = np.clip(s_val, 0, 1)

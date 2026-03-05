@@ -90,14 +90,13 @@ def _precompute_knockoff_params(
     else:  # asdp
         diag_s = create_solve_asdp(Sigma)
 
-    # Handle SDP failure with equicorrelated fallback
-    max_s = np.max(diag_s) if len(diag_s) > 0 else 0
-    if max_s < 1e-6:
+    # Match R: if SDP returns all zeros, warn but do not fall back.
+    # R returns X as knockoffs, giving zero power (no variables selected).
+    if np.all(diag_s == 0):
         warnings.warn(
-            f"SDP returned degenerate solution (max diag_s={max_s:.2e}). "
-            f"Falling back to equicorrelated method."
+            "SDP solver returned all-zero solution. "
+            "Knockoffs will have no power."
         )
-        diag_s = create_solve_equi(Sigma)
 
     return mu, Sigma, diag_s
 

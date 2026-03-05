@@ -153,7 +153,7 @@ def LP(y: np.ndarray, lbd: float) -> np.ndarray:
 
 
 def EstAJDant(C_hat: np.ndarray, Y: np.ndarray, lbd: float,
-              se_est_J: np.ndarray) -> np.ndarray:
+              se_est_J: np.ndarray) -> Optional[np.ndarray]:
     """
     Estimate non-pure rows via the Dantzig approach.
 
@@ -170,15 +170,19 @@ def EstAJDant(C_hat: np.ndarray, Y: np.ndarray, lbd: float,
 
     Returns
     -------
-    np.ndarray
-        A |J| by K matrix.
+    np.ndarray or None
+        A |J| by K matrix, or None if any Dantzig LP fails.
+        Matches R's estAJDant which returns NULL on failure.
     """
     n_J = Y.shape[1]
     K = Y.shape[0]
     AJ = np.zeros((n_J, K))
 
     for i in range(n_J):
-        AJ[i, :] = Dantzig(C_hat, Y[:, i], lbd * se_est_J[i])
+        dantzig_sol = Dantzig(C_hat, Y[:, i], lbd * se_est_J[i])
+        if dantzig_sol is None:
+            return None
+        AJ[i, :] = dantzig_sol
         # Normalize if L1 norm > 1
         if np.sum(np.abs(AJ[i, :])) > 1:
             AJ[i, :] = AJ[i, :] / np.sum(np.abs(AJ[i, :]))
@@ -186,7 +190,7 @@ def EstAJDant(C_hat: np.ndarray, Y: np.ndarray, lbd: float,
     return AJ
 
 
-def Dantzig(C_hat: np.ndarray, y: np.ndarray, lbd: float) -> np.ndarray:
+def Dantzig(C_hat: np.ndarray, y: np.ndarray, lbd: float) -> Optional[np.ndarray]:
     """
     The Dantzig approach for solving one non-pure row.
 
@@ -207,8 +211,9 @@ def Dantzig(C_hat: np.ndarray, y: np.ndarray, lbd: float) -> np.ndarray:
 
     Returns
     -------
-    np.ndarray
-        A vector of length K.
+    np.ndarray or None
+        A vector of length K, or None if the LP solver fails.
+        Matches R's dantzig() which returns NULL on failure.
     """
     K = len(y)
 
@@ -219,9 +224,9 @@ def Dantzig(C_hat: np.ndarray, y: np.ndarray, lbd: float) -> np.ndarray:
     # Objective: minimize sum of all variables
     c = np.ones(2 * K)
 
-    # Build constraint matrix matching R:
-    # new_C_hat[k, :] = [C_hat[k, :], -C_hat[k, :]]
-    # So new_C_hat @ x = C_hat @ beta_pos - C_hat @ beta_neg = C_hat @ beta
+    # Build constraint matrix matching R's linprog::solveLP formulation:
+    # R includes explicit non-negativity rows: A_mat = [new_C_hat; -new_C_hat; -I(2K)]
+    # Python uses bounds instead, which is mathematically equivalent.
     new_C_hat = np.zeros((K, 2 * K))
     for k in range(K):
         new_C_hat[k, :K] = C_hat[k, :]      # beta_pos coefficients
@@ -242,5 +247,5 @@ def Dantzig(C_hat: np.ndarray, y: np.ndarray, lbd: float) -> np.ndarray:
         beta = solution[:K] - solution[K:]
         return beta
     else:
-        # Return zeros as fallback
-        return np.zeros(K)
+        # Match R: return None on LP failure (R's dantzig returns NULL)
+        return None
