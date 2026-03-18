@@ -39,7 +39,9 @@ if [[ ! -f "$CONFIG" ]]; then
 fi
 
 # ── Locate script directory ───────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Inside SLURM, BASH_SOURCE[0] points to the spool copy — use the pre-resolved
+# SUBMIT_SCRIPT_DIR if available (set during self-submit on the login node).
+SCRIPT_DIR="${SUBMIT_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
 # PROJECT_DIR is resolved later from YAML (env.project_dir), with git fallback.
 
@@ -133,10 +135,14 @@ if [[ -z "${SLURM_ARRAY_TASK_ID:-}" ]]; then
         --output="${LOG_DIR}/${JOB_NAME}_%A_%a.log"
     )
 
+    # Pass the real SCRIPT_DIR to SLURM tasks — BASH_SOURCE[0] inside SLURM
+    # points to the spool copy, so SCRIPT_DIR would resolve to /var/spool/...
+    export SUBMIT_SCRIPT_DIR="$SCRIPT_DIR"
+
     if [[ -n "$ENV_ARG" ]]; then
-        SLIDE_JOB=$(sbatch --parsable "${SBATCH_ARGS[@]}" "${BASH_SOURCE[0]}" "$CONFIG" "$ENV_ARG")
+        SLIDE_JOB=$(sbatch --parsable --export=ALL "${SBATCH_ARGS[@]}" "${BASH_SOURCE[0]}" "$CONFIG" "$ENV_ARG")
     else
-        SLIDE_JOB=$(sbatch --parsable "${SBATCH_ARGS[@]}" "${BASH_SOURCE[0]}" "$CONFIG")
+        SLIDE_JOB=$(sbatch --parsable --export=ALL "${SBATCH_ARGS[@]}" "${BASH_SOURCE[0]}" "$CONFIG")
     fi
 
     # Extract numeric job ID (sbatch --parsable may return "JOBID;CLUSTER")
