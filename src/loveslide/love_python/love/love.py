@@ -295,10 +295,9 @@ def LOVE(X: np.ndarray, lbd: float = 0.5, mu: float = 0.5,
 
         Gamma_hat = BI_C_res['Gamma'] * D_Sigma
 
-    # Ensure non-negative Gamma - match R behavior: set negative values to 1e2
-    # R code: Gamma_hat[Gamma_hat < 0] <- 1e2 (for non-pure variables)
-    # This provides numerical stability for downstream computations
-    Gamma_hat[Gamma_hat < 0] = 1e2
+    # Match R's two-stage gamma cleanup (getLatentFactors.R:133):
+    # Stage 1: pure-variable negative gamma → 1e-2 (before non-pure estimation)
+    Gamma_hat[Gamma_hat < 0] = 1e-2
 
     if verbose:
         print("Finish estimating the pure loadings...")
@@ -373,6 +372,15 @@ def LOVE(X: np.ndarray, lbd: float = 0.5, mu: float = 0.5,
         J_list = [i for i in range(p) if i not in I_hat_list]
         A_hat[J_list, :] = AJ
         group = recoverGroup(A_hat)
+
+        # Stage 2: re-estimate Gamma for non-pure variables, then clamp
+        # negatives to 1e2 (matches R getLatentFactors.R:178-179)
+        if J_list:
+            A_J = A_hat[J_list, :]
+            diag_sigma_J = np.diag(Sigma[np.ix_(J_list, J_list)])
+            diag_ACA_J = np.diag(A_J @ C_hat @ A_J.T)
+            Gamma_hat[J_list] = diag_sigma_J - diag_ACA_J
+            Gamma_hat[Gamma_hat < 0] = 1e2
 
     return {
         'K': A_hat.shape[1],
