@@ -35,14 +35,6 @@ cv:
 output:
   base_dir: ./ssc_output
 
-env:
-  project_dir: /ix/djishnu/Aaron/1_general_use/SLIDE_py
-  modules:
-    - python/ondemand-jupyter-python3.11
-    - r/4.4.0
-  python_version: "3.11"
-  pip_extras: "dev,r,viz"
-
 slurm:
   job_name: ssc_slide
   time: "2-12:00:00"

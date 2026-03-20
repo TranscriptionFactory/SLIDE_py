@@ -14,6 +14,7 @@ archive/
 **/**output*/**
 .conda*/
 conda_envs/
+.pixi/
 # Test conda environment
 tests/test_env/
 

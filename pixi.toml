@@ -1,0 +1,68 @@
+[workspace]
+name = "loveslide"
+version = "1.0.0"
+description = "Python implementation of SLIDE (LOVE + Knockoffs)"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+# ─── Default feature: core scientific deps ────────────────────────────────────
+[dependencies]
+python = "3.11.*"
+numpy = ">=1.20"
+scipy = ">=1.7"
+scikit-learn = ">=1.0"
+pandas = ">=2.0"
+joblib = ">=0.14.1"
+statsmodels = ">=0.14"
+cvxpy = ">=1.3"
+tqdm = ">=4.60"
+networkx = ">=3.0"
+matplotlib = ">=3.7"
+seaborn = ">=0.12"
+pyyaml = ">=6.0"
+
+[pypi-dependencies]
+loveslide = { path = ".", editable = true }
+pqdm = "*"
+easydict = "*"
+
+# ─── Feature: R integration ──────────────────────────────────────────────────
+[feature.r.dependencies]
+r-base = ">=4.4"
+rpy2 = ">=3.5"
+r-knockoff = "*"
+r-linprog = "*"
+r-lpsolve = "*"
+r-mass = "*"
+r-glmnet = "*"
+
+# ─── Feature: dev tools ──────────────────────────────────────────────────────
+[feature.dev.dependencies]
+pytest = ">=7.0"
+ruff = ">=0.1"
+
+[feature.dev.pypi-dependencies]
+black = ">=23.0"
+
+# ─── Feature: viz extras ─────────────────────────────────────────────────────
+[feature.viz.pypi-dependencies]
+adjusttext = ">=1.0"
+altair = ">=5.0"
+wordcloud = "*"
+
+# ─── Environments ────────────────────────────────────────────────────────────
+[environments]
+default = { features = [], solve-group = "default" }
+dev = { features = ["r", "dev", "viz"], solve-group = "default" }
+
+# ─── Activation ──────────────────────────────────────────────────────────────
+# Prevent stale user-site packages from shadowing pixi's environment
+[activation]
+env = { PYTHONNOUSERSITE = "1" }
+
+# ─── Tasks ───────────────────────────────────────────────────────────────────
+[tasks]
+test = "pytest tests/ -v"
+lint = "ruff check src/"
+fmt = "ruff format src/"
+check = "python -c \"import loveslide; print('loveslide', loveslide.__version__ if hasattr(loveslide, '__version__') else 'OK')\""
