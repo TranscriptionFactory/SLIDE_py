@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-03-22T11:52:10.819Z",
+  "projectRoot": "/ix/djishnu/Aaron/1_general_use/SLIDE_py",
+  "structure": {
+    "hasPackageJson": false,
+    "hasTsConfig": false,
+    "hasClaudeConfig": true,
+    "hasClaudeFlow": true
+  },
+  "scannedAt": 1774180330819
+}

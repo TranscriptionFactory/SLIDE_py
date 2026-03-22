@@ -1,622 +1,0 @@
-=== Creating conda environment at /ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/ssc_multi_param/conda_envs/env_7948539 ===
-warning  libmamba 'repo.anaconda.com', a commercial channel hosted by Anaconda.com, is used.
-    
-warning  libmamba Please make sure you understand Anaconda Terms of Services.
-    
-warning  libmamba See: https://legal.anaconda.com/policies/en/
-
-
-Transaction
-
-  Prefix: /ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/ssc_multi_param/conda_envs/env_7948539
-
-  Updating specs:
-
-   - python=3.11
-
-
-  Package              Version  Build                 Channel          Size
-─────────────────────────────────────────────────────────────────────────────
-  Install:
-─────────────────────────────────────────────────────────────────────────────
-
-  + _libgcc_mutex          0.1  conda_forge           conda-forge       3kB
-  + _openmp_mutex          4.5  2_gnu                 conda-forge      24kB
-  + bzip2                1.0.8  hda65f42_8            conda-forge     260kB
-  + ca-certificates   2026.1.4  hbd8a1cb_0            conda-forge     147kB
-  + icu                   78.2  h33c6efd_0            conda-forge      13MB
-  + ld_impl_linux-64    2.45.1  default_hbd61a6d_101  conda-forge     726kB
-  + libexpat             2.7.3  hecca717_0            conda-forge      77kB
-  + libffi               3.5.2  h3435931_0            conda-forge      59kB
-  + libgcc              15.2.0  he0feb66_17           conda-forge       1MB
-  + libgcc-ng           15.2.0  h69a702a_17           conda-forge      28kB
-  + libgomp             15.2.0  he0feb66_17           conda-forge     603kB
-  + liblzma              5.8.2  hb03c661_0            conda-forge     113kB
-  + libnsl               2.0.1  hb9d3cd8_1            conda-forge      34kB
-  + libsqlite           3.51.2  hf4e2dac_0            conda-forge     943kB
-  + libstdcxx           15.2.0  h934c35e_17           conda-forge       6MB
-  + libuuid             2.41.3  h5347b49_0            conda-forge      40kB
-  + libxcrypt           4.4.36  hd590300_1            conda-forge     100kB
-  + libzlib              1.3.1  hb9d3cd8_2            conda-forge      61kB
-  + ncurses                6.5  h2d0b736_3            conda-forge     892kB
-  + openssl              3.6.1  h35e630c_1            conda-forge       3MB
-  + packaging             26.0  pyhcf101f3_0          conda-forge      72kB
-  + pip                 26.0.1  pyh8b19718_0          conda-forge       1MB
-  + python             3.11.14  hd63d673_3_cpython    conda-forge      31MB
-  + readline               8.3  h853b02a_0            conda-forge     345kB
-  + setuptools          82.0.0  pyh332efcf_0          conda-forge     638kB
-  + tk                  8.6.13  noxft_h366c992_103    conda-forge       3MB
-  + tzdata               2025c  hc9c84f9_1            conda-forge     119kB
-  + wheel               0.46.3  pyhd8ed1ab_0          conda-forge      32kB
-  + zstd                 1.5.7  hb78ec9c_6            conda-forge     601kB
-
-  Summary:
-
-  Install: 29 packages
-
-  Total download: 64MB
-
-─────────────────────────────────────────────────────────────────────────────
-
-
-
-Transaction starting
-Linking tzdata-2025c-hc9c84f9_1
-Linking ca-certificates-2026.1.4-hbd8a1cb_0
-Linking libgomp-15.2.0-he0feb66_17
-Linking _libgcc_mutex-0.1-conda_forge
-Linking _openmp_mutex-4.5-2_gnu
-Linking libgcc-15.2.0-he0feb66_17
-Linking libstdcxx-15.2.0-h934c35e_17
-Linking libffi-3.5.2-h3435931_0
-Linking openssl-3.6.1-h35e630c_1
-Linking ncurses-6.5-h2d0b736_3
-Linking libzlib-1.3.1-hb9d3cd8_2
-Linking libgcc-ng-15.2.0-h69a702a_17
-Linking libnsl-2.0.1-hb9d3cd8_1
-Linking libexpat-2.7.3-hecca717_0
-Linking bzip2-1.0.8-hda65f42_8
-Linking libuuid-2.41.3-h5347b49_0
-Linking liblzma-5.8.2-hb03c661_0
-Linking icu-78.2-h33c6efd_0
-Linking readline-8.3-h853b02a_0
-Linking tk-8.6.13-noxft_h366c992_103
-Linking zstd-1.5.7-hb78ec9c_6
-Linking libxcrypt-4.4.36-hd590300_1
-Linking libsqlite-3.51.2-hf4e2dac_0
-Linking ld_impl_linux-64-2.45.1-default_hbd61a6d_101
-Linking python-3.11.14-hd63d673_3_cpython
-Linking packaging-26.0-pyhcf101f3_0
-Linking setuptools-82.0.0-pyh332efcf_0
-Linking wheel-0.46.3-pyhd8ed1ab_0
-Linking pip-26.0.1-pyh8b19718_0
-
-Transaction finished
-
-
-To activate this environment, use:
-
-    mamba activate /ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/ssc_multi_param/conda_envs/env_7948539
-
-Or to execute a single command in this environment, use:
-
-    mamba run -p /ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/ssc_multi_param/conda_envs/env_7948539 mycommand
-
-Python: Python 3.11.14
-Location: /ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/ssc_multi_param/conda_envs/env_7948539/bin/python
-=== Creating per-job build copy at /ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/ssc_multi_param/conda_envs/build_7948539 ===
-=== Installing loveslide from source ===
-Processing ./.
-  Installing build dependencies: started
-  Installing build dependencies: finished with status 'done'
-  Getting requirements to build wheel: started
-  Getting requirements to build wheel: finished with status 'done'
-  Preparing metadata (pyproject.toml): started
-  Preparing metadata (pyproject.toml): finished with status 'done'
-Collecting numpy>=1.20.0 (from loveslide==1.0.0)
-  Using cached numpy-2.4.2-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
-Collecting scipy>=1.7.0 (from loveslide==1.0.0)
-  Using cached scipy-1.17.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
-Collecting scikit-learn>=1.0.0 (from loveslide==1.0.0)
-  Using cached scikit_learn-1.8.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (11 kB)
-Collecting pandas>=2.0.0 (from loveslide==1.0.0)
-  Using cached pandas-3.0.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (79 kB)
-Collecting joblib>=0.14.1 (from loveslide==1.0.0)
-  Using cached joblib-1.5.3-py3-none-any.whl.metadata (5.5 kB)
-Collecting statsmodels>=0.14.0 (from loveslide==1.0.0)
-  Using cached statsmodels-0.14.6-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (9.5 kB)
-Collecting cvxpy>=1.3.0 (from loveslide==1.0.0)
-  Using cached cvxpy-1.8.1-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (9.6 kB)
-Collecting tqdm>=4.60.0 (from loveslide==1.0.0)
-  Using cached tqdm-4.67.3-py3-none-any.whl.metadata (57 kB)
-Collecting pqdm (from loveslide==1.0.0)
-  Using cached pqdm-0.2.0-py2.py3-none-any.whl.metadata (3.2 kB)
-Collecting networkx>=3.0.0 (from loveslide==1.0.0)
-  Using cached networkx-3.6.1-py3-none-any.whl.metadata (6.8 kB)
-Collecting matplotlib>=3.7.0 (from loveslide==1.0.0)
-  Using cached matplotlib-3.10.8-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (52 kB)
-Collecting seaborn>=0.12.0 (from loveslide==1.0.0)
-  Using cached seaborn-0.13.2-py3-none-any.whl.metadata (5.4 kB)
-Collecting easydict (from loveslide==1.0.0)
-  Using cached easydict-1.13-py3-none-any.whl.metadata (4.2 kB)
-Collecting adjustText>=1.0.0 (from loveslide==1.0.0)
-  Using cached adjustText-1.3.0-py3-none-any.whl.metadata (3.1 kB)
-Collecting altair>=5.0.0 (from loveslide==1.0.0)
-  Using cached altair-6.0.0-py3-none-any.whl.metadata (11 kB)
-Collecting wordcloud (from loveslide==1.0.0)
-  Using cached wordcloud-1.9.6-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (3.4 kB)
-Collecting pysankeybeta (from loveslide==1.0.0)
-  Using cached pysankeybeta-1.4.2-py3-none-any.whl.metadata (6.4 kB)
-Collecting rpy2>=3.5.0 (from loveslide==1.0.0)
-  Using cached rpy2-3.6.4-py3-none-any.whl.metadata (5.4 kB)
-Collecting pytest>=7.0.0 (from loveslide==1.0.0)
-  Using cached pytest-9.0.2-py3-none-any.whl.metadata (7.6 kB)
-Collecting black>=23.0.0 (from loveslide==1.0.0)
-  Using cached black-26.1.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (88 kB)
-Collecting ruff>=0.1.0 (from loveslide==1.0.0)
-  Using cached ruff-0.15.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (26 kB)
-Collecting jinja2 (from altair>=5.0.0->loveslide==1.0.0)
-  Using cached jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
-Collecting jsonschema>=3.0 (from altair>=5.0.0->loveslide==1.0.0)
-  Using cached jsonschema-4.26.0-py3-none-any.whl.metadata (7.6 kB)
-Collecting narwhals>=1.27.1 (from altair>=5.0.0->loveslide==1.0.0)
-  Using cached narwhals-2.16.0-py3-none-any.whl.metadata (14 kB)
-Requirement already satisfied: packaging in /ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/ssc_multi_param/conda_envs/env_7948539/lib/python3.11/site-packages (from altair>=5.0.0->loveslide==1.0.0) (26.0)
-Collecting typing-extensions>=4.12.0 (from altair>=5.0.0->loveslide==1.0.0)
-  Using cached typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
-Collecting click>=8.0.0 (from black>=23.0.0->loveslide==1.0.0)
-  Using cached click-8.3.1-py3-none-any.whl.metadata (2.6 kB)
-Collecting mypy-extensions>=0.4.3 (from black>=23.0.0->loveslide==1.0.0)
-  Using cached mypy_extensions-1.1.0-py3-none-any.whl.metadata (1.1 kB)
-Collecting pathspec>=1.0.0 (from black>=23.0.0->loveslide==1.0.0)
-  Using cached pathspec-1.0.4-py3-none-any.whl.metadata (13 kB)
-Collecting platformdirs>=2 (from black>=23.0.0->loveslide==1.0.0)
-  Using cached platformdirs-4.5.1-py3-none-any.whl.metadata (12 kB)
-Collecting pytokens>=0.3.0 (from black>=23.0.0->loveslide==1.0.0)
-  Using cached pytokens-0.4.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (3.8 kB)
-Collecting osqp>=1.0.0 (from cvxpy>=1.3.0->loveslide==1.0.0)
-  Using cached osqp-1.1.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (2.1 kB)
-Collecting clarabel>=0.5.0 (from cvxpy>=1.3.0->loveslide==1.0.0)
-  Using cached clarabel-0.11.1-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.8 kB)
-Collecting scs>=3.2.4.post1 (from cvxpy>=1.3.0->loveslide==1.0.0)
-  Using cached scs-3.2.11-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (2.8 kB)
-Collecting highspy>=1.11.0 (from cvxpy>=1.3.0->loveslide==1.0.0)
-  Using cached highspy-1.13.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (11 kB)
-Collecting cffi (from clarabel>=0.5.0->cvxpy>=1.3.0->loveslide==1.0.0)
-  Using cached cffi-2.0.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.6 kB)
-Collecting attrs>=22.2.0 (from jsonschema>=3.0->altair>=5.0.0->loveslide==1.0.0)
-  Using cached attrs-25.4.0-py3-none-any.whl.metadata (10 kB)
-Collecting jsonschema-specifications>=2023.03.6 (from jsonschema>=3.0->altair>=5.0.0->loveslide==1.0.0)
-  Using cached jsonschema_specifications-2025.9.1-py3-none-any.whl.metadata (2.9 kB)
-Collecting referencing>=0.28.4 (from jsonschema>=3.0->altair>=5.0.0->loveslide==1.0.0)
-  Using cached referencing-0.37.0-py3-none-any.whl.metadata (2.8 kB)
-Collecting rpds-py>=0.25.0 (from jsonschema>=3.0->altair>=5.0.0->loveslide==1.0.0)
-  Using cached rpds_py-0.30.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.1 kB)
-Collecting contourpy>=1.0.1 (from matplotlib>=3.7.0->loveslide==1.0.0)
-  Using cached contourpy-1.3.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (5.5 kB)
-Collecting cycler>=0.10 (from matplotlib>=3.7.0->loveslide==1.0.0)
-  Using cached cycler-0.12.1-py3-none-any.whl.metadata (3.8 kB)
-Collecting fonttools>=4.22.0 (from matplotlib>=3.7.0->loveslide==1.0.0)
-  Using cached fonttools-4.61.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (114 kB)
-Collecting kiwisolver>=1.3.1 (from matplotlib>=3.7.0->loveslide==1.0.0)
-  Using cached kiwisolver-1.4.9-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (6.3 kB)
-Collecting pillow>=8 (from matplotlib>=3.7.0->loveslide==1.0.0)
-  Using cached pillow-12.1.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (8.8 kB)
-Collecting pyparsing>=3 (from matplotlib>=3.7.0->loveslide==1.0.0)
-  Using cached pyparsing-3.3.2-py3-none-any.whl.metadata (5.8 kB)
-Collecting python-dateutil>=2.7 (from matplotlib>=3.7.0->loveslide==1.0.0)
-  Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
-Requirement already satisfied: setuptools in /ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/ssc_multi_param/conda_envs/env_7948539/lib/python3.11/site-packages (from osqp>=1.0.0->cvxpy>=1.3.0->loveslide==1.0.0) (82.0.0)
-Collecting iniconfig>=1.0.1 (from pytest>=7.0.0->loveslide==1.0.0)
-  Using cached iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)
-Collecting pluggy<2,>=1.5 (from pytest>=7.0.0->loveslide==1.0.0)
-  Using cached pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
-Collecting pygments>=2.7.2 (from pytest>=7.0.0->loveslide==1.0.0)
-  Using cached pygments-2.19.2-py3-none-any.whl.metadata (2.5 kB)
-Collecting six>=1.5 (from python-dateutil>=2.7->matplotlib>=3.7.0->loveslide==1.0.0)
-  Using cached six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
-Collecting rpy2-rinterface>=3.6.3 (from rpy2>=3.5.0->loveslide==1.0.0)
-  Using cached rpy2_rinterface-3.6.3-cp311-cp311-linux_x86_64.whl
-Collecting rpy2-robjects>=3.6.3 (from rpy2>=3.5.0->loveslide==1.0.0)
-  Using cached rpy2_robjects-3.6.3-py3-none-any.whl.metadata (3.3 kB)
-Collecting pycparser (from cffi->clarabel>=0.5.0->cvxpy>=1.3.0->loveslide==1.0.0)
-  Using cached pycparser-3.0-py3-none-any.whl.metadata (8.2 kB)
-Collecting tzlocal (from rpy2-robjects>=3.6.3->rpy2>=3.5.0->loveslide==1.0.0)
-  Using cached tzlocal-5.3.1-py3-none-any.whl.metadata (7.6 kB)
-Collecting threadpoolctl>=3.2.0 (from scikit-learn>=1.0.0->loveslide==1.0.0)
-  Using cached threadpoolctl-3.6.0-py3-none-any.whl.metadata (13 kB)
-Collecting patsy>=0.5.6 (from statsmodels>=0.14.0->loveslide==1.0.0)
-  Using cached patsy-1.0.2-py2.py3-none-any.whl.metadata (3.6 kB)
-Collecting MarkupSafe>=2.0 (from jinja2->altair>=5.0.0->loveslide==1.0.0)
-  Using cached markupsafe-3.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.7 kB)
-Collecting bounded-pool-executor (from pqdm->loveslide==1.0.0)
-  Using cached bounded_pool_executor-0.0.3-py3-none-any.whl.metadata (2.7 kB)
-Using cached adjustText-1.3.0-py3-none-any.whl (13 kB)
-Using cached altair-6.0.0-py3-none-any.whl (795 kB)
-Using cached black-26.1.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.7 MB)
-Using cached click-8.3.1-py3-none-any.whl (108 kB)
-Using cached cvxpy-1.8.1-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (1.4 MB)
-Using cached clarabel-0.11.1-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (1.2 MB)
-Using cached highspy-1.13.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (2.5 MB)
-Using cached joblib-1.5.3-py3-none-any.whl (309 kB)
-Using cached jsonschema-4.26.0-py3-none-any.whl (90 kB)
-Using cached attrs-25.4.0-py3-none-any.whl (67 kB)
-Using cached jsonschema_specifications-2025.9.1-py3-none-any.whl (18 kB)
-Using cached matplotlib-3.10.8-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (8.7 MB)
-Using cached contourpy-1.3.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (355 kB)
-Using cached cycler-0.12.1-py3-none-any.whl (8.3 kB)
-Using cached fonttools-4.61.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (5.0 MB)
-Using cached kiwisolver-1.4.9-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.4 MB)
-Using cached mypy_extensions-1.1.0-py3-none-any.whl (5.0 kB)
-Using cached narwhals-2.16.0-py3-none-any.whl (443 kB)
-Using cached networkx-3.6.1-py3-none-any.whl (2.1 MB)
-Using cached numpy-2.4.2-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.9 MB)
-Using cached osqp-1.1.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (357 kB)
-Using cached pandas-3.0.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (11.2 MB)
-Using cached pathspec-1.0.4-py3-none-any.whl (55 kB)
-Using cached pillow-12.1.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (7.0 MB)
-Using cached platformdirs-4.5.1-py3-none-any.whl (18 kB)
-Using cached pyparsing-3.3.2-py3-none-any.whl (122 kB)
-Using cached pytest-9.0.2-py3-none-any.whl (374 kB)
-Using cached pluggy-1.6.0-py3-none-any.whl (20 kB)
-Using cached iniconfig-2.3.0-py3-none-any.whl (7.5 kB)
-Using cached pygments-2.19.2-py3-none-any.whl (1.2 MB)
-Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
-Using cached pytokens-0.4.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (260 kB)
-Using cached referencing-0.37.0-py3-none-any.whl (26 kB)
-Using cached rpds_py-0.30.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (390 kB)
-Using cached rpy2-3.6.4-py3-none-any.whl (9.9 kB)
-Using cached cffi-2.0.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (215 kB)
-Using cached rpy2_robjects-3.6.3-py3-none-any.whl (125 kB)
-Using cached ruff-0.15.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (11.1 MB)
-Using cached scikit_learn-1.8.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (9.1 MB)
-Using cached scipy-1.17.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (35.1 MB)
-Using cached scs-3.2.11-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (12.1 MB)
-Using cached seaborn-0.13.2-py3-none-any.whl (294 kB)
-Using cached six-1.17.0-py2.py3-none-any.whl (11 kB)
-Using cached statsmodels-0.14.6-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (10.4 MB)
-Using cached patsy-1.0.2-py2.py3-none-any.whl (233 kB)
-Using cached threadpoolctl-3.6.0-py3-none-any.whl (18 kB)
-Using cached tqdm-4.67.3-py3-none-any.whl (78 kB)
-Using cached typing_extensions-4.15.0-py3-none-any.whl (44 kB)
-Using cached easydict-1.13-py3-none-any.whl (6.8 kB)
-Using cached jinja2-3.1.6-py3-none-any.whl (134 kB)
-Using cached markupsafe-3.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
-Using cached pqdm-0.2.0-py2.py3-none-any.whl (6.8 kB)
-Using cached bounded_pool_executor-0.0.3-py3-none-any.whl (3.4 kB)
-Using cached pycparser-3.0-py3-none-any.whl (48 kB)
-Using cached pysankeybeta-1.4.2-py3-none-any.whl (20 kB)
-Using cached tzlocal-5.3.1-py3-none-any.whl (18 kB)
-Using cached wordcloud-1.9.6-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (551 kB)
-Building wheels for collected packages: loveslide
-  Building wheel for loveslide (pyproject.toml): started
-  Building wheel for loveslide (pyproject.toml): finished with status 'done'
-  Created wheel for loveslide: filename=loveslide-1.0.0-cp311-cp311-linux_x86_64.whl size=2648749 sha256=324df8ad23cdff17f62b8c17d72bb0bffb8559b1d0e5826de0189c312adbf7a6
-  Stored in directory: /scratch/slurm-7948539/pip-ephem-wheel-cache-k9bk_u6d/wheels/95/4e/9f/f7c03ae56a56d0100cca27839bcbffeae4c0ef3607b72d4ff1
-Successfully built loveslide
-Installing collected packages: easydict, bounded-pool-executor, tzlocal, typing-extensions, tqdm, threadpoolctl, six, ruff, rpds-py, pytokens, pyparsing, pygments, pycparser, pluggy, platformdirs, pillow, pathspec, numpy, networkx, narwhals, mypy-extensions, MarkupSafe, kiwisolver, joblib, iniconfig, fonttools, cycler, click, attrs, scipy, referencing, python-dateutil, pytest, pqdm, patsy, jinja2, highspy, contourpy, cffi, black, scs, scikit-learn, rpy2-rinterface, pandas, osqp, matplotlib, jsonschema-specifications, clarabel, wordcloud, statsmodels, seaborn, rpy2-robjects, jsonschema, cvxpy, adjustText, rpy2, pysankeybeta, loveslide, altair
-
-Successfully installed MarkupSafe-3.0.3 adjustText-1.3.0 altair-6.0.0 attrs-25.4.0 black-26.1.0 bounded-pool-executor-0.0.3 cffi-2.0.0 clarabel-0.11.1 click-8.3.1 contourpy-1.3.3 cvxpy-1.8.1 cycler-0.12.1 easydict-1.13 fonttools-4.61.1 highspy-1.13.0 iniconfig-2.3.0 jinja2-3.1.6 joblib-1.5.3 jsonschema-4.26.0 jsonschema-specifications-2025.9.1 kiwisolver-1.4.9 loveslide-1.0.0 matplotlib-3.10.8 mypy-extensions-1.1.0 narwhals-2.16.0 networkx-3.6.1 numpy-2.4.2 osqp-1.1.0 pandas-3.0.0 pathspec-1.0.4 patsy-1.0.2 pillow-12.1.0 platformdirs-4.5.1 pluggy-1.6.0 pqdm-0.2.0 pycparser-3.0 pygments-2.19.2 pyparsing-3.3.2 pysankeybeta-1.4.2 pytest-9.0.2 python-dateutil-2.9.0.post0 pytokens-0.4.1 referencing-0.37.0 rpds-py-0.30.0 rpy2-3.6.4 rpy2-rinterface-3.6.3 rpy2-robjects-3.6.3 ruff-0.15.0 scikit-learn-1.8.0 scipy-1.17.0 scs-3.2.11 seaborn-0.13.2 six-1.17.0 statsmodels-0.14.6 threadpoolctl-3.6.0 tqdm-4.67.3 typing-extensions-4.15.0 tzlocal-5.3.1 wordcloud-1.9.6
-
-=== Installed packages ===
-cvxpy                     1.8.1
-loveslide                 1.0.0
-numpy                     2.4.2
-pandas                    3.0.0
-rpy2                      3.6.4
-rpy2-rinterface           3.6.3
-rpy2-robjects             3.6.3
-scikit-learn              1.8.0
-scipy                     1.17.0
-
-=== Running SSc multi-delta/lambda pipeline ===
-  deltas:   [0.01, 0.05, 0.1, 0.2]
-  lambdas:  [0.1, 1.0]
-  backends: python, r_knockoffs, r
-
-2026-02-09 23:45:08,729 INFO === Starting python backend ===
-2026-02-09 23:45:08,729 INFO   deltas=[0.01, 0.05, 0.1, 0.2], lambdas=[0.1, 1.0]
-2026-02-09 23:45:08,729 INFO   output: /ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/ssc_multi_param/output/python
-
-### PARAMETERS ###
-
-x_path: /ix/djishnu/Aaron/1_general_use/SLIDE/Data_Scripts/SSc/UnTx/X.csv
-y_path: /ix/djishnu/Aaron/1_general_use/SLIDE/Data_Scripts/SSc/UnTx/Y.csv
-y_factor: False
-niter: 500
-SLIDE_top_feats: 10
-out_path: /ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/ssc_multi_param/output/python
-fdr: 0.1
-thresh_fdr: 0.2
-pure_homo: True
-do_interacts: True
-n_workers: 1
-spec: 0.1
-love_backend: python
-knockoff_backend: python
-knockoff_method: asdp
-knockoff_shrink: False
-knockoff_offset: 0
-fstat: glmnet_lambdasmax
-delta: [0.01, 0.05, 0.1, 0.2]
-lambda: [0.1, 1.0]
-y_flip: False
-
-###### DATA ######
-
-24 samples
-804 features
-0.0% cases
-0.0% controls
-
-##################
-
-Running LOVE with delta=0.01 and lambda=0.1
-Using Python LOVE backend
-Note: Using Dantzig for non-pure rows (default for pure_homo=True)
-Select delta by using data splitting...
-Finish selecting delta and start estimating the pure loadings...
-Applying FDR thresholding (thresh=0.2) to correlation matrix...
-Finish estimating the pure loadings...
-Estimate the non-pure loadings by Dantzig...
-LOVE found 172 latent factors.
-
-Running SLIDE knockoffs...
-Calculated f_size: 24
-Knockoff backend: python
-Knockoff method: asdp
-Knockoff shrink: False
-Knockoff offset: 0
-Feature statistic: glmnet_lambdasmax
-Finding standalone LF...
-Processing subsets:   0%|          | 0/8 [00:00<?, ?it/s]2026-02-09 23:45:22,332 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-09 23:45:22,601 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  12%|█▎        | 1/8 [00:57<06:39, 57.07s/it]2026-02-09 23:46:19,332 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-09 23:46:19,343 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  25%|██▌       | 2/8 [01:49<05:24, 54.10s/it]2026-02-09 23:47:11,361 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-09 23:47:11,372 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  38%|███▊      | 3/8 [02:02<02:57, 35.44s/it]2026-02-09 23:47:24,589 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-09 23:47:24,598 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  50%|█████     | 4/8 [02:28<02:07, 31.78s/it]2026-02-09 23:47:50,772 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-09 23:47:50,782 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  62%|██████▎   | 5/8 [03:46<02:25, 48.39s/it]2026-02-09 23:49:08,613 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-09 23:49:08,622 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  75%|███████▌  | 6/8 [03:55<01:09, 34.89s/it]2026-02-09 23:49:17,291 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-09 23:49:17,300 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  88%|████████▊ | 7/8 [04:41<00:38, 38.58s/it]2026-02-09 23:50:03,455 INFO Pre-computing SDP solution for 18 features using method=sdp
-2026-02-09 23:50:03,462 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets: 100%|██████████| 8/8 [05:36<00:00, 43.91s/it]Processing subsets: 100%|██████████| 8/8 [05:36<00:00, 42.07s/it]
-2026-02-09 23:50:58,922 INFO Pre-computing SDP solution for 32 features using method=sdp
-2026-02-09 23:50:58,932 INFO Running 500 knockoff iterations with 1 parallel jobs
-Found 5 standalone LF
-Finding interacting LF...
-Processing subsets:   0%|          | 0/8 [00:00<?, ?it/s]2026-02-09 23:51:04,190 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-09 23:51:04,199 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  12%|█▎        | 1/8 [05:55<41:28, 355.47s/it]2026-02-09 23:56:59,658 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-09 23:56:59,669 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  25%|██▌       | 2/8 [09:35<27:34, 275.70s/it]2026-02-10 00:00:39,538 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 00:00:39,547 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  38%|███▊      | 3/8 [15:43<26:29, 317.91s/it]2026-02-10 00:06:47,654 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 00:06:47,664 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  50%|█████     | 4/8 [20:33<20:28, 307.01s/it]2026-02-10 00:11:37,964 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 00:11:37,974 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  62%|██████▎   | 5/8 [24:04<13:36, 272.30s/it]2026-02-10 00:15:08,708 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 00:15:08,718 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  75%|███████▌  | 6/8 [30:19<10:14, 307.06s/it]2026-02-10 00:21:23,238 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 00:21:23,248 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  88%|████████▊ | 7/8 [35:31<05:08, 308.76s/it]2026-02-10 00:26:35,528 INFO Pre-computing SDP solution for 17 features using method=sdp
-2026-02-10 00:26:35,535 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets: 100%|██████████| 8/8 [37:01<00:00, 239.13s/it]Processing subsets: 100%|██████████| 8/8 [37:01<00:00, 277.68s/it]
-2026-02-10 00:28:05,645 INFO Pre-computing SDP solution for 18 features using method=sdp
-2026-02-10 00:28:05,653 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:   0%|          | 0/8 [00:00<?, ?it/s]2026-02-10 00:30:01,453 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 00:30:01,462 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  12%|█▎        | 1/8 [04:08<28:57, 248.25s/it]2026-02-10 00:34:09,708 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 00:34:09,718 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  25%|██▌       | 2/8 [11:40<36:49, 368.29s/it]2026-02-10 00:41:42,026 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 00:41:42,036 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  38%|███▊      | 3/8 [13:33<20:58, 251.68s/it]2026-02-10 00:43:34,932 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 00:43:34,941 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  50%|█████     | 4/8 [15:18<12:55, 193.76s/it]2026-02-10 00:45:19,904 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 00:45:19,914 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  62%|██████▎   | 5/8 [18:24<09:32, 190.94s/it]2026-02-10 00:48:25,841 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 00:48:25,850 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  75%|███████▌  | 6/8 [24:34<08:23, 251.83s/it]2026-02-10 00:54:35,874 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 00:54:35,884 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  88%|████████▊ | 7/8 [27:08<03:39, 219.85s/it]2026-02-10 00:57:09,890 INFO Pre-computing SDP solution for 16 features using method=sdp
-2026-02-10 00:57:09,896 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets: 100%|██████████| 8/8 [31:00<00:00, 223.83s/it]Processing subsets: 100%|██████████| 8/8 [31:00<00:00, 232.60s/it]
-2026-02-10 01:01:02,239 INFO Pre-computing SDP solution for 20 features using method=sdp
-2026-02-10 01:01:02,248 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:   0%|          | 0/8 [00:00<?, ?it/s]2026-02-10 01:02:10,921 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:02:10,930 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  12%|█▎        | 1/8 [02:34<18:03, 154.72s/it]2026-02-10 01:04:45,649 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:04:45,659 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  25%|██▌       | 2/8 [04:38<13:38, 136.36s/it]2026-02-10 01:06:49,155 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:06:49,166 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  38%|███▊      | 3/8 [09:06<16:22, 196.57s/it]2026-02-10 01:11:17,364 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:11:17,373 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  50%|█████     | 4/8 [12:23<13:07, 196.88s/it]2026-02-10 01:14:34,715 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:14:34,725 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  62%|██████▎   | 5/8 [13:55<07:57, 159.05s/it]2026-02-10 01:16:06,695 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:16:06,704 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  75%|███████▌  | 6/8 [17:37<06:00, 180.31s/it]2026-02-10 01:19:48,276 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:19:48,285 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  88%|████████▊ | 7/8 [20:11<02:51, 171.91s/it]2026-02-10 01:22:22,884 INFO Pre-computing SDP solution for 15 features using method=sdp
-2026-02-10 01:22:22,890 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets: 100%|██████████| 8/8 [21:51<00:00, 148.79s/it]Processing subsets: 100%|██████████| 8/8 [21:51<00:00, 163.91s/it]
-2026-02-10 01:24:02,168 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:24:02,175 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:   0%|          | 0/7 [00:00<?, ?it/s]2026-02-10 01:26:56,666 INFO Pre-computing SDP solution for 24 features using method=sdp
-2026-02-10 01:26:56,674 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  14%|█▍        | 1/7 [00:07<00:47,  7.88s/it]2026-02-10 01:27:04,549 INFO Pre-computing SDP solution for 24 features using method=sdp
-2026-02-10 01:27:04,556 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  29%|██▊       | 2/7 [00:13<00:33,  6.72s/it]2026-02-10 01:27:10,453 INFO Pre-computing SDP solution for 24 features using method=sdp
-2026-02-10 01:27:10,460 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  43%|████▎     | 3/7 [00:18<00:22,  5.71s/it]2026-02-10 01:27:14,969 INFO Pre-computing SDP solution for 24 features using method=sdp
-2026-02-10 01:27:14,976 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  57%|█████▋    | 4/7 [00:23<00:16,  5.39s/it]2026-02-10 01:27:19,861 INFO Pre-computing SDP solution for 24 features using method=sdp
-2026-02-10 01:27:19,868 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  71%|███████▏  | 5/7 [00:28<00:10,  5.43s/it]2026-02-10 01:27:25,354 INFO Pre-computing SDP solution for 24 features using method=sdp
-2026-02-10 01:27:25,361 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  86%|████████▌ | 6/7 [00:33<00:05,  5.25s/it]2026-02-10 01:27:30,260 INFO Pre-computing SDP solution for 24 features using method=sdp
-2026-02-10 01:27:30,267 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets: 100%|██████████| 7/7 [00:39<00:00,  5.32s/it]Processing subsets: 100%|██████████| 7/7 [00:39<00:00,  5.58s/it]
-2026-02-10 01:27:35,721 INFO Pre-computing SDP solution for 6 features using method=sdp
-2026-02-10 01:27:35,724 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:   0%|          | 0/7 [00:00<?, ?it/s]2026-02-10 01:27:38,738 INFO Pre-computing SDP solution for 24 features using method=sdp
-2026-02-10 01:27:38,745 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  14%|█▍        | 1/7 [00:07<00:47,  7.90s/it]2026-02-10 01:27:46,639 INFO Pre-computing SDP solution for 24 features using method=sdp
-2026-02-10 01:27:46,646 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  29%|██▊       | 2/7 [00:14<00:34,  6.94s/it]2026-02-10 01:27:52,910 INFO Pre-computing SDP solution for 24 features using method=sdp
-2026-02-10 01:27:52,918 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  43%|████▎     | 3/7 [00:18<00:23,  5.90s/it]2026-02-10 01:27:57,567 INFO Pre-computing SDP solution for 24 features using method=sdp
-2026-02-10 01:27:57,574 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  57%|█████▋    | 4/7 [00:26<00:19,  6.46s/it]2026-02-10 01:28:04,900 INFO Pre-computing SDP solution for 24 features using method=sdp
-2026-02-10 01:28:04,907 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  71%|███████▏  | 5/7 [00:31<00:12,  6.14s/it]2026-02-10 01:28:10,458 INFO Pre-computing SDP solution for 24 features using method=sdp
-2026-02-10 01:28:10,465 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  86%|████████▌ | 6/7 [00:38<00:06,  6.25s/it]2026-02-10 01:28:16,935 INFO Pre-computing SDP solution for 23 features using method=sdp
-2026-02-10 01:28:16,946 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets: 100%|██████████| 7/7 [02:15<00:00, 36.12s/it]Processing subsets: 100%|██████████| 7/7 [02:15<00:00, 19.40s/it]
-2026-02-10 01:29:54,535 INFO Pre-computing SDP solution for 6 features using method=sdp
-2026-02-10 01:29:54,539 INFO Running 500 knockoff iterations with 1 parallel jobs
-Found 2 interacting LF
-
-SLIDE complete.
-
-Completed 0.01_0.1
-
-##################
-
-Running LOVE with delta=0.01 and lambda=1.0
-Using Python LOVE backend
-Note: Using Dantzig for non-pure rows (default for pure_homo=True)
-Select delta by using data splitting...
-Finish selecting delta and start estimating the pure loadings...
-Applying FDR thresholding (thresh=0.2) to correlation matrix...
-Finish estimating the pure loadings...
-Estimate the non-pure loadings by Dantzig...
-LOVE found 172 latent factors.
-
-Running SLIDE knockoffs...
-Calculated f_size: 24
-Knockoff backend: python
-Knockoff method: asdp
-Knockoff shrink: False
-Knockoff offset: 0
-Feature statistic: glmnet_lambdasmax
-Finding standalone LF...
-Processing subsets:   0%|          | 0/8 [00:00<?, ?it/s]2026-02-10 01:30:32,522 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:30:32,531 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  12%|█▎        | 1/8 [00:55<06:26, 55.21s/it]2026-02-10 01:31:27,737 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:31:27,745 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  25%|██▌       | 2/8 [01:43<05:06, 51.13s/it]2026-02-10 01:32:16,006 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:32:16,016 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  38%|███▊      | 3/8 [01:56<02:49, 33.86s/it]2026-02-10 01:32:29,323 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:32:29,332 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  50%|█████     | 4/8 [02:21<02:01, 30.29s/it]2026-02-10 01:32:54,124 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:32:54,133 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  62%|██████▎   | 5/8 [03:36<02:18, 46.22s/it]2026-02-10 01:34:08,593 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:34:08,601 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  75%|███████▌  | 6/8 [03:44<01:06, 33.43s/it]2026-02-10 01:34:17,184 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:34:17,192 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  88%|████████▊ | 7/8 [04:32<00:38, 38.12s/it]2026-02-10 01:35:04,981 INFO Pre-computing SDP solution for 18 features using method=sdp
-2026-02-10 01:35:04,988 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets: 100%|██████████| 8/8 [05:26<00:00, 43.20s/it]Processing subsets: 100%|██████████| 8/8 [05:26<00:00, 40.82s/it]
-2026-02-10 01:35:59,048 INFO Pre-computing SDP solution for 33 features using method=sdp
-2026-02-10 01:35:59,058 INFO Running 500 knockoff iterations with 1 parallel jobs
-Found 6 standalone LF
-Finding interacting LF...
-Processing subsets:   0%|          | 0/8 [00:00<?, ?it/s]2026-02-10 01:36:04,024 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:36:04,033 INFO Running 500 knockoff iterations with 1 parallel jobs
-Processing subsets:  12%|█▎        | 1/8 [05:53<41:12, 353.24s/it]2026-02-10 01:41:57,281 INFO Pre-computing SDP solution for 22 features using method=sdp
-2026-02-10 01:41:57,290 INFO Running 500 knockoff iterations with 1 parallel jobs
-slurmstepd: error: *** JOB 7948539 ON htc-1024-n1 CANCELLED AT 2026-02-10T01:43:22 ***
-
-=== Cleaning up conda environment ===
-Transaction
-
-  Prefix: /ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/ssc_multi_param/conda_envs/env_7948539
-
-  Removing specs:
-
-   - _libgcc_mutex
-   - _openmp_mutex
-   - bzip2
-   - ca-certificates
-   - icu
-   - ld_impl_linux-64
-   - libexpat
-   - libffi
-   - libgcc
-   - libgcc-ng
-   - libgomp
-   - liblzma
-   - libnsl
-   - libsqlite
-   - libstdcxx
-   - libuuid
-   - libxcrypt
-   - libzlib
-   - ncurses
-   - openssl
-   - packaging
-   - pip
-   - python
-   - readline
-   - setuptools
-   - tk
-   - tzdata
-   - wheel
-   - zstd
-
-
-  Package              Version  Build                 Channel           Size
-──────────────────────────────────────────────────────────────────────────────
-  Remove:
-──────────────────────────────────────────────────────────────────────────────
-
-  - _libgcc_mutex          0.1  conda_forge           conda-forge     Cached
-  - _openmp_mutex          4.5  2_gnu                 conda-forge     Cached
-  - bzip2                1.0.8  hda65f42_8            conda-forge     Cached
-  - ca-certificates   2026.1.4  hbd8a1cb_0            conda-forge     Cached
-  - icu                   78.2  h33c6efd_0            conda-forge       13MB
-  - ld_impl_linux-64    2.45.1  default_hbd61a6d_101  conda-forge      726kB
-  - libexpat             2.7.3  hecca717_0            conda-forge     Cached
-  - libffi               3.5.2  h3435931_0            conda-forge       59kB
-  - libgcc              15.2.0  he0feb66_17           conda-forge        1MB
-  - libgcc-ng           15.2.0  h69a702a_17           conda-forge       28kB
-  - libgomp             15.2.0  he0feb66_17           conda-forge      603kB
-  - liblzma              5.8.2  hb03c661_0            conda-forge     Cached
-  - libnsl               2.0.1  hb9d3cd8_1            conda-forge     Cached
-  - libsqlite           3.51.2  hf4e2dac_0            conda-forge      943kB
-  - libstdcxx           15.2.0  h934c35e_17           conda-forge        6MB
-  - libuuid             2.41.3  h5347b49_0            conda-forge     Cached
-  - libxcrypt           4.4.36  hd590300_1            conda-forge     Cached
-  - libzlib              1.3.1  hb9d3cd8_2            conda-forge     Cached
-  - ncurses                6.5  h2d0b736_3            conda-forge     Cached
-  - openssl              3.6.1  h35e630c_1            conda-forge        3MB
-  - packaging             26.0  pyhcf101f3_0          conda-forge     Cached
-  - pip                 26.0.1  pyh8b19718_0          conda-forge        1MB
-  - python             3.11.14  hd63d673_3_cpython    conda-forge       31MB
-  - readline               8.3  h853b02a_0            conda-forge     Cached
-  - setuptools          82.0.0  pyh332efcf_0          conda-forge      638kB
-  - tk                  8.6.13  noxft_h366c992_103    conda-forge        3MB
-  - tzdata               2025c  hc9c84f9_1            conda-forge     Cached
-  - wheel               0.46.3  pyhd8ed1ab_0          conda-forge       32kB
-  - zstd                 1.5.7  hb78ec9c_6            conda-forge     Cached
-
-  Summary:
-
-  Remove: 29 packages
-
-  Total download: 0 B
-
-──────────────────────────────────────────────────────────────────────────────
-
-
-
-Transaction starting
-Unlinking python-3.11.14-hd63d673_3_cpython
-Unlinking pip-26.0.1-pyh8b19718_0
