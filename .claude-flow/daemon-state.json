@@ -3,49 +3,49 @@
   "startedAt": "2026-02-05T15:58:12.563Z",
   "workers": {
     "map": {
-      "runCount": 4141,
-      "successCount": 4141,
+      "runCount": 4142,
+      "successCount": 4142,
       "failureCount": 0,
-      "averageDurationMs": 160.91765274088382,
-      "lastRun": "2026-04-01T04:59:25.908Z",
-      "nextRun": "2026-04-01T05:07:25.821Z",
+      "averageDurationMs": 160.87928536938674,
+      "lastRun": "2026-04-01T05:14:51.137Z",
+      "nextRun": "2026-04-01T05:23:00.497Z",
       "isRunning": false
     },
     "audit": {
-      "runCount": 4769,
-      "successCount": 730,
-      "failureCount": 4039,
-      "averageDurationMs": 10083.737193357389,
-      "lastRun": "2026-04-01T05:00:12.172Z",
-      "nextRun": "2026-04-01T05:09:25.906Z",
+      "runCount": 4773,
+      "successCount": 732,
+      "failureCount": 4041,
+      "averageDurationMs": 10098.928086568743,
+      "lastRun": "2026-04-01T05:15:32.618Z",
+      "nextRun": "2026-04-01T05:24:51.085Z",
       "isRunning": false
     },
     "optimize": {
-      "runCount": 3460,
+      "runCount": 3463,
       "successCount": 456,
-      "failureCount": 3004,
+      "failureCount": 3007,
       "averageDurationMs": 57266.887593518215,
-      "lastRun": "2026-04-01T04:59:25.909Z",
-      "nextRun": "2026-04-01T05:07:25.821Z",
-      "isRunning": true
+      "lastRun": "2026-04-01T05:14:51.085Z",
+      "nextRun": "2026-04-01T05:23:00.497Z",
+      "isRunning": false
     },
     "consolidate": {
-      "runCount": 2106,
-      "successCount": 2105,
+      "runCount": 2107,
+      "successCount": 2106,
       "failureCount": 1,
-      "averageDurationMs": 78.60488960568786,
-      "lastRun": "2026-04-01T04:59:25.904Z",
-      "nextRun": "2026-04-01T05:02:51.893Z",
+      "averageDurationMs": 78.57470218774496,
+      "lastRun": "2026-04-01T05:14:51.131Z",
+      "nextRun": "2026-04-01T05:37:15.994Z",
       "isRunning": false
     },
     "testgaps": {
-      "runCount": 2708,
+      "runCount": 2709,
       "successCount": 320,
-      "failureCount": 2388,
+      "failureCount": 2389,
       "averageDurationMs": 24057.74904726797,
-      "lastRun": "2026-04-01T04:59:25.913Z",
+      "lastRun": "2026-04-01T05:14:51.104Z",
       "nextRun": "2026-04-01T05:19:25.906Z",
-      "isRunning": false
+      "isRunning": true
     },
     "predict": {
       "runCount": 0,
@@ -131,5 +131,5 @@
       }
     ]
   },
-  "savedAt": "2026-04-01T05:00:12.172Z"
+  "savedAt": "2026-04-01T05:15:32.618Z"
 }
