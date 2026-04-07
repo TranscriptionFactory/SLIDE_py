@@ -21,11 +21,15 @@ def _rlist_get(robj, name):
 
     rpy2 3.5 supports result['name']; rpy2 3.6 deprecated OrdDict and broke
     string-key access.  Fall back to names-based integer indexing.
+    In rpy2 3.6.x, .names may be a method (callable) rather than a property.
     """
     try:
         return robj[name]
     except TypeError:
-        names = list(robj.names)
+        r_names = robj.names
+        if callable(r_names):
+            r_names = r_names()
+        names = list(r_names)
         return robj[names.index(name)]
 
 
