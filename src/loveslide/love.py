@@ -42,54 +42,54 @@ def call_love_r(X, lbd=0.5, delta=None, thresh_fdr=0.2, rep_CV=50,
     """
     import rpy2.robjects as robjects
     from rpy2.robjects import numpy2ri
-    from rpy2.robjects.packages import importr
+    from rpy2.robjects.conversion import get_conversion, localconverter
 
-    numpy2ri.activate()
+    # Use context-manager conversion (activate/deactivate removed in rpy2 >= 3.5)
+    np_cv = numpy2ri.converter + get_conversion()
+    with localconverter(np_cv):
+        # Get path to R scripts
+        r_script_dir = os.path.join(os.path.dirname(__file__), 'slide_r')
 
-    # Get path to R scripts
-    r_script_dir = os.path.join(os.path.dirname(__file__), 'slide_r')
+        # Source all R scripts in the slide_r directory
+        r_source = robjects.r['source']
+        import glob
+        for script_path in glob.glob(os.path.join(r_script_dir, '*.R')):
+            r_source(script_path)
 
-    # Source all R scripts in the slide_r directory
-    r_source = robjects.r['source']
-    import glob
-    for script_path in glob.glob(os.path.join(r_script_dir, '*.R')):
-        r_source(script_path)
+        # Get the R function
+        getLatentFactors = robjects.globalenv['getLatentFactors']
 
-    # Get the R function
-    getLatentFactors = robjects.globalenv['getLatentFactors']
+        # Convert delta to R vector
+        if delta is None:
+            delta = 0.1
+        if not hasattr(delta, '__iter__'):
+            delta = [delta]
+        delta_r = robjects.FloatVector(delta)
 
-    # Convert delta to R vector
-    if delta is None:
-        delta = 0.1
-    if not hasattr(delta, '__iter__'):
-        delta = [delta]
-    delta_r = robjects.FloatVector(delta)
+        # Call R function
+        result = getLatentFactors(
+            x=X,
+            delta=delta_r,
+            thresh_fdr=thresh_fdr,
+            lbd=lbd,
+            rep_cv=rep_CV,
+            alpha_level=alpha_level,
+            verbose=verbose
+        )
 
-    # Call R function
-    result = getLatentFactors(
-        x=X,
-        delta=delta_r,
-        thresh_fdr=thresh_fdr,
-        lbd=lbd,
-        rep_cv=rep_CV,
-        alpha_level=alpha_level,
-        verbose=verbose
-    )
+        # Convert R result to Python dict (version-resilient named-list access)
+        result_dict = {
+            'K': int(_rlist_get(result, 'K')[0]),
+            'pureVec': np.array(_rlist_get(result, 'pureVec')) - 1,  # R is 1-indexed
+            'pureInd': _convert_r_pure_ind(_rlist_get(result, 'purInd')),
+            'group': None,  # Not returned by R function
+            'A': np.array(_rlist_get(result, 'A')),
+            'C': np.array(_rlist_get(result, 'C')),
+            'Omega': None,  # Not returned by R function
+            'Gamma': np.array(_rlist_get(result, 'Gamma')),
+            'optDelta': delta[0] if len(delta) == 1 else delta[0],
+        }
 
-    # Convert R result to Python dict (version-resilient named-list access)
-    result_dict = {
-        'K': int(_rlist_get(result, 'K')[0]),
-        'pureVec': np.array(_rlist_get(result, 'pureVec')) - 1,  # R is 1-indexed
-        'pureInd': _convert_r_pure_ind(_rlist_get(result, 'purInd')),
-        'group': None,  # Not returned by R function
-        'A': np.array(_rlist_get(result, 'A')),
-        'C': np.array(_rlist_get(result, 'C')),
-        'Omega': None,  # Not returned by R function
-        'Gamma': np.array(_rlist_get(result, 'Gamma')),
-        'optDelta': delta[0] if len(delta) == 1 else delta[0],
-    }
-
-    numpy2ri.deactivate()
     return result_dict
 
 
