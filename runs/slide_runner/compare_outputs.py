@@ -1,4 +1,23 @@
 #!/usr/bin/env python3
+# ── SLURM submission (heredoc) ──────────────────────────────────────────────
+"""
+sbatch <<'SLURM'
+#!/bin/bash
+#SBATCH --job-name=compare_slide
+#SBATCH --cluster=htc
+#SBATCH --time=00:30:00
+#SBATCH --mem=16G
+#SBATCH --cpus-per-task=1
+#SBATCH --output=compare_%j.out
+
+module load anaconda3
+source activate metabopt_gpu_py310
+
+cd /ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/slide_runner
+python compare_outputs.py --config ssc_untx.yaml --job-id 8273774 --detailed
+SLURM
+"""
+# ─────────────────────────────────────────────────────────────────────────────
 """
 Compare SLIDE outputs across backends from a YAML-driven run.
 

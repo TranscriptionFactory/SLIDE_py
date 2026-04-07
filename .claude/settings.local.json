@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(module load:*)",
-      "Read(//tmp/**)",
-      "Bash(~/.pixi/bin/pixi search:*)"
-    ]
-  }
-}
