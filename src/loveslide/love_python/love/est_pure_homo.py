@@ -258,7 +258,7 @@ def FindSignPureNode(pureList: List[List[int]],
     signPureList = []
 
     for purei in pureList:
-        purei = list(purei)  # Ensure it's a list
+        purei = sorted(purei)  # Sort to match R's findSignPureNode
         if len(purei) != 1:
             firstPure = purei[0]
             pos = [firstPure]
