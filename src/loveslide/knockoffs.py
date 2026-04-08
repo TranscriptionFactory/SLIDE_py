@@ -15,6 +15,28 @@ from sklearn.linear_model import LinearRegression, Lasso, lasso_path
 
 logger = logging.getLogger(__name__)
 
+# Import from bundled knockoff package
+from .knockoff.filter import (
+    knockoff_filter,
+    knockoff_threshold,
+    knockoff_filter_voting_slide,
+    VotingResult,
+)
+from .knockoff.create import create_gaussian, KnockoffVariables
+from .knockoff.stats import (
+    stat_glmnet_lambdasmax,
+    stat_glmnet_lambdadiff,
+    stat_glmnet_coefdiff,
+    stat_sqrt_lasso,
+    stat_stability_selection,
+    stat_random_forest,
+    stat_lasso_lambdasmax,
+    stat_lasso_lambdadiff,
+    stat_lasso_coefdiff,
+)
+from .knockoff.solve import create_solve_equi, create_solve_sdp, create_solve_asdp
+from .knockoff.utils import is_posdef
+
 
 def _rlist_get(robj, name):
     """Access named element of an R list, compatible with rpy2 3.5.x and 3.6.x.
@@ -31,20 +53,6 @@ def _rlist_get(robj, name):
             r_names = r_names()
         names = list(r_names)
         return robj[names.index(name)]
-
-
-# Import from bundled knockoff package
-from .knockoff.filter import (
-    knockoff_filter, knockoff_threshold, knockoff_filter_voting_slide, VotingResult
-)
-from .knockoff.create import create_gaussian, KnockoffVariables
-from .knockoff.stats import (
-    stat_glmnet_lambdasmax, stat_glmnet_lambdadiff, stat_glmnet_coefdiff,
-    stat_sqrt_lasso, stat_stability_selection, stat_random_forest,
-    stat_lasso_lambdasmax, stat_lasso_lambdadiff, stat_lasso_coefdiff,
-)
-from .knockoff.solve import create_solve_equi, create_solve_sdp, create_solve_asdp
-from .knockoff.utils import is_posdef
 
 
 def _create_second_order_r(X: np.ndarray) -> np.ndarray:
@@ -77,15 +85,15 @@ def _create_second_order_r(X: np.ndarray) -> np.ndarray:
 
     converter = robjects.default_converter + numpy2ri.converter + pandas2ri.converter
     with converter.context():
-        knockoff_r = importr('knockoff')
-        X_r = robjects.r['as.matrix'](pd.DataFrame(X))
+        knockoff_r = importr("knockoff")
+        X_r = robjects.r["as.matrix"](pd.DataFrame(X))
         Xk_r = knockoff_r.create_second_order(X_r)
         Xk = np.array(Xk_r)
 
     return Xk
 
 
-def _solve_sdp_r(Sigma: np.ndarray, method: str = 'sdp') -> np.ndarray:
+def _solve_sdp_r(Sigma: np.ndarray, method: str = "sdp") -> np.ndarray:
     """Compute knockoff diagonal s-vector using R's SDP solver via rpy2.
 
     Calls R's create.solve_sdp (or create.solve_asdp/equi) once to get the
@@ -111,11 +119,11 @@ def _solve_sdp_r(Sigma: np.ndarray, method: str = 'sdp') -> np.ndarray:
 
     converter = robjects.default_converter + numpy2ri.converter
     with converter.context():
-        knockoff_r = importr('knockoff')
+        knockoff_r = importr("knockoff")
 
-        if method == 'equi':
+        if method == "equi":
             diag_s_r = knockoff_r.create_solve_equi(Sigma)
-        elif method == 'asdp':
+        elif method == "asdp":
             diag_s_r = knockoff_r.create_solve_asdp(Sigma)
         else:  # sdp
             diag_s_r = knockoff_r.create_solve_sdp(Sigma)
@@ -125,8 +133,9 @@ def _solve_sdp_r(Sigma: np.ndarray, method: str = 'sdp') -> np.ndarray:
     return diag_s
 
 
-def _single_knockoff_iteration_python(z, y, fdr, method, shrink, offset, statistic,
-                                       mu, Sigma, diag_s):
+def _single_knockoff_iteration_python(
+    z, y, fdr, method, shrink, offset, statistic, mu, Sigma, diag_s
+):
     """Execute a single knockoff filter iteration with cached covariance.
 
     This function is designed to be called in parallel via joblib.
@@ -148,25 +157,24 @@ def _single_knockoff_iteration_python(z, y, fdr, method, shrink, offset, statist
     return selected.tolist() if len(selected) > 0 else []
 
 
-class Knockoffs():
-
-    def __init__(self, y, z2, model='LR'):
+class Knockoffs:
+    def __init__(self, y, z2, model="LR"):
 
         # self.z1 = self.scale_features(z1)
         self.z2 = self.scale_features(z2)
         self.y = y
         self.n = self.y.shape[0]
         # self.n, self.k = self.z1.shape
-        self.l = self.z2.shape[1] 
-        # self.interaction_terms = self.get_interaction_terms(self.z1, self.z2) 
-        
-        if model == 'lasso':
+        self.l = self.z2.shape[1]
+        # self.interaction_terms = self.get_interaction_terms(self.z1, self.z2)
+
+        if model == "lasso":
             self.model = Lasso(alpha=0.1)
-        elif model == 'LR':
+        elif model == "LR":
             self.model = LinearRegression()
         else:
-            raise ValueError('Model not supported')
-    
+            raise ValueError("Model not supported")
+
     def add_z1(self, z1=None, marginal_idxs=None):
         if marginal_idxs is not None and z1 is None:
             z1 = self.z2[:, marginal_idxs]
@@ -177,8 +185,8 @@ class Knockoffs():
         assert n == self.n
 
         self.z1 = self.scale_features(z1)
-        self.interaction_terms = self.get_interaction_terms(self.z1, self.z2) 
-    
+        self.interaction_terms = self.get_interaction_terms(self.z1, self.z2)
+
     @staticmethod
     def scale_features(X, minmax=False, feature_range=(-1, 1)):
         if isinstance(X, pd.DataFrame):
@@ -211,28 +219,28 @@ class Knockoffs():
         np.ndarray
             Residuals from linear regression of y on z_marginal.
         """
-        y_flat = y.flatten() if hasattr(y, 'flatten') else np.array(y).flatten()
+        y_flat = y.flatten() if hasattr(y, "flatten") else np.array(y).flatten()
         z_2d = z_marginal.reshape(-1, 1)
         reg = LinearRegression().fit(z_2d, y_flat)
         return y_flat - reg.predict(z_2d)
 
     @staticmethod
     def get_interaction_terms(z_matrix, plm_embedding):
-        '''
+        """
         @return: interactions in shape of (n_samples, n_LFs, plm_embed_dim)
-        '''
+        """
 
         # If only one dimension, need to reshape to 2D for einsum to work as expected
         if len(z_matrix.shape) == 1:
             n = z_matrix.shape[0]
             z_matrix = z_matrix.reshape(n, -1)
-        
+
         if len(plm_embedding.shape) == 1:
             n = plm_embedding.shape[0]
             plm_embedding = plm_embedding.reshape(n, -1)
-        
+
         assert z_matrix.shape[0] == plm_embedding.shape[0]
-        return np.einsum('ij,ik->ijk', z_matrix, plm_embedding)
+        return np.einsum("ij,ik->ijk", z_matrix, plm_embedding)
 
     @staticmethod
     def filter_knockoffs_iterative_r(z, y, fdr=0.1, niter=1, spec=0.2, **kwargs):
@@ -241,7 +249,7 @@ class Knockoffs():
         from rpy2.robjects import pandas2ri
         from rpy2.robjects.packages import importr
 
-        knockoff = importr('knockoff')
+        knockoff = importr("knockoff")
         converter = robjects.default_converter + pandas2ri.converter
 
         results = []
@@ -256,9 +264,9 @@ class Knockoffs():
                     knockoffs=knockoff.create_second_order,
                     statistic=knockoff.stat_glmnet_lambdasmax,
                     offset=0,
-                    fdr=fdr
+                    fdr=fdr,
                 )
-                selected = _rlist_get(result, 'selected')
+                selected = _rlist_get(result, "selected")
                 results.append(robjects.conversion.get_conversion().rpy2py(selected))
 
         results = np.concatenate(results, axis=0)
@@ -270,9 +278,19 @@ class Knockoffs():
         return sig_idxs
 
     @staticmethod
-    def filter_knockoffs_iterative_python(z, y, fdr=0.1, niter=1, spec=0.2,
-                                          method='asdp', shrink=False, offset=0,
-                                          fstat='glmnet_lambdasmax', n_jobs=-1, **kwargs):
+    def filter_knockoffs_iterative_python(
+        z,
+        y,
+        fdr=0.1,
+        niter=1,
+        spec=0.2,
+        method="asdp",
+        shrink=False,
+        offset=0,
+        fstat="glmnet_lambdasmax",
+        n_jobs=-1,
+        **kwargs,
+    ):
         """Run knockoff filter using pure Python package with parallel processing.
 
         Parameters
@@ -323,19 +341,21 @@ class Knockoffs():
         fstat_map = {
             # GLMNet-based (default) - use partial to pass use_sklearn for R compatibility
             # Only glmnet_lambdasmax and glmnet_lambdadiff support use_sklearn parameter
-            'glmnet_lambdasmax': partial(stat_glmnet_lambdasmax, use_sklearn=True),
-            'glmnet_lambdadiff': partial(stat_glmnet_lambdadiff, use_sklearn=True),
-            'glmnet_coefdiff': stat_glmnet_coefdiff,  # Does not support use_sklearn
+            "glmnet_lambdasmax": partial(stat_glmnet_lambdasmax, use_sklearn=True),
+            "glmnet_lambdadiff": partial(stat_glmnet_lambdadiff, use_sklearn=True),
+            "glmnet_coefdiff": stat_glmnet_coefdiff,  # Does not support use_sklearn
             # Lasso-based (wrapper around glmnet with family='gaussian')
-            'lasso_lambdasmax': stat_lasso_lambdasmax,
-            'lasso_lambdadiff': stat_lasso_lambdadiff,
-            'lasso_coefdiff': stat_lasso_coefdiff,
+            "lasso_lambdasmax": stat_lasso_lambdasmax,
+            "lasso_lambdadiff": stat_lasso_lambdadiff,
+            "lasso_coefdiff": stat_lasso_coefdiff,
             # sklearn-based alternatives
-            'sqrt_lasso': stat_sqrt_lasso,  # Uses sklearn's lasso_path
-            'stability': stat_stability_selection,  # Uses sklearn's LassoCV
-            'random_forest': stat_random_forest,  # Uses sklearn's RandomForest
+            "sqrt_lasso": stat_sqrt_lasso,  # Uses sklearn's lasso_path
+            "stability": stat_stability_selection,  # Uses sklearn's LassoCV
+            "random_forest": stat_random_forest,  # Uses sklearn's RandomForest
         }
-        statistic = fstat_map.get(fstat, partial(stat_glmnet_lambdasmax, use_sklearn=True))
+        statistic = fstat_map.get(
+            fstat, partial(stat_glmnet_lambdasmax, use_sklearn=True)
+        )
 
         z = np.asarray(z, dtype=np.float64)
         y = np.asarray(y)
@@ -352,31 +372,38 @@ class Knockoffs():
 
         if shrink:
             from sklearn.covariance import LedoitWolf
+
             lw = LedoitWolf().fit(z)
             Sigma = lw.covariance_
 
         # Solve SDP once (OPTIMIZATION: this is expensive and doesn't change between iterations)
         p = z.shape[1]
-        if p <= 500 and method == 'asdp':
-            method = 'sdp'  # Use full SDP for small problems
+        if p <= 500 and method == "asdp":
+            method = "sdp"  # Use full SDP for small problems
 
-        logger.info(f"Pre-computing SDP solution for {p} features using method={method}")
+        logger.info(
+            f"Pre-computing SDP solution for {p} features using method={method}"
+        )
         try:
-            if method == 'equi':
+            if method == "equi":
                 diag_s = create_solve_equi(Sigma)
-            elif method == 'asdp':
+            elif method == "asdp":
                 diag_s = create_solve_asdp(Sigma)
             else:
                 diag_s = create_solve_sdp(Sigma)
         except ImportError as e:
             # Fall back to equi only if solver package not installed
-            logger.warning(f"SDP/ASDP solver not available ({e}), falling back to equi method")
-            method = 'equi'
+            logger.warning(
+                f"SDP/ASDP solver not available ({e}), falling back to equi method"
+            )
+            method = "equi"
             diag_s = create_solve_equi(Sigma)
 
         # Match R: if SDP returns all zeros, return empty (no power)
         if np.all(diag_s == 0):
-            logger.warning("SDP solver returned all-zero solution. Knockoffs will have no power.")
+            logger.warning(
+                "SDP solver returned all-zero solution. Knockoffs will have no power."
+            )
             return np.array([], dtype=int)
 
         logger.info(f"Running {niter} knockoff iterations with {n_jobs} parallel jobs")
@@ -412,7 +439,7 @@ class Knockoffs():
         return sig_idxs
 
     @staticmethod
-    def _compute_glmnet_lambdasmax(X, Xk, y, nlambda=500, eps=0.0005):
+    def _compute_glmnet_lambdasmax(X, Xk, y, nlambda=250, eps=0.0005):
         """Compute W statistics matching R's stat.glmnet_lambdasmax.
 
         This implements the signed maximum of lasso path statistic using a
@@ -430,7 +457,7 @@ class Knockoffs():
         y : np.ndarray
             Response vector (n,).
         nlambda : int
-            Number of lambda values in the grid (default 500, matching glmnet).
+            Number of lambda values in the grid (default 250).
         eps : float
             Ratio of lambda_min/lambda_max (default 0.0005, matching glmnet's 1/2000).
 
@@ -463,7 +490,9 @@ class Knockoffs():
         except Exception:
             # Fallback to simpler grid if path computation fails
             _, coef_path, _ = lasso_path(X_full, y, n_alphas=nlambda, max_iter=10000)
-            lambdas = np.logspace(np.log10(lambda_max), np.log10(lambda_min), coef_path.shape[1])
+            lambdas = np.logspace(
+                np.log10(lambda_max), np.log10(lambda_min), coef_path.shape[1]
+            )
 
         # Find entry times (lambda at which each feature first becomes nonzero)
         Z = np.zeros(p)  # Entry times for original features
@@ -521,8 +550,19 @@ class Knockoffs():
         return threshold
 
     @staticmethod
-    def filter_knockoffs_iterative(z, y, fdr=0.1, niter=1, spec=0.2, n_workers=-1, backend='python',
-                                   method='asdp', shrink=False, offset=0, fstat='glmnet_lambdasmax'):
+    def filter_knockoffs_iterative(
+        z,
+        y,
+        fdr=0.1,
+        niter=1,
+        spec=0.2,
+        n_workers=-1,
+        backend="python",
+        method="asdp",
+        shrink=False,
+        offset=0,
+        fstat="glmnet_lambdasmax",
+    ):
         """
         Run knockoff filter to find significant variables.
 
@@ -566,29 +606,52 @@ class Knockoffs():
         np.ndarray
             Indices of selected variables.
         """
-        if backend == 'python':
+        if backend == "python":
             return Knockoffs.filter_knockoffs_iterative_python(
-                z, y, fdr=fdr, niter=niter, spec=spec, method=method, shrink=shrink,
-                offset=offset, fstat=fstat, n_jobs=n_workers)
-        elif backend == 'r':
-            return Knockoffs.filter_knockoffs_iterative_r(z, y, fdr=fdr, niter=niter, spec=spec)
+                z,
+                y,
+                fdr=fdr,
+                niter=niter,
+                spec=spec,
+                method=method,
+                shrink=shrink,
+                offset=offset,
+                fstat=fstat,
+                n_jobs=n_workers,
+            )
+        elif backend == "r":
+            return Knockoffs.filter_knockoffs_iterative_r(
+                z, y, fdr=fdr, niter=niter, spec=spec
+            )
         else:
             raise ValueError(f"Unknown backend: {backend}. Use 'python' or 'r'.")
-    
+
     def fit_linear(self, z_matrix, y):
-        '''fit z-matrix in linear part to get LP'''
+        """fit z-matrix in linear part to get LP"""
         reg = self.model.fit(z_matrix, y)
-        
+
         LP = reg.predict(z_matrix)
-        beta = reg.coef_       
+        beta = reg.coef_
 
         return LP, beta
 
-
     @staticmethod
-    def select_short_freq(z, y, spec=0.1, fdr=0.1, niter=1000, f_size=100, n_workers=-1, backend='python',
-                          method='asdp', shrink=False, offset=0, fstat='glmnet_lambdasmax',
-                          verbose=False, **kwargs):
+    def select_short_freq(
+        z,
+        y,
+        spec=0.1,
+        fdr=0.1,
+        niter=1000,
+        f_size=100,
+        n_workers=-1,
+        backend="python",
+        method="asdp",
+        shrink=False,
+        offset=0,
+        fstat="glmnet_lambdasmax",
+        verbose=False,
+        **kwargs,
+    ):
         """
         Find significant variables using second order knockoffs across subsets of features.
 
@@ -653,13 +716,18 @@ class Knockoffs():
         # Route python and r_knockoffs through select_short_freq_slide for
         # consistent SLIDE methodology (findOptIter, deterministic seeding,
         # feature chunking, two-stage screening).
-        if backend in ('r_knockoffs', 'python'):
+        if backend in ("r_knockoffs", "python"):
             result = Knockoffs.select_short_freq_slide(
-                z, y, spec=spec, fdr=fdr, niter=niter, f_size=f_size,
+                z,
+                y,
+                spec=spec,
+                fdr=fdr,
+                niter=niter,
+                f_size=f_size,
                 n_jobs=n_workers,
                 backend=backend,
                 verbose=verbose,
-                **kwargs
+                **kwargs,
             )
             return result.selected
         z = Knockoffs.scale_features(z)
@@ -675,19 +743,31 @@ class Knockoffs():
         n_splits = math.ceil(n_features / f_size)
         feature_split = math.ceil(n_features / n_splits)
         feature_starts = list(range(0, n_features, feature_split))
-        feature_stops = [min(start + feature_split, n_features) for start in feature_starts]
+        feature_stops = [
+            min(start + feature_split, n_features) for start in feature_starts
+        ]
 
         screen_var = []
 
-        for start, stop in tqdm(zip(feature_starts, feature_stops),
-                                total=len(feature_starts),
-                                desc="Processing subsets"):
-
+        for start, stop in tqdm(
+            zip(feature_starts, feature_stops),
+            total=len(feature_starts),
+            desc="Processing subsets",
+        ):
             subset_z = z[:, start:stop]
 
             selected_indices = Knockoffs.filter_knockoffs_iterative(
-                subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers, backend=backend,
-                method=method, shrink=shrink, offset=offset, fstat=fstat
+                subset_z,
+                y,
+                fdr=fdr,
+                niter=niter,
+                spec=spec,
+                n_workers=n_workers,
+                backend=backend,
+                method=method,
+                shrink=shrink,
+                offset=offset,
+                fstat=fstat,
             )
 
             selected_indices = selected_indices + start
@@ -700,8 +780,17 @@ class Knockoffs():
         if n_splits > 1 and len(screen_var) > 1:
             subset_z = z[:, screen_var]
             final_var = Knockoffs.filter_knockoffs_iterative(
-                subset_z, y, fdr=fdr, niter=niter, spec=spec, n_workers=n_workers, backend=backend,
-                method=method, shrink=shrink, offset=offset, fstat=fstat
+                subset_z,
+                y,
+                fdr=fdr,
+                niter=niter,
+                spec=spec,
+                n_workers=n_workers,
+                backend=backend,
+                method=method,
+                shrink=shrink,
+                offset=offset,
+                fstat=fstat,
             )
             final_var = screen_var[final_var]
         else:
@@ -711,21 +800,26 @@ class Knockoffs():
 
     @staticmethod
     def select_short_freq_slide(
-        z, y,
-        spec=0.1, fdr=0.1, niter=1000, f_size=100,
+        z,
+        y,
+        spec=0.1,
+        fdr=0.1,
+        niter=1000,
+        f_size=100,
         n_jobs=-1,
-        backend='python',
+        backend="python",
         verbose=False,
-        **kwargs
+        slide_selection=False,
+        **kwargs,
     ) -> VotingResult:
         """
-        Full SLIDE methodology with findOptIter refinement.
+        Full SLIDE voting procedure with optional findOptIter refinement.
 
         This method implements the complete SLIDE voting procedure:
         1. Feature chunking (f_size parameter)
         2. Knockoff voting on each chunk
-        3. findOptIter refinement (select from ONE optimal iteration)
-        4. Two-stage screening when multiple chunks
+        3. Two-stage screening when multiple chunks
+        4. Optional findOptIter refinement (slide_selection=True)
 
         Parameters
         ----------
@@ -806,14 +900,14 @@ class Knockoffs():
             z = z.values
 
         # Determine knockoffs callable based on backend
-        if backend == 'r_knockoffs':
+        if backend == "r_knockoffs":
             # Use R's SDP solver once per chunk, then Python cached iteration loop
             knockoffs_func = None  # Use default Python knockoff sampling
-            use_cache = kwargs.pop('use_cache', True)
-            kwargs['sdp_solver'] = _solve_sdp_r
-        elif backend == 'python':
+            use_cache = kwargs.pop("use_cache", True)
+            kwargs["sdp_solver"] = _solve_sdp_r
+        elif backend == "python":
             knockoffs_func = None  # Use default create_second_order
-            use_cache = kwargs.pop('use_cache', True)
+            use_cache = kwargs.pop("use_cache", True)
         else:
             raise ValueError(
                 f"Unknown backend: {backend}. Use 'python' or 'r_knockoffs'."
@@ -821,7 +915,8 @@ class Knockoffs():
 
         # Call the full SLIDE voting implementation
         result = knockoff_filter_voting_slide(
-            z, y,
+            z,
+            y,
             knockoffs=knockoffs_func,
             statistic=stat_glmnet_lambdasmax,
             fdr=fdr,
@@ -833,9 +928,8 @@ class Knockoffs():
             verbose=verbose,
             match_r=True,
             use_cache=use_cache,
-            **kwargs
+            slide_selection=slide_selection,
+            **kwargs,
         )
 
         return result
-
-

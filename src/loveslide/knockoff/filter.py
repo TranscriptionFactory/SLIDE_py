@@ -979,6 +979,7 @@ def knockoff_filter_voting_slide(
     verbose: bool = False,
     match_r: bool = True,
     use_cache: bool = True,
+    slide_selection: bool = False,
     **kwargs
 ) -> VotingResult:
     """
@@ -1099,7 +1100,7 @@ def knockoff_filter_voting_slide(
             verbose=verbose,
             match_r=match_r,
             use_cache=use_cache,
-            slide_selection=True,
+            slide_selection=slide_selection,
             return_selected_list=True,
             **kwargs
         )
@@ -1122,7 +1123,7 @@ def knockoff_filter_voting_slide(
 
         X_chunk = X[:, start:stop]
 
-        # Run voting on this chunk with findOptIter
+        # Run voting on this chunk
         result_chunk = knockoff_filter_voting(
             X_chunk, y,
             knockoffs=knockoffs,
@@ -1136,7 +1137,7 @@ def knockoff_filter_voting_slide(
             verbose=verbose,
             match_r=match_r,
             use_cache=use_cache,
-            slide_selection=True,
+            slide_selection=slide_selection,
             return_selected_list=True,
             **kwargs
         )
@@ -1181,7 +1182,7 @@ def knockoff_filter_voting_slide(
 
     X_screen = X[:, screen_var]
 
-    # Run final voting with findOptIter
+    # Run final voting on screened variables
     final_result = knockoff_filter_voting(
         X_screen, y,
         knockoffs=knockoffs,
@@ -1195,7 +1196,7 @@ def knockoff_filter_voting_slide(
         verbose=verbose,
         match_r=match_r,
         use_cache=use_cache,
-        slide_selection=True,
+        slide_selection=slide_selection,
         return_selected_list=True,
         **kwargs
     )

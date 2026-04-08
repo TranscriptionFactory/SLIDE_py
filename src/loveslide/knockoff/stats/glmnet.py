@@ -43,7 +43,7 @@ def _r_scale(X: np.ndarray) -> tuple:
 def _lasso_max_lambda_glmnet(
     X: np.ndarray,
     y: np.ndarray,
-    nlambda: int = 100,  # Match R's glmnet default for faster computation
+    nlambda: int = 250,
     intercept: bool = True,
     standardize: bool = True,  # Match R: always standardize X with scale() (ddof=1)
     family: str = 'gaussian',
@@ -59,7 +59,7 @@ def _lasso_max_lambda_glmnet(
         Feature matrix.
     y : array-like of shape (n,)
         Response vector.
-    nlambda : int, default=500
+    nlambda : int, default=250
         Number of lambda values.
     intercept : bool, default=True
         Whether to fit an intercept.
@@ -221,7 +221,7 @@ def _lasso_max_lambda_glmnet(
 def _cv_coeffs_glmnet(
     X: np.ndarray,
     y: np.ndarray,
-    nlambda: int = 100,  # Match R's glmnet default for faster computation
+    nlambda: int = 250,
     intercept: bool = True,
     family: str = 'gaussian',
     n_jobs: int = -1,
@@ -236,7 +236,7 @@ def _cv_coeffs_glmnet(
         Feature matrix.
     y : array-like of shape (n,)
         Response vector.
-    nlambda : int, default=500
+    nlambda : int, default=250
         Number of lambda values.
     intercept : bool, default=True
         Whether to fit an intercept.
