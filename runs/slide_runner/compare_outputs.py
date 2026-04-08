@@ -17,6 +17,7 @@ cd /ix/djishnu/Aaron/1_general_use/SLIDE_py/runs/slide_runner
 python compare_outputs.py --config ssc_untx.yaml --job-id 8273774 --detailed
 SLURM
 """
+
 # ─────────────────────────────────────────────────────────────────────────────
 """
 Compare SLIDE outputs across backends from a YAML-driven run.
@@ -26,20 +27,23 @@ directory.  Compares z_matrix, A matrix, significant latent factors, feature-
 list content, summary metrics, and optionally performs Hungarian LF matching.
 
 Usage:
-    # Auto-detect latest job output
+    # Direct directory comparison (no config needed)
+    python compare_outputs.py --dir /path/to/output/12345
+
+    # Auto-detect latest job output from config
     python compare_outputs.py --config ssc_untx.yaml
 
     # Specify a particular job's output
     python compare_outputs.py --config ssc_untx.yaml --job-id 12345
 
     # Include a native R baseline for comparison
-    python compare_outputs.py --config ssc_untx.yaml --native-r /path/to/native_R_output
+    python compare_outputs.py --dir /path/to/output/12345 --native-r /path/to/native_R_output
 
     # Detailed per-column/per-LF output
-    python compare_outputs.py --config ssc_untx.yaml --detailed
+    python compare_outputs.py --dir /path/to/output/12345 --detailed
 
     # Only a specific parameter combo
-    python compare_outputs.py --config ssc_untx.yaml --param 0.1_1
+    python compare_outputs.py --dir /path/to/output/12345 --param 0.1_1
 """
 
 import argparse
@@ -176,9 +180,7 @@ def load_feature_lists(path, impl_type):
                 result[lf_name] = {
                     "features": set(df.index.tolist()),
                     "loadings": (
-                        dict(zip(df.index, df["loading"]))
-                        if "loading" in df
-                        else {}
+                        dict(zip(df.index, df["loading"])) if "loading" in df else {}
                     ),
                 }
             except Exception as e:
@@ -264,9 +266,7 @@ def z_matrix_corr_summary(z1, z2):
     common_rows = sorted(set(z1.index) & set(z2.index))
     if not common_rows:
         return None
-    common_cols = sorted(
-        set(z1.columns) & set(z2.columns), key=lambda c: int(c[1:])
-    )
+    common_cols = sorted(set(z1.columns) & set(z2.columns), key=lambda c: int(c[1:]))
     if not common_cols:
         return None
 
@@ -331,9 +331,7 @@ def match_lfs_hungarian(feat1, feat2):
 
 def _build_a_from_features(features_per_lf):
     """Build a sparse A matrix from feature lists."""
-    all_feats = sorted(
-        {f for lf in features_per_lf.values() for f in lf["features"]}
-    )
+    all_feats = sorted({f for lf in features_per_lf.values() for f in lf["features"]})
     lf_names = sorted(features_per_lf.keys(), key=lambda x: int(x[1:]))
     if not all_feats or not lf_names:
         return None
@@ -390,6 +388,55 @@ def discover_implementations(job_dir, backends, native_r_path=None):
     return impls
 
 
+# ── Directory-based discovery ────────────────────────────────────────────
+
+KNOWN_BACKENDS = {"python", "r_knockoffs", "r"}
+
+
+def _discover_backends_from_dir(job_dir):
+    """Auto-discover backend subdirectories under a job output dir."""
+    found = []
+    if not os.path.isdir(job_dir):
+        return found
+    for name in sorted(os.listdir(job_dir)):
+        full = os.path.join(job_dir, name)
+        if os.path.isdir(full) and name in KNOWN_BACKENDS:
+            found.append(name)
+    # Also include any non-known dirs that contain _out param subdirs
+    for name in sorted(os.listdir(job_dir)):
+        full = os.path.join(job_dir, name)
+        if name in KNOWN_BACKENDS or not os.path.isdir(full):
+            continue
+        if any(
+            d.endswith("_out")
+            for d in os.listdir(full)
+            if os.path.isdir(os.path.join(full, d))
+        ):
+            found.append(name)
+    return found
+
+
+def _discover_params_from_dir(backend_dir):
+    """Discover delta/lambda parameter combos from *_out subdirectory names."""
+    combos = []
+    if not os.path.isdir(backend_dir):
+        return combos
+    for name in sorted(os.listdir(backend_dir)):
+        if not name.endswith("_out") or not os.path.isdir(
+            os.path.join(backend_dir, name)
+        ):
+            continue
+        # Parse "0.1_1_out" → delta=0.1, lam=1.0
+        stem = name[: -len("_out")]
+        parts = stem.split("_")
+        if len(parts) == 2:
+            try:
+                combos.append({"delta": float(parts[0]), "lam": float(parts[1])})
+            except ValueError:
+                continue
+    return combos
+
+
 # ── Printing helpers ─────────────────────────────────────────────────────────
 
 W = 80
@@ -420,9 +467,16 @@ def main():
     )
     parser.add_argument(
         "--config",
-        required=True,
+        required=False,
         metavar="YAML",
         help="Path to the YAML config used for the run",
+    )
+    parser.add_argument(
+        "--dir",
+        type=str,
+        default=None,
+        help="Direct path to output directory containing backend subdirs "
+        "(e.g. python/, r_knockoffs/, r/). Bypasses config-based discovery.",
     )
     parser.add_argument(
         "--job-id",
@@ -460,37 +514,54 @@ def main():
 
         sys.stdout = open(args.output, "w")
 
-    # ── Load config and locate output ────────────────────────────────────
-    cfg = load_config(args.config)
-
-    if args.job_id:
-        job_dir = os.path.join(cfg["out_base"], args.job_id)
-    else:
-        job_dir = find_latest_job_dir(cfg["out_base"])
-
-    if not job_dir or not os.path.isdir(job_dir):
-        logger.error(
-            "No job output found at %s.  Use --job-id to specify.",
-            cfg["out_base"],
-        )
+    if not args.config and not args.dir:
+        logger.error("Must provide either --config or --dir.")
         return
 
-    # ── Build param combos ───────────────────────────────────────────────
-    param_combos = [
-        {"delta": d, "lam": l}
-        for d, l in product(cfg["deltas"], cfg["lambdas"])
-    ]
+    # ── Direct directory mode (no config needed) ─────────────────────────
+    if args.dir:
+        job_dir = os.path.abspath(args.dir)
+        if not os.path.isdir(job_dir):
+            logger.error("Directory not found: %s", job_dir)
+            return
+
+        # Auto-discover backends from subdirectories
+        backends = _discover_backends_from_dir(job_dir)
+        if not backends:
+            logger.error("No backend subdirs found in %s", job_dir)
+            return
+
+        # Discover param combos from the first backend's subdirectories
+        param_combos = _discover_params_from_dir(os.path.join(job_dir, backends[0]))
+
+        impls = discover_implementations(job_dir, backends, native_r_path=args.native_r)
+    else:
+        # ── Config-based mode ────────────────────────────────────────────
+        cfg = load_config(args.config)
+
+        if args.job_id:
+            job_dir = os.path.join(cfg["out_base"], args.job_id)
+        else:
+            job_dir = find_latest_job_dir(cfg["out_base"])
+
+        if not job_dir or not os.path.isdir(job_dir):
+            logger.error(
+                "No job output found at %s.  Use --job-id to specify.",
+                cfg["out_base"],
+            )
+            return
+
+        backends = cfg["backends"]
+        param_combos = [
+            {"delta": d, "lam": l} for d, l in product(cfg["deltas"], cfg["lambdas"])
+        ]
+
+        impls = discover_implementations(job_dir, backends, native_r_path=args.native_r)
+
     if args.param:
         parts = args.param.split("_")
         d, l = float(parts[0]), float(parts[1])
-        param_combos = [
-            p for p in param_combos if p["delta"] == d and p["lam"] == l
-        ]
-
-    # ── Discover implementations ─────────────────────────────────────────
-    impls = discover_implementations(
-        job_dir, cfg["backends"], native_r_path=args.native_r
-    )
+        param_combos = [p for p in param_combos if p["delta"] == d and p["lam"] == l]
 
     if len(impls) < 2:
         logger.error(
@@ -509,9 +580,7 @@ def main():
     print(f"  Config:  {args.config}\n")
     for name, info in impls.items():
         exists = os.path.isdir(info["path"])
-        print(
-            f"  {name:15s}  {'OK' if exists else 'MISSING':7s}  {info['desc']}"
-        )
+        print(f"  {name:15s}  {'OK' if exists else 'MISSING':7s}  {info['desc']}")
 
     # ─────────────────────────────────────────────────────────────────────
     section("1. SUMMARY TABLES")
@@ -532,14 +601,10 @@ def main():
             d = row.get("delta", "")
             lam = row.get("lambda", "")
             n_lfs = (
-                int(row["n_LFs"])
-                if "n_LFs" in row and pd.notna(row["n_LFs"])
-                else "-"
+                int(row["n_LFs"]) if "n_LFs" in row and pd.notna(row["n_LFs"]) else "-"
             )
             n_sig = (
-                int(row["n_sig"])
-                if "n_sig" in row and pd.notna(row["n_sig"])
-                else "-"
+                int(row["n_sig"]) if "n_sig" in row and pd.notna(row["n_sig"]) else "-"
             )
             n_int = (
                 int(row["n_interact"])
@@ -565,9 +630,7 @@ def main():
         # Load data for this parameter across all implementations
         data = {}
         for name, info in impls.items():
-            pdir = _param_dir(
-                info["path"], info["type"], param["delta"], param["lam"]
-            )
+            pdir = _param_dir(info["path"], info["type"], param["delta"], param["lam"])
             if not os.path.isdir(pdir):
                 print(f"  [{name}] NOT FOUND: {os.path.basename(pdir)}")
                 continue
@@ -590,11 +653,7 @@ def main():
         subsection("Significant Latent Factors")
         for name in impl_names:
             d = data[name]
-            sig = (
-                sorted(d["sig_lfs"], key=lambda x: int(x[1:]))
-                if d["sig_lfs"]
-                else []
-            )
+            sig = sorted(d["sig_lfs"], key=lambda x: int(x[1:])) if d["sig_lfs"] else []
             inter = (
                 sorted(d["sig_interacts"], key=lambda x: int(x[1:]))
                 if d["sig_interacts"]
@@ -611,19 +670,11 @@ def main():
             common = s1 & s2
             only1 = s1 - s2
             only2 = s2 - s1
-            print(
-                f"  {n1} vs {n2}: Jaccard={j:.3f} ({len(common)} shared)"
-            )
+            print(f"  {n1} vs {n2}: Jaccard={j:.3f} ({len(common)} shared)")
             if only1:
-                print(
-                    f"    only in {n1}: "
-                    f"{sorted(only1, key=lambda x: int(x[1:]))}"
-                )
+                print(f"    only in {n1}: {sorted(only1, key=lambda x: int(x[1:]))}")
             if only2:
-                print(
-                    f"    only in {n2}: "
-                    f"{sorted(only2, key=lambda x: int(x[1:]))}"
-                )
+                print(f"    only in {n2}: {sorted(only2, key=lambda x: int(x[1:]))}")
 
         # ── 3. Z-matrix correlation ──
         subsection("Z Matrix Correlation")
@@ -726,9 +777,7 @@ def main():
 
             nz1 = np.count_nonzero(np.abs(v1) > 1e-10)
             nz2 = np.count_nonzero(np.abs(v2) > 1e-10)
-            sparsity_agree = np.mean(
-                (np.abs(v1) > 1e-10) == (np.abs(v2) > 1e-10)
-            )
+            sparsity_agree = np.mean((np.abs(v1) > 1e-10) == (np.abs(v2) > 1e-10))
             exact = np.allclose(v1, v2, atol=1e-6)
 
             print(
@@ -742,19 +791,15 @@ def main():
     # ─────────────────────────────────────────────────────────────────────
     section("LAMBDA SENSITIVITY (within each delta)")
     # ─────────────────────────────────────────────────────────────────────
-    unique_deltas = sorted(set(cfg["deltas"]))
-    unique_lambdas = sorted(set(cfg["lambdas"]))
+    unique_deltas = sorted({p["delta"] for p in param_combos})
+    unique_lambdas = sorted({p["lam"] for p in param_combos})
 
     if len(unique_lambdas) >= 2:
         lam_lo, lam_hi = unique_lambdas[0], unique_lambdas[-1]
         for name, info in impls.items():
             for delta in unique_deltas:
-                p_lo = _param_dir(
-                    info["path"], info["type"], delta, lam_lo
-                )
-                p_hi = _param_dir(
-                    info["path"], info["type"], delta, lam_hi
-                )
+                p_lo = _param_dir(info["path"], info["type"], delta, lam_lo)
+                p_hi = _param_dir(info["path"], info["type"], delta, lam_hi)
                 if not os.path.isdir(p_lo) or not os.path.isdir(p_hi):
                     continue
 
