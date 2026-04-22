@@ -130,9 +130,15 @@ if [[ -z "${SLURM_ARRAY_TASK_ID:-}" ]]; then
         --output="${LOG_DIR}/${JOB_NAME}_%A_%a.log"
     )
 
+    # Pre-resolve values needed by SLURM tasks so they don't call pixi/yaml_query.
+    # Backends as a space-separated list; each task indexes by SLURM_ARRAY_TASK_ID.
+    BACKENDS_LIST=$(yaml_query "' '.join(cfg['slide']['backends'])")
+
     # Pass resolved paths to SLURM tasks
     export SUBMIT_SCRIPT_DIR="$SCRIPT_DIR"
     export PIXI
+    export SLIDE_BACKENDS="$BACKENDS_LIST"
+    export SLIDE_OUT_BASE="$LOG_DIR"
 
     SLIDE_JOB=$(sbatch --parsable --export=ALL "${SBATCH_ARGS[@]}" \
         "${BASH_SOURCE[0]}" "$CONFIG")
@@ -153,10 +159,10 @@ fi
 
 export PYTHONUNBUFFERED=1
 
-BACKEND=$(yaml_query "cfg['slide']['backends'][${SLURM_ARRAY_TASK_ID}]")
-OUT_BASE_RAW=$(yaml_query "cfg.get('output',{}).get('base_dir','./output')")
-OUT_BASE="$(resolve_path "$OUT_BASE_RAW")"
-OUTPUT_DIR="${OUT_BASE}/${SLURM_ARRAY_JOB_ID}"
+# Use pre-resolved values from the login-node phase (no pixi needed here).
+read -ra _backends <<< "${SLIDE_BACKENDS}"
+BACKEND="${_backends[${SLURM_ARRAY_TASK_ID}]}"
+OUTPUT_DIR="${SLIDE_OUT_BASE}/${SLURM_ARRAY_JOB_ID}"
 
 echo "=== Array task ${SLURM_ARRAY_TASK_ID}: backend=${BACKEND} ==="
 echo "  config:  ${CONFIG}"
