@@ -25,6 +25,7 @@ pyyaml = ">=6.0"
 loveslide = { path = ".", editable = true }
 pqdm = "*"
 easydict = "*"
+rpy2 = "*"
 
 # ─── Feature: R integration ──────────────────────────────────────────────────
 [feature.r.dependencies]
