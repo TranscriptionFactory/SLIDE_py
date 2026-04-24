@@ -45,14 +45,15 @@ class Plotter:
 
         # Plot each latent factor
         for i, (lf_name, lr_info) in enumerate(lfs.items()):
-            # R ordering: loading-selected at bottom (ascending by abs loading),
-            # corr-selected on top (ascending by abs corr)
+            # R ordering: corr-selected at bottom, loading-selected at top.
+            # Within each group, ascending so highest value ends up at the
+            # extreme (top for loading, just-below-loading for corr).
             if 'group' in lr_info.columns:
-                loading_group = lr_info[lr_info['group'] == 'loading'].sort_values(
-                    by='loading', key=abs, ascending=True)
                 corr_group = lr_info[lr_info['group'] == 'corr'].sort_values(
                     by='corr', key=abs, ascending=True)
-                lr_info = pd.concat([loading_group, corr_group])
+                loading_group = lr_info[lr_info['group'] == 'loading'].sort_values(
+                    by='loading', key=abs, ascending=True)
+                lr_info = pd.concat([corr_group, loading_group])
             else:
                 lr_info = lr_info.sort_values(by='loading', key=abs, ascending=True)
             n_genes = len(lr_info)

@@ -149,14 +149,8 @@ class SLIDE:
             [scorer.evaluate(X[x], y, n_iters=3) for x in selected.index]
         ).mean(axis=1)
 
-        # Color: red = positive corr, blue = negative corr, gray = no corr or low AUC
-        color = np.where(
-            selected["corr"] > 0,
-            "red",
-            np.where(selected["corr"] == 0, "gray", "blue"),
-        )
-        color = np.where(selected["AUC"] > 0.45, color, "gray")
-        selected["color"] = color
+        # Color: red = positive corr, blue = negative corr (matches R)
+        selected["color"] = np.where(selected["corr"] > 0, "red", "blue")
 
         selected = selected.sort_values(by="loading", key=abs, ascending=False)
 
