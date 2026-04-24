@@ -809,7 +809,7 @@ class Knockoffs:
         n_jobs=-1,
         backend="python",
         verbose=False,
-        slide_selection=False,
+        slide_selection=True,
         **kwargs,
     ) -> VotingResult:
         """

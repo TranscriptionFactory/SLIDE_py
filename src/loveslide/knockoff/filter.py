@@ -979,7 +979,7 @@ def knockoff_filter_voting_slide(
     verbose: bool = False,
     match_r: bool = True,
     use_cache: bool = True,
-    slide_selection: bool = False,
+    slide_selection: bool = True,
     **kwargs
 ) -> VotingResult:
     """
