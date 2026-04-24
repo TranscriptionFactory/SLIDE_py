@@ -136,6 +136,12 @@ class SLIDE:
             top_feats // 2
         )
 
+        # Tag groups for plot ordering (loading at bottom, corr on top)
+        top_loading = top_loading.copy()
+        top_corr = top_corr.copy()
+        top_loading["group"] = "loading"
+        top_corr["group"] = "corr"
+
         # Combine and compute AUC only for selected features (expensive)
         selected = pd.concat([top_loading, top_corr], axis=0)
         scorer = Estimator(model="auto", scaler="standard")
