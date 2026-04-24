@@ -169,6 +169,14 @@ echo "  config:  ${CONFIG}"
 echo "  project: ${PROJECT_DIR}"
 echo "  pixi:    ${PIXI}"
 echo "  output:  ${OUTPUT_DIR}/${BACKEND}/"
+
+# Stagger pixi starts to avoid lockfile contention when array tasks launch
+# simultaneously.  Each task waits (task_id * 30) seconds.
+STAGGER=$((SLURM_ARRAY_TASK_ID * 30))
+if [[ $STAGGER -gt 0 ]]; then
+    echo "  Staggering pixi start by ${STAGGER}s (task ${SLURM_ARRAY_TASK_ID})..."
+    sleep "$STAGGER"
+fi
 echo ""
 
 "$PIXI" run -e dev --manifest-path "${PROJECT_DIR}/pixi.toml" \
